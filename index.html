@@ -157,21 +157,6 @@ body {
   line-height: 1.5;
 }
 
-/* ═══════════════════════════════════════
-   CONFIG BANNER
-═══════════════════════════════════════ */
-#config-banner {
-  display: none;
-  background: rgba(240,165,0,0.1);
-  border: 1px solid rgba(240,165,0,0.3);
-  border-radius: var(--radius);
-  padding: 14px 20px;
-  margin-bottom: 20px;
-  font-size: 13px;
-  color: var(--gold);
-}
-
-#config-banner a { color: var(--gold); font-weight: 600; }
 
 /* ═══════════════════════════════════════
    APP LAYOUT
@@ -2253,17 +2238,6 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
       Entrar com Google
     </button>
 
-    <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-      <span style="font-size:11px;color:var(--text3)">ou</span>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-    </div>
-
-    <button class="btn-google" onclick="showDemoMode()" style="border-color:rgba(46,196,160,0.3);color:var(--teal)">
-      <span style="font-size:16px">🎮</span>
-      Explorar em Modo Demo
-    </button>
-
     <p class="login-note">Acesso restrito a usuários autorizados.<br>Dados sincronizados com Google Sheets.</p>
   </div>
 </div>
@@ -2472,8 +2446,6 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
     </div>
 
     <div class="content">
-      <div id="config-banner"></div>
-
       <!-- ── DASHBOARD CRM ── -->
       <div class="page active" id="page-dashboard-crm">
         <div class="kpi-grid" id="kpi-crm">
@@ -6198,9 +6170,8 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
    CONFIG & STATE
 ═══════════════════════════════════════════ */
 const CONFIG = {
-  // Preencher em Configurações ou hardcode aqui:
-  SHEET_ID:    localStorage.getItem('sheet_id')    || '',
-  CLIENT_ID:   localStorage.getItem('client_id')   || '',
+  SHEET_ID:    localStorage.getItem('sheet_id')    || '102NFCEWMUY_VMxRVwUJYYmrrRedDv4GqiZFZ9YgPwoQ',
+  CLIENT_ID:   localStorage.getItem('client_id')   || '608889217139-gc5dmnea8o7n59b8hg48bieu1cg01udi.apps.googleusercontent.com',
   CALENDAR_ID: localStorage.getItem('cal_id')      || 'primary',
 
   // Escopos necessários
@@ -6288,7 +6259,6 @@ window.gapiLoaded = function() {
 
 window.addEventListener('load', () => {
   loadConfigFromStorage();
-  checkConfigBanner();
   // gapiLoaded() e initGSI() serão chamados pelos onload dos scripts externos no fim do body
 });
 
@@ -6314,16 +6284,11 @@ function maybeInit() {
 
 function signIn() {
   if (!CONFIG.CLIENT_ID) {
-    // Client ID não configurado — mostrar aviso e oferecer modo demo
-    const ok = confirm(
-      'Client ID do Google não configurado ainda.\n\n' +
-      'Para usar com dados reais:\n' +
-      '1. Acesse Google Cloud Console\n' +
-      '2. Crie credenciais OAuth para este domínio\n' +
-      '3. Cole o Client ID em Configurações\n\n' +
-      'Deseja explorar o sistema em modo demonstração?'
-    );
-    if (ok) showDemoMode();
+    if (!window._noClientIdWarned) {
+      toast('Client ID do Google não configurado. Acesse Configurações para conectar.', 'warning');
+      window._noClientIdWarned = true;
+      setTimeout(() => { window._noClientIdWarned = false; }, 5000);
+    }
     return;
   }
 
@@ -6402,21 +6367,6 @@ function showApp() {
   setSyncStatus('loading', 'Sincronizando...');
 }
 
-function showDemoMode() {
-  // Sem config — carregar dados de exemplo e mostrar app
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('user-name').textContent = 'Gerson (Demo)';
-
-  loadDemoData();
-  setSyncStatus('ok', 'Modo demo');
-
-  const banner = document.getElementById('config-banner');
-  banner.style.display = 'block';
-  banner.innerHTML = '⚠️ <strong>Modo demonstração</strong> — dados fictícios. Vá em <a href="#" onclick="nav(\'config\')">Configurações</a> para conectar sua planilha real.';
-
-  renderAllPages();
-}
 
 /* ═══════════════════════════════════════════
    NAVIGATION
@@ -6485,9 +6435,8 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 ═══════════════════════════════════════════ */
 async function syncData() {
   if (!CONFIG.SHEET_ID) {
-    loadDemoData();
-    renderAllPages();
-    setSyncStatus('ok', 'Modo demo');
+    toast('Sheet ID não configurado. Acesse Configurações para conectar sua planilha.', 'warning');
+    setSyncStatus('error', 'Não configurado');
     return;
   }
 
@@ -6868,7 +6817,7 @@ async function updateStatus(idx, novoStatus) {
     renderDashboardCRM();
     renderCRMTable();
     if (novoStatus === 'Ganha' && statusAntes !== 'Ganha') await transferirParaFinanceiro(DATA.crm[idx]);
-    toast('Status atualizado (demo)', 'success');
+    toast('Status atualizado', 'success');
     closeModal('modal-detalhe');
     return;
   }
@@ -7499,7 +7448,7 @@ async function _saveProposta(row, prefix) {
     } else {
       // NOVA proposta
       DATA.crm.push(row);
-      toast('Proposta salva (demo)', 'success');
+      toast('Proposta salva', 'success');
     }
     window._lastSavedPropId = idProp;
     window._lastSavedRazao = row[2] || '';
@@ -7728,18 +7677,6 @@ function saveConfig() {
   CONFIG.CLIENT_ID   = clientId;
   CONFIG.CALENDAR_ID = calId;
 
-  checkConfigBanner();
-}
-
-function checkConfigBanner() {
-  const banner = document.getElementById('config-banner');
-  if (!banner) return;
-  if (!CONFIG.SHEET_ID || !CONFIG.CLIENT_ID) {
-    banner.style.display = 'block';
-    banner.innerHTML = `⚙️ <strong>Configure o sistema</strong> — acesse <a href="#" onclick="nav('config')">Configurações</a> para conectar sua planilha e habilitar todas as integrações.`;
-  } else {
-    banner.style.display = 'none';
-  }
 }
 
 async function testConnection() {
@@ -7752,51 +7689,6 @@ async function testConnection() {
   } catch(e) {
     toast('Erro: ' + e.message, 'error');
   }
-}
-
-/* ═══════════════════════════════════════════
-   DEMO DATA
-═══════════════════════════════════════════ */
-function loadDemoData() {
-  // Sistema inicializado sem dados demo - pronto para uso em produção
-  DATA.crm = [];
-  DATA.financeiro = [];
-  DATA.despesas = [];
-  DATA.projetos = [];
-  DATA.marketing = [];
-  DATA.clientes = [];
-  DATA.loaded = true;
-
-  // Leads
-  DATA_leads = [];
-  localStorage.setItem('data_leads', JSON.stringify(DATA_leads));
-
-  // Equipe
-  EQUIPE_DATA = [];
-  localStorage.setItem('equipe_data', JSON.stringify(EQUIPE_DATA));
-
-  // Timer Log
-  TIMER_LOG = [];
-  localStorage.setItem('timer_log', JSON.stringify(TIMER_LOG));
-
-  // Contatos
-  CONTATOS.projetistas = [];
-  CONTATOS.representantes = [];
-  CONTATOS.outros = [];
-  localStorage.setItem('contatos_projetistas', JSON.stringify(CONTATOS.projetistas));
-  localStorage.setItem('contatos_representantes', JSON.stringify(CONTATOS.representantes));
-  localStorage.setItem('contatos_outros', JSON.stringify(CONTATOS.outros));
-
-  // Despesas reais por serviço
-  DESP_REAIS_SERVICO = [];
-  localStorage.setItem('desp_reais_servico', JSON.stringify(DESP_REAIS_SERVICO));
-
-  // Comissões
-  COMISSOES = [];
-  localStorage.setItem('comissoes_data', JSON.stringify(COMISSOES));
-
-  // Revisões
-  DATA_revisoes = [];
 }
 
 /* ═══════════════════════════════════════════
@@ -8010,7 +7902,7 @@ async function pipeDrop(e, targetStatus) {
       toast('Erro ao salvar status: ' + err.message, 'error');
     }
   } else {
-    toast(`Movido para "${novoStatus}" (demo)`, 'info');
+    toast(`Movido para "${novoStatus}"`, 'success');
   }
 
   // Transferência automática ao mover para Ganha
@@ -8171,11 +8063,10 @@ async function salvarEdicao() {
       toast('Erro ao salvar: ' + e.message, 'error');
     }
   } else {
-    // Modo demo — transferência local
     if (editStatusSelected === 'Ganha' && statusAnterior !== 'Ganha') {
       await transferirParaFinanceiro(r);
     }
-    toast('Alterações salvas (demo)', 'success');
+    toast('Alterações salvas', 'success');
   }
 
   closeModal('modal-editar');
@@ -8256,9 +8147,9 @@ async function transferirParaFinanceiro(r) {
       f4RenderKPIs();
       initFinCharts();
       const msg = rowsToAdd.length > 1
-        ? `💰 ${rowsToAdd.length} parcelas lançadas no Financeiro (demo)`
-        : '💰 Lançado no Financeiro (demo)';
-      toast(msg, 'info');
+        ? `💰 ${rowsToAdd.length} parcelas lançadas no Financeiro!`
+        : '💰 Lançado no Financeiro!';
+      toast(msg, 'success');
     }
   } catch(e) {
     toast('Aviso: não foi possível transferir para Financeiro — ' + e.message, 'warning');
@@ -8620,7 +8511,7 @@ async function calcSalvarNoSheets() {
       toast('Erro: ' + e.message, 'error');
     }
   } else {
-    toast(`Valor ${fmtMoney(liq)} salvo na proposta #${idProp} (demo)`, 'success');
+    toast(`Valor ${fmtMoney(liq)} salvo na proposta #${idProp}`, 'success');
   }
 
   renderDashboardCRM();
@@ -9801,7 +9692,7 @@ async function salvarRevisao() {
       toast('Revisão salva localmente (erro Sheets: ' + e.message + ')', 'warning');
     }
   } else {
-    toast('Revisão salva (demo)', 'success');
+    toast('Revisão salva', 'success');
   }
 
   // Atualizar valor no CRM se o novo valor foi informado
@@ -10034,7 +9925,7 @@ async function salvarNF() {
       toast('NF salva localmente', 'warning');
     }
   } else {
-    toast('NF registrada (demo)', 'success');
+    toast('NF registrada', 'success');
   }
 
   closeModal('modal-nova-nf');
@@ -11821,7 +11712,7 @@ async function f4LancarReceita() {
       toast('Salvo localmente (erro Sheets: ' + e.message + ')', 'warning');
     }
   } else {
-    toast('Receita lançada (demo)', 'success');
+    toast('Receita lançada', 'success');
   }
 
   renderFinanceiroTable();
@@ -12496,7 +12387,7 @@ async function salvarCampanha() {
       toast('✅ Campanha salva no Sheets!', 'success');
     } catch(e) { toast('Campanha salva localmente', 'warning'); }
   } else {
-    toast('Campanha salva (demo)', 'success');
+    toast('Campanha salva', 'success');
   }
 
   closeModal('modal-nova-campanha');
