@@ -7758,21 +7758,50 @@ async function testConnection() {
    DEMO DATA
 ═══════════════════════════════════════════ */
 function loadDemoData() {
-  function mkCrm(id,cnpj,razao,servico,modelo,nomeProp,pessoaResp,valor,dataAber,dataProp,validade,followup,status,canal,retorno,contato,email,fone,obs,revisao,fantasia,endereco,cep,email2,contato2) {
-    const r = Array(44).fill('');
-    r[0]=id;r[1]=cnpj;r[2]=razao;r[3]=servico;r[4]=modelo;r[5]=nomeProp;r[6]=pessoaResp;r[7]=valor;
-    r[8]=dataAber;r[9]=dataProp;r[10]=validade;r[11]=followup;r[12]=status;
-    r[24]=canal;r[28]=retorno;r[30]=contato;r[31]=email;r[32]=fone;
-    r[36]=obs;r[37]=revisao;r[38]=fantasia;r[39]=endereco;r[40]=cep;r[41]=email2;r[43]=contato2;
-    return r;
-  }
-   DATA.crm = [];
+  // Sistema inicializado sem dados demo - pronto para uso em produção
+  DATA.crm = [];
   DATA.financeiro = [];
   DATA.despesas = [];
   DATA.projetos = [];
   DATA.marketing = [];
   DATA.clientes = [];
+  DATA.loaded = true;
 
+  // Leads
+  DATA_leads = [];
+  localStorage.setItem('data_leads', JSON.stringify(DATA_leads));
+
+  // Equipe
+  EQUIPE_DATA = [];
+  localStorage.setItem('equipe_data', JSON.stringify(EQUIPE_DATA));
+
+  // Timer Log
+  TIMER_LOG = [];
+  localStorage.setItem('timer_log', JSON.stringify(TIMER_LOG));
+
+  // Contatos
+  CONTATOS.projetistas = [];
+  CONTATOS.representantes = [];
+  CONTATOS.outros = [];
+  localStorage.setItem('contatos_projetistas', JSON.stringify(CONTATOS.projetistas));
+  localStorage.setItem('contatos_representantes', JSON.stringify(CONTATOS.representantes));
+  localStorage.setItem('contatos_outros', JSON.stringify(CONTATOS.outros));
+
+  // Despesas reais por serviço
+  DESP_REAIS_SERVICO = [];
+  localStorage.setItem('desp_reais_servico', JSON.stringify(DESP_REAIS_SERVICO));
+
+  // Comissões
+  COMISSOES = [];
+  localStorage.setItem('comissoes_data', JSON.stringify(COMISSOES));
+
+  // Revisões
+  DATA_revisoes = [];
+}
+
+/* ═══════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════ */
 function set(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
