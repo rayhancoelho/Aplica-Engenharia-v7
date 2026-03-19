@@ -2238,6 +2238,9 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
       Entrar com Google
     </button>
 
+    <button class="btn-google" onclick="signInSelectAccount()" style="margin-top:8px;background:transparent;border:1px solid var(--border);font-size:0.85rem;padding:10px 16px;opacity:0.8">
+      Escolher outra conta Google
+    </button>
     <p class="login-note">Acesso restrito a usuários autorizados.<br>Dados sincronizados com Google Sheets.</p>
   </div>
 </div>
@@ -6282,6 +6285,43 @@ function maybeInit() {
   if (loginEl) loginEl.style.display = 'flex';
 }
 
+function initTokenClientOnce() {
+  if (tokenClient) return;
+  if (!window.google?.accounts?.oauth2) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.CLIENT_ID,
+    scope: CONFIG.SCOPES,
+    callback: (resp) => {
+      if (resp.error) {
+        if (resp.error === 'popup_closed_by_user') {
+          toast('Popup de login fechado. Clique novamente em "Entrar com Google".', 'warning');
+        } else if (resp.error === 'access_denied') {
+          toast('Acesso negado. Verifique se está usando a conta autorizada.', 'error');
+        } else {
+          toast('Erro no login: ' + resp.error, 'error');
+        }
+        return;
+      }
+      accessToken = resp.access_token;
+      sessionStorage.setItem('gtoken', accessToken);
+      gapi.client.setToken({ access_token: accessToken });
+      fetchUserInfo();
+      showApp();
+      syncData();
+    },
+    error_callback: (err) => {
+      if (err.type === 'popup_failed_to_open') {
+        toast('Popup bloqueado pelo navegador. Permita popups para este site e tente novamente.', 'error');
+      } else if (err.type === 'popup_closed') {
+        toast('Popup de login fechado. Clique novamente em "Entrar com Google".', 'warning');
+      } else {
+        toast('Erro ao abrir login Google: ' + (err.message || err.type || 'desconhecido'), 'error');
+      }
+      console.error('Google login error_callback:', err);
+    }
+  });
+}
+
 function signIn() {
   if (!CONFIG.CLIENT_ID) {
     if (!window._noClientIdWarned) {
@@ -6294,7 +6334,6 @@ function signIn() {
 
   // Verificar se a lib Google está pronta
   if (!window.google?.accounts?.oauth2) {
-    // Lib do Google ainda não carregou — aguardar e tentar até 5x
     toast('Aguardando autenticação Google...', 'warning');
     if (window.gapi && !gapiInited) window.gapiLoaded();
     let tentativas = 0;
@@ -6312,26 +6351,29 @@ function signIn() {
   }
 
   try {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.CLIENT_ID,
-      scope: CONFIG.SCOPES,
-      callback: (resp) => {
-        if (resp.error) {
-          toast('Erro no login: ' + resp.error, 'error');
-          return;
-        }
-        accessToken = resp.access_token;
-        sessionStorage.setItem('gtoken', accessToken);
-        gapi.client.setToken({ access_token: accessToken });
-        fetchUserInfo();
-        showApp();
-        syncData();
-      }
-    });
+    initTokenClientOnce();
     tokenClient.requestAccessToken({ prompt: '' });
   } catch(e) {
     toast('Erro ao iniciar login: ' + e.message, 'error');
     console.error('signIn error:', e);
+  }
+}
+
+function signInSelectAccount() {
+  if (!CONFIG.CLIENT_ID) {
+    toast('Client ID do Google não configurado. Acesse Configurações para conectar.', 'warning');
+    return;
+  }
+  if (!window.google?.accounts?.oauth2) {
+    toast('Aguardando autenticação Google...', 'warning');
+    return;
+  }
+  try {
+    initTokenClientOnce();
+    tokenClient.requestAccessToken({ prompt: 'select_account' });
+  } catch(e) {
+    toast('Erro ao iniciar login: ' + e.message, 'error');
+    console.error('signInSelectAccount error:', e);
   }
 }
 
@@ -7648,9 +7690,9 @@ async function agendarVisita() {
    CONFIG
 ═══════════════════════════════════════════ */
 function loadConfigFromStorage() {
-  const sheetId  = localStorage.getItem('sheet_id')  || '';
-  const clientId = localStorage.getItem('client_id') || '';
-  const calId    = localStorage.getItem('cal_id')    || 'primary';
+  const sheetId  = localStorage.getItem('sheet_id')  || CONFIG.SHEET_ID  || '';
+  const clientId = localStorage.getItem('client_id') || CONFIG.CLIENT_ID || '';
+  const calId    = localStorage.getItem('cal_id')    || CONFIG.CALENDAR_ID || 'primary';
 
   CONFIG.SHEET_ID    = sheetId;
   CONFIG.CLIENT_ID   = clientId;
