@@ -5855,10 +5855,9 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           <input type="text" class="form-control" id="cont-valor" placeholder="Ex: R$ 80/h ou 15%">
         </div>
         <div class="form-group" id="cont-campo-cat-wrap" style="display:none">
-          <label class="form-label">Categoria</label>
+          <label class="form-label">Tipo de Cliente</label>
           <select class="form-control" id="cont-cat">
-            <option>Software</option><option>Manutenção</option><option>Fornecedor</option>
-            <option>Contador</option><option>Advogado</option><option>Outro</option>
+            <!-- Populado dinamicamente por _contPopularTiposCliente() -->
           </select>
         </div>
         <div class="form-group" id="cont-campo-custo-wrap" style="display:none">
@@ -18135,7 +18134,7 @@ function cliContatoEditar(tipo, idx) {
   if (document.getElementById('cont-atividade')) document.getElementById('cont-atividade').value = c.atividade || '';
   document.getElementById('cont-esp').value   = c.esp   || '';
   document.getElementById('cont-valor').value = c.valor || '';
-  document.getElementById('cont-cat').value   = c.cat   || '';
+  _contPopularTiposCliente(c.cat || '');
   if (document.getElementById('cont-custo')) document.getElementById('cont-custo').value = c.custo || '';
   document.getElementById('cont-obs').value   = c.obs   || '';
   // Guardar índice para edição
@@ -20207,6 +20206,13 @@ function cliAbrirExportar() {
   openModal('modal-exportar-clientes');
 }
 
+function _contPopularTiposCliente(valorAtual) {
+  const sel = document.getElementById('cont-cat');
+  if (!sel) return;
+  const opcoes = (typeof cfgGetOpcoes === 'function') ? cfgGetOpcoes('tipos_cliente') : ['Pessoa Física', 'Pessoa Jurídica', 'Condomínio', 'Órgão Público', 'Construtora', 'Indústria', 'Comércio', 'Incorporadora'];
+  sel.innerHTML = opcoes.map(o => `<option${o === valorAtual ? ' selected' : ''}>${o}</option>`).join('');
+}
+
 function cliCadastrarCliente() {
   document.getElementById('contato-tipo').value = 'outros';
   document.getElementById('modal-contato-titulo').textContent = '🏢 Novo Cliente';
@@ -20216,6 +20222,7 @@ function cliCadastrarCliente() {
   document.getElementById('cont-campo-val-wrap').style.display = 'none';
   document.getElementById('cont-campo-cat-wrap').style.display = '';
   document.getElementById('cont-campo-custo-wrap').style.display = '';
+  _contPopularTiposCliente();
   document.getElementById('modal-novo-contato').dataset.editIdx = '-1';
   openModal('modal-novo-contato');
 }
