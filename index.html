@@ -7403,6 +7403,41 @@ async function _saveProposta(row, prefix) {
 
   renderDashboardCRM();
   renderCRMTable();
+  if (typeof renderClientesV2 === 'function') renderClientesV2();
+
+  // Salvar cliente na aba CLIENTES (se for novo)
+  const cnpjCli = (row[CRM_COL.CNPJ] || '').replace(/\D/g, '');
+  const razaoCli = row[CRM_COL.RAZAO] || '';
+  if (cnpjCli || razaoCli) {
+    const chaveCliente = cnpjCli || razaoCli;
+    const jaExiste = DATA.clientes.some(c => {
+      const cDoc = (c[0] || '').replace(/\D/g, '');
+      return (cnpjCli && cDoc === cnpjCli) || (!cnpjCli && (c[1] || '') === razaoCli);
+    });
+    if (!jaExiste) {
+      const clienteRow = [
+        cnpjCli,                         // A - CNPJ/CPF
+        razaoCli,                        // B - Razão Social
+        '1',                             // C - Propostas
+        '',                              // D - Ganhas
+        '',                              // E - Conversão
+        '',                              // F - Receita Total
+        row[CRM_COL.FONE] || '',         // G - Telefone
+        row[CRM_COL.EMAIL] || '',        // H - E-mail
+        '',                              // I - UF / Cidade
+        row[CRM_COL.SERVICO] || '',      // J - Atividade
+        new Date().toISOString().split('T')[0]  // K - Data Cadastro
+      ];
+      DATA.clientes.push(clienteRow);
+      saveDataLocal();
+      if (CONFIG.APPS_SCRIPT_URL) {
+        sheetsAppend(CONFIG.SHEETS.CLIENTES, [clienteRow]).catch(err => {
+          console.error('Erro ao salvar cliente no Sheets:', err);
+        });
+      }
+    }
+  }
+
   if (prefix === 'm') { closeModal('modal-nova-proposta'); clearForm(); }
   PROPOSTA_CONTEXTO = {};
 }
@@ -8425,13 +8460,13 @@ async function calcSalvarNoSheets() {
     idx = DATA.crm.length - 1;
   }
 
-  DATA.crm[idx][CRM_COL.VALOR] = liq.toFixed(2);
+  DATA.crm[idx][CRM_COL.VALOR] = bruto.toFixed(2);
   saveDataLocal();
 
   if (CONFIG.APPS_SCRIPT_URL) {
     try {
       const rowReal = idx + 2;
-      await sheetsPut(CONFIG.SHEETS.CRM, `H${rowReal}`, [[liq.toFixed(2)]]);
+      await sheetsPut(CONFIG.SHEETS.CRM, `H${rowReal}`, [[bruto.toFixed(2)]]);
       toast(`✅ Valor R$ ${liq.toFixed(2)} salvo na proposta #${idProp}`, 'success');
     } catch(e) {
       toast('Erro: ' + e.message, 'error');
@@ -8547,18 +8582,25 @@ function prevCarregarItens(r) {
       });
     });
     const valorProp = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
-    if (prevItens.length && valorProp > 0) {
+    // CRM armazena bruto (com ART+desl+extras). Subtrair para distribuir só serviços.
+    const _artV = parseFloat(document.getElementById('calc-art')?.value || '0') || 0;
+    const _kmV = parseFloat(document.getElementById('calc-km')?.value || '0') || 0;
+    const _rkmV = parseFloat(document.getElementById('calc-rkm')?.value || '0.8') || 0.8;
+    const _visV = parseFloat(document.getElementById('calc-vis')?.value || '1') || 1;
+    const _extV = parseFloat(document.getElementById('calc-extras')?.value || '0') || 0;
+    const valorServicos = Math.max(0, valorProp - _artV - (_kmV * _rkmV * _visV) - _extV);
+    if (prevItens.length && valorServicos > 0) {
       const totalHoras = prevItens.reduce((s, it) => s + (it.horas || 0), 0);
       if (totalHoras > 0) {
-        prevItens.forEach(it => { it.unit = Math.round(valorProp * ((it.horas||0) / totalHoras)); });
+        prevItens.forEach(it => { it.unit = Math.round(valorServicos * ((it.horas||0) / totalHoras)); });
       } else {
-        prevItens.forEach(it => { it.unit = Math.round(valorProp / prevItens.length); });
+        prevItens.forEach(it => { it.unit = Math.round(valorServicos / prevItens.length); });
       }
       const somaF = prevItens.reduce((s, it) => s + (it.qtd * it.unit), 0);
-      if (somaF !== Math.round(valorProp) && prevItens.length) prevItens[prevItens.length - 1].unit += (Math.round(valorProp) - somaF);
+      if (somaF !== Math.round(valorServicos) && prevItens.length) prevItens[prevItens.length - 1].unit += (Math.round(valorServicos) - somaF);
     }
   }
-  
+
   // Fonte 0.5: calcBlocos salvos no localStorage (para revisão/recarregamento)
   if (!prevItens.length) {
     const pid = String(r[CRM_COL.ID]||'');
@@ -8576,17 +8618,23 @@ function prevCarregarItens(r) {
               prevItens.push({ desc: it.desc, qtd: it.qtd||1, unit: 0, horas: (it.horas||0), rev: (it.rev||0), bloco: bloco.nome || bloco.servico || '' });
             });
           });
-          // Distribuir valor
+          // Distribuir valor — CRM armazena bruto, subtrair extras para obter serviços
           const valorProp = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
-          if (prevItens.length && valorProp > 0) {
+          const _a = parseFloat(document.getElementById('calc-art')?.value || '0') || 0;
+          const _k = parseFloat(document.getElementById('calc-km')?.value || '0') || 0;
+          const _rk = parseFloat(document.getElementById('calc-rkm')?.value || '0.8') || 0.8;
+          const _v = parseFloat(document.getElementById('calc-vis')?.value || '1') || 1;
+          const _e = parseFloat(document.getElementById('calc-extras')?.value || '0') || 0;
+          const valorServ = Math.max(0, valorProp - _a - (_k * _rk * _v) - _e);
+          if (prevItens.length && valorServ > 0) {
             const totalH = prevItens.reduce((s, it) => s + (it.horas||0), 0);
             if (totalH > 0) {
-              prevItens.forEach(it => { it.unit = Math.round(valorProp * ((it.horas||0) / totalH)); });
+              prevItens.forEach(it => { it.unit = Math.round(valorServ * ((it.horas||0) / totalH)); });
             } else {
-              prevItens.forEach(it => { it.unit = Math.round(valorProp / prevItens.length); });
+              prevItens.forEach(it => { it.unit = Math.round(valorServ / prevItens.length); });
             }
             const sf = prevItens.reduce((s, it) => s + (it.qtd * it.unit), 0);
-            if (sf !== Math.round(valorProp) && prevItens.length) prevItens[prevItens.length-1].unit += (Math.round(valorProp) - sf);
+            if (sf !== Math.round(valorServ) && prevItens.length) prevItens[prevItens.length-1].unit += (Math.round(valorServ) - sf);
           }
         }
       } catch(e) { /* ignore parse errors */ }
@@ -8796,7 +8844,8 @@ function prevAtualizar() {
   let subtotalComArt = subtotalItens + artVal;
   const impValComArt = subtotalComArt * (imp/100);
   const liqComArt    = subtotalComArt - impValComArt;
-  const total  = liqComArt + desl + extras;
+  // Total da proposta = bruto (o que o cliente paga), sem descontar Simples Nacional
+  const total  = subtotalComArt + desl + extras;
 
   // — Montar linhas da tabela de itens —
   // Coletar todos os itens dos blocos da calculadora para cruzar normas/descrição
@@ -9477,7 +9526,7 @@ function prevWhatsApp() {
 
   let subtotal = 0;
   prevItens.forEach(it => { subtotal += (it.qtd||0)*(it.unit||0); });
-  const total = subtotal * 0.94; // 6% Simples
+  const total = subtotal; // Valor bruto — o que o cliente paga
 
   const numProp = String(r[CRM_COL.ID]||1).padStart(4,'0');
   const cliente = r[CRM_COL.RAZAO]   || '—';
@@ -13920,12 +13969,16 @@ function calcCarregarSubcategorias() {
 
 // Enviar resultado da calculadora de volta para Nova Proposta
 function calcEnviarParaProposta() {
-  const liqEl = document.getElementById('r-liq');
-  const liq = parseFloat((liqEl?.textContent||'0').replace(/[R$.\s]/g,'').replace(',','.')) || 0;
+  // Ler subtotal de serviços (bruto, sem ART/desl/extras) para distribuir nos itens
+  const subtotalEl = document.getElementById('r-subtotal');
+  const subtotalServ = parseFloat((subtotalEl?.textContent||'0').replace(/[R$.\s]/g,'').replace(',','.')) || 0;
+  // Ler total bruto (serviços + ART + desl + extras) — valor que vai para o cliente
+  const brutoEl = document.getElementById('r-bruto');
+  const bruto = parseFloat((brutoEl?.textContent||'0').replace(/[R$.\s]/g,'').replace(',','.')) || 0;
   const vh = parseFloat(document.getElementById('calc-vh')?.value || '100') || 100;
 
-  // Salvar valor e condições no contexto
-  PROPOSTA_CONTEXTO.valor = liq.toFixed(2);
+  // Salvar valor bruto (o que o cliente paga) e condições no contexto
+  PROPOSTA_CONTEXTO.valor = bruto.toFixed(2);
   PROPOSTA_CONTEXTO.pagto = calcGetPagtoStr?.() || '';
   PROPOSTA_CONTEXTO.parcelas = JSON.parse(JSON.stringify(calcPagtoItens || []));
   localStorage.setItem('proposta_ctx', JSON.stringify(PROPOSTA_CONTEXTO));
@@ -13941,22 +13994,22 @@ function calcEnviarParaProposta() {
         prevItens.push({ desc: it.desc, qtd: it.qtd || 1, unit: 0, horas: (it.horas||0), rev: (it.rev||0), bloco: bloco.nome || bloco.servico || '' });
       });
     });
-    // Distribuir valor total (liq) proporcionalmente pelas horas
-    if (prevItens.length && liq > 0) {
+    // Distribuir subtotal de serviços (bruto, sem ART) proporcionalmente pelas horas
+    if (prevItens.length && subtotalServ > 0) {
       const totalHoras = prevItens.reduce((s, it) => s + (it.horas || 0), 0);
       if (totalHoras > 0) {
         // Distribuir proporcional às horas
         prevItens.forEach(it => {
-          it.unit = Math.round(liq * (it.horas / totalHoras));
+          it.unit = Math.round(subtotalServ * (it.horas / totalHoras));
         });
       } else {
         // Sem horas: distribuir igualmente
-        const perItem = Math.round(liq / prevItens.length);
+        const perItem = Math.round(subtotalServ / prevItens.length);
         prevItens.forEach(it => { it.unit = perItem; });
       }
       // Corrigir arredondamento no último item
       const somaFinal = prevItens.reduce((s, it) => s + (it.qtd * it.unit), 0);
-      if (somaFinal !== Math.round(liq)) prevItens[prevItens.length - 1].unit += (Math.round(liq) - somaFinal);
+      if (somaFinal !== Math.round(subtotalServ)) prevItens[prevItens.length - 1].unit += (Math.round(subtotalServ) - somaFinal);
     }
   }
 
@@ -13974,7 +14027,7 @@ function calcEnviarParaProposta() {
   setTimeout(() => {
     // Restaurar valor
     const elVal = document.getElementById('np-valor');
-    if (elVal && liq) elVal.value = liq.toFixed(2);
+    if (elVal && bruto) elVal.value = bruto.toFixed(2);
 
     // Restaurar campos da proposta se existir contexto
     const ctx = PROPOSTA_CONTEXTO;
@@ -14271,7 +14324,7 @@ function calcGetValorLiquido() {
 }
 
 function calcPagtoRecalcular() {
-  const totalProposta = calcGetValorLiquido() || parseFloat(document.getElementById('np-valor')?.value || '0') || 0;
+  const totalProposta = calcGetValorBruto() || parseFloat(document.getElementById('np-valor')?.value || '0') || 0;
   calcPagtoItens.forEach(p => {
     const pct = parseFloat(p.percentual) || 0;
     p.valorCalc = totalProposta * (pct / 100);
@@ -14287,7 +14340,7 @@ function calcRenderPagto() {
     { percentual: 50, desc: 'Na entrega do projeto', textoCompl: '', valorCalc: 0 },
   ];
 
-  const totalProposta = calcGetValorLiquido() || parseFloat(document.getElementById('np-valor')?.value || '0') || 0;
+  const totalProposta = calcGetValorBruto() || parseFloat(document.getElementById('np-valor')?.value || '0') || 0;
 
   // Calcular valores
   let somaPerc = 0;
@@ -15085,10 +15138,15 @@ function renderGraficosClientes(clientes) {
 
 function cliVerDetalhe(chave) {
   // Abrir modal ou filtrar CRM por este cliente
-  const row = DATA.crm.find(r => r[CRM_COL.CNPJ] === chave || r[CRM_COL.RAZAO] === chave);
-  if (!row) return;
+  const row = DATA.crm.find(r => {
+    const cnpj = (r[CRM_COL.CNPJ]||'').replace(/[.\-\/\s]/g,'');
+    const chaveClean = (chave||'').replace(/[.\-\/\s]/g,'');
+    return cnpj === chaveClean || r[CRM_COL.RAZAO] === chave;
+  });
+  if (!row) { toast('Cliente não encontrado no CRM', 'warning'); return; }
   // Ir para CRM já filtrado
-  document.getElementById('crm-search').value = row[CRM_COL.RAZAO] || chave;
+  const searchEl = document.getElementById('crm-search');
+  if (searchEl) searchEl.value = row[CRM_COL.RAZAO] || chave;
   filterCRM();
   nav('crm');
   toast(`Mostrando propostas de ${row[CRM_COL.RAZAO] || chave}`, 'info');
@@ -15169,7 +15227,8 @@ function prevExportarWord() {
   const subtotalComArt = subtotalItens + artVal;
   const impVal = subtotalComArt*(imp/100);
   const liq    = subtotalComArt - impVal;
-  const total  = liq + desl + extras;
+  // Total da proposta = bruto (o que o cliente paga), sem descontar Simples Nacional
+  const total  = subtotalComArt + desl + extras;
 
   const fmt = v => 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2});
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
