@@ -6347,13 +6347,42 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 /* ═══════════════════════════════════════════
    SYNC / GOOGLE SHEETS
 ═══════════════════════════════════════════ */
-async function _fetchRetry(url, opts = {}, retries = 2) {
-  opts.redirect = opts.redirect || 'follow';
+// ── Fetch com retry e fallback para CORS do Apps Script ──
+async function _fetchGet(url, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
-      const resp = await fetch(url, opts);
+      const resp = await fetch(url, { redirect: 'follow' });
       return resp;
     } catch(e) {
+      if (i === retries) throw e;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+}
+
+async function _fetchPost(url, payload, retries = 2) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      // Tentativa 1: POST normal com redirect follow
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow'
+      });
+      return resp;
+    } catch(e) {
+      // Se falhou com "Failed to fetch" (CORS), tenta via GET com dados na URL
+      if (i === 0 && e.message && e.message.includes('fetch')) {
+        try {
+          const encoded = encodeURIComponent(JSON.stringify(payload));
+          const sep = url.includes('?') ? '&' : '?';
+          const resp = await fetch(url + sep + 'payload=' + encoded, { redirect: 'follow' });
+          return resp;
+        } catch(e2) {
+          // GET fallback também falhou, continua retry do POST
+        }
+      }
       if (i === retries) throw e;
       await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
@@ -6374,7 +6403,7 @@ async function syncData() {
 
   try {
     // Buscar tudo de uma vez via Apps Script (action=sync)
-    const resp = await _fetchRetry(CONFIG.APPS_SCRIPT_URL + '?action=sync');
+    const resp = await _fetchGet(CONFIG.APPS_SCRIPT_URL + '?action=sync');
     if (!resp.ok) throw new Error('Apps Script respondeu ' + resp.status);
     const all = await resp.json();
     if (all.error) throw new Error(all.error);
@@ -6413,7 +6442,7 @@ function _getAppsScriptUrl() {
 async function sheetsGet(sheetName, range) {
   const base = _getAppsScriptUrl();
   const url = `${base}?action=get&sheet=${encodeURIComponent(sheetName)}&range=${encodeURIComponent(range)}`;
-  const resp = await _fetchRetry(url);
+  const resp = await _fetchGet(url);
   if (!resp.ok) throw new Error(`Apps Script GET ${resp.status}: ${sheetName}`);
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
@@ -6422,11 +6451,8 @@ async function sheetsGet(sheetName, range) {
 
 async function sheetsAppend(sheetName, values) {
   const base = _getAppsScriptUrl();
-  const resp = await _fetchRetry(base, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'append', sheet: sheetName, values }),
-  });
+  const payload = { action: 'append', sheet: sheetName, values };
+  const resp = await _fetchPost(base, payload);
   if (!resp.ok) throw new Error(`Apps Script POST ${resp.status}: ${sheetName}`);
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
@@ -6435,11 +6461,8 @@ async function sheetsAppend(sheetName, values) {
 
 async function sheetsPut(sheetName, range, values) {
   const base = _getAppsScriptUrl();
-  const resp = await _fetchRetry(base, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'put', sheet: sheetName, range, values }),
-  });
+  const payload = { action: 'put', sheet: sheetName, range, values };
+  const resp = await _fetchPost(base, payload);
   if (!resp.ok) throw new Error(`Apps Script PUT ${resp.status}: ${sheetName}`);
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
@@ -7488,16 +7511,12 @@ async function loadCalendar() {
     const calId  = encodeURIComponent(CONFIG.CALENDAR_ID);
 
     const base = _getAppsScriptUrl();
-    const resp = await fetch(base, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'calendarList',
-        calendarId: CONFIG.CALENDAR_ID,
-        timeMin: now,
-        timeMax: future,
-        maxResults: 15
-      })
+    const resp = await _fetchPost(base, {
+      action: 'calendarList',
+      calendarId: CONFIG.CALENDAR_ID,
+      timeMin: now,
+      timeMax: future,
+      maxResults: 15
     });
 
     if (!resp.ok) throw new Error('Calendar API: ' + resp.status);
@@ -7563,17 +7582,13 @@ async function createCalendarEvent() {
     const end   = new Date(start.getTime() + 60*60*1000); // 1h
 
     const base = _getAppsScriptUrl();
-    const resp  = await fetch(base, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'calendarCreate',
-        calendarId: CONFIG.CALENDAR_ID,
-        summary:     title,
-        description: desc,
-        start: { dateTime: start.toISOString(), timeZone: 'America/Sao_Paulo' },
-        end:   { dateTime: end.toISOString(),   timeZone: 'America/Sao_Paulo' },
-      })
+    const resp  = await _fetchPost(base, {
+      action: 'calendarCreate',
+      calendarId: CONFIG.CALENDAR_ID,
+      summary:     title,
+      description: desc,
+      start: { dateTime: start.toISOString(), timeZone: 'America/Sao_Paulo' },
+      end:   { dateTime: end.toISOString(),   timeZone: 'America/Sao_Paulo' },
     });
 
     if (!resp.ok) { const err = await resp.json(); throw new Error(err.error?.message || 'Erro'); }
@@ -8001,11 +8016,7 @@ async function salvarEdicao() {
       ];
 
       const base = _getAppsScriptUrl();
-      await fetch(base, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'batchUpdate', updates })
-      });
+      await _fetchPost(base, { action: 'batchUpdate', updates });
 
       // Transferência automática CRM → FINANCEIRO ao marcar Ganha
       if (editStatusSelected === 'Ganha' && statusAnterior !== 'Ganha') {
