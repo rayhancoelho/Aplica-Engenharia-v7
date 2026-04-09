@@ -6347,42 +6347,22 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 /* ═══════════════════════════════════════════
    SYNC / GOOGLE SHEETS
 ═══════════════════════════════════════════ */
-// ── Fetch com retry e fallback para CORS do Apps Script ──
-async function _fetchGet(url, retries = 2) {
+// ── Comunicação com Apps Script (tudo via GET para evitar CORS) ──
+async function _appsGet(params, retries = 2) {
+  const base = _getAppsScriptUrl();
+  const qs = Object.entries(params)
+    .map(([k, v]) => `${k}=${encodeURIComponent(typeof v === 'object' ? JSON.stringify(v) : v)}`)
+    .join('&');
+  const url = base + '?' + qs;
+
   for (let i = 0; i <= retries; i++) {
     try {
       const resp = await fetch(url, { redirect: 'follow' });
-      return resp;
+      if (!resp.ok) throw new Error('Apps Script respondeu ' + resp.status);
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      return data;
     } catch(e) {
-      if (i === retries) throw e;
-      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-    }
-  }
-}
-
-async function _fetchPost(url, payload, retries = 2) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      // Tentativa 1: POST normal com redirect follow
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload),
-        redirect: 'follow'
-      });
-      return resp;
-    } catch(e) {
-      // Se falhou com "Failed to fetch" (CORS), tenta via GET com dados na URL
-      if (i === 0 && e.message && e.message.includes('fetch')) {
-        try {
-          const encoded = encodeURIComponent(JSON.stringify(payload));
-          const sep = url.includes('?') ? '&' : '?';
-          const resp = await fetch(url + sep + 'payload=' + encoded, { redirect: 'follow' });
-          return resp;
-        } catch(e2) {
-          // GET fallback também falhou, continua retry do POST
-        }
-      }
       if (i === retries) throw e;
       await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
@@ -6403,10 +6383,7 @@ async function syncData() {
 
   try {
     // Buscar tudo de uma vez via Apps Script (action=sync)
-    const resp = await _fetchGet(CONFIG.APPS_SCRIPT_URL + '?action=sync');
-    if (!resp.ok) throw new Error('Apps Script respondeu ' + resp.status);
-    const all = await resp.json();
-    if (all.error) throw new Error(all.error);
+    const all = await _appsGet({ action: 'sync' });
 
     DATA.crm        = all.crm        || [];
     DATA.financeiro = all.financeiro || [];
@@ -6440,33 +6417,15 @@ function _getAppsScriptUrl() {
 }
 
 async function sheetsGet(sheetName, range) {
-  const base = _getAppsScriptUrl();
-  const url = `${base}?action=get&sheet=${encodeURIComponent(sheetName)}&range=${encodeURIComponent(range)}`;
-  const resp = await _fetchGet(url);
-  if (!resp.ok) throw new Error(`Apps Script GET ${resp.status}: ${sheetName}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  return data || [];
+  return await _appsGet({ action: 'get', sheet: sheetName, range }) || [];
 }
 
 async function sheetsAppend(sheetName, values) {
-  const base = _getAppsScriptUrl();
-  const payload = { action: 'append', sheet: sheetName, values };
-  const resp = await _fetchPost(base, payload);
-  if (!resp.ok) throw new Error(`Apps Script POST ${resp.status}: ${sheetName}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  return data;
+  return await _appsGet({ action: 'append', sheet: sheetName, values });
 }
 
 async function sheetsPut(sheetName, range, values) {
-  const base = _getAppsScriptUrl();
-  const payload = { action: 'put', sheet: sheetName, range, values };
-  const resp = await _fetchPost(base, payload);
-  if (!resp.ok) throw new Error(`Apps Script PUT ${resp.status}: ${sheetName}`);
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-  return data;
+  return await _appsGet({ action: 'put', sheet: sheetName, range, values });
 }
 
 /* ═══════════════════════════════════════════
@@ -7510,18 +7469,13 @@ async function loadCalendar() {
     const future = new Date(Date.now() + 30*24*60*60*1000).toISOString();
     const calId  = encodeURIComponent(CONFIG.CALENDAR_ID);
 
-    const base = _getAppsScriptUrl();
-    const resp = await _fetchPost(base, {
+    const data = await _appsGet({
       action: 'calendarList',
       calendarId: CONFIG.CALENDAR_ID,
       timeMin: now,
       timeMax: future,
       maxResults: 15
     });
-
-    if (!resp.ok) throw new Error('Calendar API: ' + resp.status);
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error);
     const events = data.items || data || [];
 
     // Atualizar badge
@@ -7581,8 +7535,7 @@ async function createCalendarEvent() {
     const start = new Date(`${date}T${time}:00`);
     const end   = new Date(start.getTime() + 60*60*1000); // 1h
 
-    const base = _getAppsScriptUrl();
-    const resp  = await _fetchPost(base, {
+    await _appsGet({
       action: 'calendarCreate',
       calendarId: CONFIG.CALENDAR_ID,
       summary:     title,
@@ -7590,8 +7543,6 @@ async function createCalendarEvent() {
       start: { dateTime: start.toISOString(), timeZone: 'America/Sao_Paulo' },
       end:   { dateTime: end.toISOString(),   timeZone: 'America/Sao_Paulo' },
     });
-
-    if (!resp.ok) { const err = await resp.json(); throw new Error(err.error?.message || 'Erro'); }
 
     toast('✅ Evento criado no Google Calendar!', 'success');
     document.getElementById('ev-title').value = '';
@@ -8015,8 +7966,7 @@ async function salvarEdicao() {
         { sheet: CONFIG.SHEETS.CRM, range: `AK${rowReal}`, values: [[r[CRM_COL.OBS]]]      },
       ];
 
-      const base = _getAppsScriptUrl();
-      await _fetchPost(base, { action: 'batchUpdate', updates });
+      await _appsGet({ action: 'batchUpdate', updates });
 
       // Transferência automática CRM → FINANCEIRO ao marcar Ganha
       if (editStatusSelected === 'Ganha' && statusAnterior !== 'Ganha') {
