@@ -6347,6 +6347,19 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 /* ═══════════════════════════════════════════
    SYNC / GOOGLE SHEETS
 ═══════════════════════════════════════════ */
+async function _fetchRetry(url, opts = {}, retries = 2) {
+  opts.redirect = opts.redirect || 'follow';
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const resp = await fetch(url, opts);
+      return resp;
+    } catch(e) {
+      if (i === retries) throw e;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+}
+
 async function syncData() {
   if (!CONFIG.APPS_SCRIPT_URL) {
     // Sem Apps Script — usar dados locais
@@ -6361,7 +6374,7 @@ async function syncData() {
 
   try {
     // Buscar tudo de uma vez via Apps Script (action=sync)
-    const resp = await fetch(CONFIG.APPS_SCRIPT_URL + '?action=sync');
+    const resp = await _fetchRetry(CONFIG.APPS_SCRIPT_URL + '?action=sync');
     if (!resp.ok) throw new Error('Apps Script respondeu ' + resp.status);
     const all = await resp.json();
     if (all.error) throw new Error(all.error);
@@ -6400,7 +6413,7 @@ function _getAppsScriptUrl() {
 async function sheetsGet(sheetName, range) {
   const base = _getAppsScriptUrl();
   const url = `${base}?action=get&sheet=${encodeURIComponent(sheetName)}&range=${encodeURIComponent(range)}`;
-  const resp = await fetch(url);
+  const resp = await _fetchRetry(url);
   if (!resp.ok) throw new Error(`Apps Script GET ${resp.status}: ${sheetName}`);
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
@@ -6409,11 +6422,10 @@ async function sheetsGet(sheetName, range) {
 
 async function sheetsAppend(sheetName, values) {
   const base = _getAppsScriptUrl();
-  const resp = await fetch(base, {
+  const resp = await _fetchRetry(base, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action: 'append', sheet: sheetName, values }),
-    redirect: 'follow'
   });
   if (!resp.ok) throw new Error(`Apps Script POST ${resp.status}: ${sheetName}`);
   const data = await resp.json();
@@ -6423,11 +6435,10 @@ async function sheetsAppend(sheetName, values) {
 
 async function sheetsPut(sheetName, range, values) {
   const base = _getAppsScriptUrl();
-  const resp = await fetch(base, {
+  const resp = await _fetchRetry(base, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action: 'put', sheet: sheetName, range, values }),
-    redirect: 'follow'
   });
   if (!resp.ok) throw new Error(`Apps Script PUT ${resp.status}: ${sheetName}`);
   const data = await resp.json();
