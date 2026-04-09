@@ -6192,6 +6192,7 @@ const CONFIG = {
     HISTORICO_NF:        'HISTORICO_NF',
     TIMER:               'TIMER',
     CADASTRO:            'CADASTRO',
+    CONTATOS:            'CONTATOS',
   }
 };
 
@@ -6233,6 +6234,7 @@ const DATA = {
   projetos:   [],
   despesas:   [],
   marketing:  [],
+  contatos:   [],
   loaded:     false
 };
 
@@ -6248,6 +6250,7 @@ function loadDataLocal() {
       DATA.projetos   = parsed.projetos   || [];
       DATA.despesas   = parsed.despesas   || [];
       DATA.marketing  = parsed.marketing  || [];
+      DATA.contatos   = parsed.contatos   || [];
       DATA.loaded     = true;
     }
   } catch(e) { console.warn('Erro ao carregar dados locais:', e); }
@@ -6256,7 +6259,8 @@ function saveDataLocal() {
   try {
     localStorage.setItem('aplica_data', JSON.stringify({
       crm: DATA.crm, financeiro: DATA.financeiro, clientes: DATA.clientes,
-      projetos: DATA.projetos, despesas: DATA.despesas, marketing: DATA.marketing
+      projetos: DATA.projetos, despesas: DATA.despesas, marketing: DATA.marketing,
+      contatos: DATA.contatos
     }));
   } catch(e) { console.warn('Erro ao salvar dados locais:', e); }
 }
@@ -6391,7 +6395,11 @@ async function syncData() {
     DATA.projetos   = all.projetos   || [];
     DATA.despesas   = all.despesas   || [];
     DATA.marketing  = all.marketing  || [];
+    DATA.contatos   = all.contatos   || [];
     DATA.loaded     = true;
+
+    // Reconstruir contatos em memória a partir da planilha CONTATOS
+    _rebuildContatosFromData();
 
     saveDataLocal();
     setSyncStatus('ok', 'Atualizado ' + fmtTime(new Date()));
@@ -6426,6 +6434,62 @@ async function sheetsAppend(sheetName, values) {
 
 async function sheetsPut(sheetName, range, values) {
   return await _appsGet({ action: 'put', sheet: sheetName, range, values });
+}
+
+// ── CONTATOS — helpers para sincronizar com planilha ──────────
+// Colunas da aba CONTATOS: A=tipo, B=subtipo, C=ref_id, D=nome, E=cargo,
+// F=area, G=telefone, H=email, I=doc, J=uf, K=cidade, L=atividade,
+// M=esp, N=valor, O=cat, P=custo, Q=obs, R=data_criacao
+const CT = {TIPO:0,SUB:1,REF:2,NOME:3,CARGO:4,AREA:5,TEL:6,EMAIL:7,DOC:8,UF:9,CIDADE:10,ATIV:11,ESP:12,VALOR:13,CAT:14,CUSTO:15,OBS:16,DATA:17};
+
+function _rebuildContatosFromData() {
+  if (!DATA.contatos || !DATA.contatos.length) return;
+  // Reconstruir CONTATOS externos (projetistas, representantes, outros)
+  if (typeof CONTATOS !== 'undefined') {
+    CONTATOS.projetistas = [];
+    CONTATOS.representantes = [];
+    CONTATOS.outros = [];
+    DATA.contatos.filter(r => r[CT.TIPO] === 'externo').forEach(r => {
+      const sub = r[CT.SUB];
+      if (CONTATOS[sub]) CONTATOS[sub].push({
+        nome: r[CT.NOME]||'', doc: r[CT.DOC]||'', fone: r[CT.TEL]||'', email: r[CT.EMAIL]||'',
+        uf: r[CT.UF]||'', cidade: r[CT.CIDADE]||'', atividade: r[CT.ATIV]||'',
+        esp: r[CT.ESP]||'', valor: r[CT.VALOR]||'', cat: r[CT.CAT]||'', custo: r[CT.CUSTO]||'', obs: r[CT.OBS]||''
+      });
+    });
+  }
+  // Reconstruir contatos por setor do cadastro
+  if (typeof cadContatosExtra !== 'undefined') {
+    const cads = DATA.contatos.filter(r => r[CT.TIPO] === 'cadastro');
+    if (cads.length) {
+      cadContatosExtra.length = 0;
+      cads.forEach(r => cadContatosExtra.push({ nome: r[CT.NOME]||'', setor: r[CT.SUB]||'Comercial', tel: r[CT.TEL]||'', email: r[CT.EMAIL]||'' }));
+    }
+  }
+}
+
+function _contatoToRow(tipo, subtipo, refId, c) {
+  // telefone: priorizar campo específico, usar 'valor' só como fallback para contatos de proposta
+  const tel = c.telefone || c.whatsapp || c.fone || c.tel || (tipo === 'proposta' ? c.valor : '') || '';
+  // valor monetário: só para contatos externos (projetistas/representantes)
+  const valMon = tipo === 'externo' ? (c.valor||'') : '';
+  return [
+    tipo, subtipo, refId||'',
+    c.nome||'', c.cargo||'', c.area||c.setor||'',
+    tel, c.email||'',
+    c.doc||'', c.uf||'', c.cidade||'', c.atividade||'',
+    c.esp||'', valMon, c.cat||'', c.custo||'', c.obs||'',
+    new Date().toISOString().split('T')[0]
+  ];
+}
+
+async function syncAllContatos() {
+  if (!CONFIG.APPS_SCRIPT_URL) return;
+  try {
+    if (DATA.contatos.length) {
+      await sheetsPut(CONFIG.SHEETS.CONTATOS, 'A2:R' + (DATA.contatos.length + 1), DATA.contatos);
+    }
+  } catch(e) { console.error('Erro ao sincronizar contatos:', e); }
 }
 
 /* ═══════════════════════════════════════════
@@ -7345,6 +7409,15 @@ async function salvarPropostaModal() {
   ];
 
   await _saveProposta(novaRow, 'm');
+
+  // Salvar contato da modal na aba CONTATOS
+  const _mIdProp = novaRow[0] || window._lastSavedPropId || '';
+  if (_mIdProp && (contato || fone)) {
+    DATA.contatos = DATA.contatos.filter(r => !(r[CT.TIPO] === 'proposta' && String(r[CT.REF]) === String(_mIdProp)));
+    DATA.contatos.push(_contatoToRow('proposta', '', String(_mIdProp), { nome: contato, telefone: fone, email: '', cargo: '', area: 'Geral' }));
+    saveDataLocal();
+    syncAllContatos().catch(e => console.error('Erro salvar contato modal:', e));
+  }
 }
 
 async function _saveProposta(row, prefix) {
@@ -13182,7 +13255,13 @@ function cadContatoRemover(i) {
 
 function cadContatoSalvar() {
   localStorage.setItem('cad_contatos_extra', JSON.stringify(cadContatosExtra));
-  toast('Contatos salvos ✅', 'success');
+  // Salvar na aba CONTATOS da planilha
+  DATA.contatos = DATA.contatos.filter(r => r[CT.TIPO] !== 'cadastro');
+  cadContatosExtra.forEach(c => {
+    DATA.contatos.push(_contatoToRow('cadastro', c.setor||'Comercial', '', c));
+  });
+  saveDataLocal();
+  syncAllContatos().then(() => toast('Contatos salvos ✅', 'success')).catch(() => toast('Contatos salvos localmente', 'warning'));
 }
 
 // ── CONDIÇÕES DE PAGAMENTO PADRÃO (Cadastro) ──────────────
@@ -13663,10 +13742,8 @@ salvarProposta = async function() {
   // Formatar obs com subcategorias
   const obsCompleta = [d.obs, subcatsStr ? 'Serviços: ' + subcatsStr : ''].filter(Boolean).join('\n');
 
-  // Contatos adicionais em JSON para o campo AK (OBS)
-  const contatosJSON = npContatos.length > 0
-    ? '\nContatos: ' + npContatos.map(c => `${c.nome||'?'}${c.cargo?' ('+c.cargo+')':''} [${c.area||'Geral'}] Tel:${c.telefone||c.valor||'—'} Email:${c.email||'—'}`).join(' | ')
-    : '';
+  // Contatos adicionais agora salvos na aba CONTATOS (não mais no OBS)
+  const contatosJSON = '';
 
   const valid  = d.validade  ? new Date(d.validade  + 'T00:00:00').toLocaleDateString('pt-BR') : '';
   const follow = d.followup  ? new Date(d.followup  + 'T00:00:00').toLocaleDateString('pt-BR') : '';
@@ -13713,6 +13790,18 @@ salvarProposta = async function() {
   ];
 
   await _saveProposta(novaRow, 'np');
+
+  // Salvar todos os contatos da proposta na aba CONTATOS
+  if (idProp && npContatos.length) {
+    // Remover contatos antigos desta proposta
+    DATA.contatos = DATA.contatos.filter(r => !(r[CT.TIPO] === 'proposta' && String(r[CT.REF]) === String(idProp)));
+    // Adicionar contatos atuais
+    npContatos.forEach(c => {
+      DATA.contatos.push(_contatoToRow('proposta', '', String(idProp), c));
+    });
+    saveDataLocal();
+    syncAllContatos().catch(e => console.error('Erro salvar contatos proposta:', e));
+  }
 
   // Limpar rascunho correspondente se existir
   if (idProp) {
@@ -14588,15 +14677,25 @@ function npAbrirEdicaoProposta(idx) {
   // Fallback se parsing falhou
   if (!servicosParsed.length) servicosParsed.push({ servico: 'ATERRAMENTO ELÉTRICO', subcats: [] });
 
-  // Reconstruir contatos
-  const contato1 = r[CRM_COL.CONTATO]  || '';
-  const fone1    = r[CRM_COL.FONE]     || '';
-  const email1   = r[CRM_COL.EMAIL]    || '';
-  const contatosParsed = [{ tipo: 'WhatsApp', nome: contato1, valor: fone1 }];
-  if (email1) contatosParsed.push({ tipo: 'E-mail', nome: '', valor: email1 });
-  const contato2 = r[CRM_COL.CONTATO2] || '';
-  const email2   = r[CRM_COL.EMAIL2]   || '';
-  if (contato2) contatosParsed.push({ tipo: 'WhatsApp', nome: contato2, valor: email2 || '' });
+  // Reconstruir contatos — priorizar dados da aba CONTATOS
+  const propId = String(r[CRM_COL.ID] || '');
+  const contatosSalvos = (DATA.contatos || []).filter(c => c[CT.TIPO] === 'proposta' && String(c[CT.REF]) === propId);
+  let contatosParsed;
+  if (contatosSalvos.length) {
+    contatosParsed = contatosSalvos.map(c => ({
+      tipo: 'WhatsApp', nome: c[CT.NOME]||'', cargo: c[CT.CARGO]||'', area: c[CT.AREA]||'Geral',
+      telefone: c[CT.TEL]||'', whatsapp: c[CT.TEL]||'', email: c[CT.EMAIL]||'', valor: c[CT.TEL]||''
+    }));
+  } else {
+    // Fallback: reconstruir do CRM (propostas antigas)
+    const contato1 = r[CRM_COL.CONTATO]  || '';
+    const fone1    = r[CRM_COL.FONE]     || '';
+    const email1   = r[CRM_COL.EMAIL]    || '';
+    contatosParsed = [{ tipo: 'WhatsApp', nome: contato1, valor: fone1, telefone: fone1, whatsapp: fone1, email: email1, cargo: '', area: 'Geral' }];
+    const contato2 = r[CRM_COL.CONTATO2] || '';
+    const email2   = r[CRM_COL.EMAIL2]   || '';
+    if (contato2) contatosParsed.push({ tipo: 'WhatsApp', nome: contato2, valor: email2 || '', telefone: '', whatsapp: '', email: email2||'', cargo: '', area: 'Geral' });
+  }
 
   // Montar contexto
   PROPOSTA_CONTEXTO = {
@@ -18257,6 +18356,13 @@ function contSalvar() {
   }
   document.getElementById('modal-novo-contato').dataset.editIdx = '-1';
   localStorage.setItem(`contatos_${tipo}`, JSON.stringify(CONTATOS[tipo]));
+  // Salvar na aba CONTATOS da planilha
+  DATA.contatos = DATA.contatos.filter(r => !(r[CT.TIPO] === 'externo' && r[CT.SUB] === tipo));
+  CONTATOS[tipo].forEach(c => {
+    DATA.contatos.push(_contatoToRow('externo', tipo, '', c));
+  });
+  saveDataLocal();
+  syncAllContatos().catch(e => console.error('Erro salvar contato externo:', e));
   closeModal('modal-novo-contato');
   cliContatoFiltrar(tipo);
   // Também atualizar tabela principal de clientes
@@ -20688,19 +20794,28 @@ function npDuplicarProposta(idx) {
     // Copiar pessoa responsável
     if (el('np-pessoa-responsavel')) el('np-pessoa-responsavel').value = r[6] || '';
 
-    // Copiar contatos
+    // Copiar contatos — priorizar dados da aba CONTATOS
     if (typeof npContatos !== 'undefined') {
-      npContatos = [];
-      const contNome = r[CRM_COL.CONTATO] || '';
-      const contEmail = r[CRM_COL.EMAIL] || '';
-      const contFone = r[CRM_COL.FONE] || '';
-      if (contNome || contEmail || contFone) {
-        npContatos.push({ nome: contNome, email: contEmail, telefone: contFone, cargo: '', area: 'Geral', whatsapp: contFone });
+      const _dupPropId = String(r[CRM_COL.ID] || '');
+      const _dupSalvos = (DATA.contatos || []).filter(c => c[CT.TIPO] === 'proposta' && String(c[CT.REF]) === _dupPropId);
+      if (_dupSalvos.length) {
+        npContatos = _dupSalvos.map(c => ({
+          tipo: 'WhatsApp', nome: c[CT.NOME]||'', cargo: c[CT.CARGO]||'', area: c[CT.AREA]||'Geral',
+          telefone: c[CT.TEL]||'', whatsapp: c[CT.TEL]||'', email: c[CT.EMAIL]||'', valor: c[CT.TEL]||''
+        }));
+      } else {
+        // Fallback: reconstruir do CRM (propostas antigas)
+        npContatos = [];
+        const contNome = r[CRM_COL.CONTATO] || '';
+        const contEmail = r[CRM_COL.EMAIL] || '';
+        const contFone = r[CRM_COL.FONE] || '';
+        if (contNome || contEmail || contFone) {
+          npContatos.push({ nome: contNome, email: contEmail, telefone: contFone, cargo: '', area: 'Geral', whatsapp: contFone });
+        }
+        const cont2 = r[CRM_COL.CONTATO2] || '';
+        const email2 = r[CRM_COL.EMAIL2] || '';
+        if (cont2) npContatos.push({ nome: cont2, email: email2, telefone: '', cargo: '', area: '', whatsapp: '' });
       }
-      // Segundo contato
-      const cont2 = r[CRM_COL.CONTATO2] || '';
-      const email2 = r[CRM_COL.EMAIL2] || '';
-      if (cont2) npContatos.push({ nome: cont2, email: email2, telefone: '', cargo: '', area: '', whatsapp: '' });
       if (typeof npRenderContatos === 'function') npRenderContatos();
     }
 
