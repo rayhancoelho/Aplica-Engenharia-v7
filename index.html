@@ -4442,6 +4442,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
         <div class="card" style="margin-bottom:14px">
           <div class="card-header">
             <div class="card-title">🔐 Permissões de Usuários</div>
+            <button class="btn btn-ghost btn-sm" onclick="permissaoAdicionarPessoa()" style="color:var(--teal)">+ Adicionar Pessoa</button>
           </div>
           <div class="card-body" id="permissoes-wrap">
             <div style="color:var(--text3);font-size:12px">Carregando...</div>
@@ -19258,18 +19259,24 @@ const AREAS_PERMISSAO = [
 function permissoesRender() {
   const wrap = document.getElementById('permissoes-wrap');
   if (!wrap) return;
-  
+
   const membros = EQUIPE_DATA || [];
   if (!membros.length) {
-    wrap.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:16px">Cadastre membros na aba Equipe primeiro.</div>';
+    wrap.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:16px">Nenhuma pessoa cadastrada. Clique em "+ Adicionar Pessoa" para começar.</div>';
     return;
   }
-  
+
   wrap.innerHTML = membros.map((m, idx) => {
     const perms = PERMISSOES[m.nome] || {};
     return `<div class="card" style="margin-bottom:10px">
       <div class="card-body" style="padding:12px">
-        <div style="font-weight:700;margin-bottom:8px">${m.nome} <span style="font-size:11px;color:var(--text3)">(${m.vinculo})</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:700">${m.nome} <span style="font-size:11px;color:var(--text3)">(${m.vinculo || '—'})</span></div>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-ghost btn-sm" onclick="permissaoEditarPessoa(${idx})" style="font-size:10px;padding:3px 8px" title="Editar">✏️ Editar</button>
+            <button class="btn btn-ghost btn-sm" onclick="permissaoExcluirPessoa(${idx})" style="font-size:10px;padding:3px 8px;color:var(--coral)" title="Excluir">🗑️ Excluir</button>
+          </div>
+        </div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
           ${AREAS_PERMISSAO.map(a => {
             const checked = perms[a.key] !== false;
@@ -19288,6 +19295,67 @@ function permissaoToggle(nome, area, checked) {
   if (!PERMISSOES[nome]) PERMISSOES[nome] = {};
   PERMISSOES[nome][area] = checked;
   localStorage.setItem('user_permissions', JSON.stringify(PERMISSOES));
+}
+
+function permissaoAdicionarPessoa() {
+  const nome = prompt('Nome da pessoa:');
+  if (!nome || !nome.trim()) return;
+  const vinculos = (typeof cfgGetOpcoes === 'function') ? cfgGetOpcoes('vinculos') : ['CLT', 'PJ/Terceiro', 'Sócio', 'Estagiário', 'Parceiro', 'Freelancer', 'Consultor'];
+  const vinculo = prompt('Vínculo (' + vinculos.join(', ') + '):') || 'CLT';
+
+  if (EQUIPE_DATA.some(m => m.nome === nome.trim())) {
+    toast('Pessoa já cadastrada', 'warning');
+    return;
+  }
+
+  EQUIPE_DATA.push({ nome: nome.trim(), vinculo: vinculo.trim(), ativo: true, projetos: [] });
+  localStorage.setItem('equipe_data', JSON.stringify(EQUIPE_DATA));
+  permissoesRender();
+  if (typeof equipeRender === 'function') equipeRender();
+  toast(`"${nome.trim()}" adicionado(a)`, 'success');
+}
+
+function permissaoEditarPessoa(idx) {
+  const m = EQUIPE_DATA[idx];
+  if (!m) return;
+  const nomeAntigo = m.nome;
+  const novoNome = prompt('Nome:', m.nome);
+  if (novoNome === null) return;
+  if (!novoNome.trim()) { toast('Nome não pode ser vazio', 'warning'); return; }
+  const novoVinculo = prompt('Vínculo:', m.vinculo || 'CLT');
+  if (novoVinculo === null) return;
+
+  // Transferir permissões se nome mudou
+  if (nomeAntigo !== novoNome.trim() && PERMISSOES[nomeAntigo]) {
+    PERMISSOES[novoNome.trim()] = PERMISSOES[nomeAntigo];
+    delete PERMISSOES[nomeAntigo];
+    localStorage.setItem('user_permissions', JSON.stringify(PERMISSOES));
+  }
+
+  EQUIPE_DATA[idx].nome = novoNome.trim();
+  EQUIPE_DATA[idx].vinculo = novoVinculo.trim();
+  localStorage.setItem('equipe_data', JSON.stringify(EQUIPE_DATA));
+  permissoesRender();
+  if (typeof equipeRender === 'function') equipeRender();
+  toast('Pessoa atualizada', 'success');
+}
+
+function permissaoExcluirPessoa(idx) {
+  const m = EQUIPE_DATA[idx];
+  if (!m) return;
+  if (!confirm(`Excluir "${m.nome}" da equipe e suas permissões?`)) return;
+
+  // Remover permissões
+  if (PERMISSOES[m.nome]) {
+    delete PERMISSOES[m.nome];
+    localStorage.setItem('user_permissions', JSON.stringify(PERMISSOES));
+  }
+
+  EQUIPE_DATA.splice(idx, 1);
+  localStorage.setItem('equipe_data', JSON.stringify(EQUIPE_DATA));
+  permissoesRender();
+  if (typeof equipeRender === 'function') equipeRender();
+  toast(`"${m.nome}" removido(a)`, 'info');
 }
 
 // ══════════════════════════════════════════════════════
