@@ -15312,8 +15312,19 @@ function prevExportarWord() {
   }
   if (!fnBase || fnBase === 'Proposta__') fnBase = 'Proposta_Aplica_Engenharia';
 
-  // Montar documento HTML que o Word abre perfeitamente — idêntico ao PDF
-  const htmlDoc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+  // Extrair imagens base64 do HTML para embutir no MHTML
+  let previewHtml = wrap.innerHTML;
+  const imgParts = [];
+  let imgIdx = 0;
+  previewHtml = previewHtml.replace(/src="data:(image\/[^;]+);base64,([^"]+)"/g, (match, mime, b64) => {
+    imgIdx++;
+    const cid = `image${imgIdx}@aplica.doc`;
+    imgParts.push({ cid, mime, b64 });
+    return `src="cid:${cid}"`;
+  });
+
+  // Montar documento HTML para Word
+  const htmlContent = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:v="urn:schemas-microsoft-com:vml" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta charset="utf-8">
 <meta name="ProgId" content="Word.Document">
@@ -15330,12 +15341,34 @@ function prevExportarWord() {
 </style>
 </head>
 <body>
-${wrap.innerHTML}
+${previewHtml}
 </body>
 </html>`;
 
-  // Download como .doc
-  const blob = new Blob(['\ufeff' + htmlDoc], { type: 'application/msword' });
+  // Montar MHTML com imagens embutidas (Word suporta perfeitamente)
+  const boundary = '----=_NextPart_APLICA_DOC';
+  let mhtml = 'MIME-Version: 1.0\r\n';
+  mhtml += `Content-Type: multipart/related; boundary="${boundary}"\r\n\r\n`;
+  mhtml += `--${boundary}\r\n`;
+  mhtml += 'Content-Type: text/html; charset="utf-8"\r\n';
+  mhtml += 'Content-Transfer-Encoding: quoted-printable\r\n\r\n';
+  mhtml += htmlContent.replace(/[^\r\n]{76}/g, '$&=\r\n') + '\r\n';
+
+  imgParts.forEach(img => {
+    mhtml += `--${boundary}\r\n`;
+    mhtml += `Content-Type: ${img.mime}\r\n`;
+    mhtml += `Content-Transfer-Encoding: base64\r\n`;
+    mhtml += `Content-ID: <${img.cid}>\r\n\r\n`;
+    // Quebrar base64 em linhas de 76 caracteres
+    const b64 = img.b64;
+    for (let i = 0; i < b64.length; i += 76) {
+      mhtml += b64.slice(i, i + 76) + '\r\n';
+    }
+  });
+  mhtml += `--${boundary}--\r\n`;
+
+  // Download como .doc (MHTML)
+  const blob = new Blob([mhtml], { type: 'application/msword' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `${fnBase}.doc`;
