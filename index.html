@@ -1694,11 +1694,27 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
     height: auto !important;
     position: static !important;
   }
+  /* Logo ajustada para não ficar gigante */
+  #print-area img, #proposta-preview-wrap img {
+    max-height: 52px !important;
+    width: auto !important;
+    object-fit: contain !important;
+  }
   .prev-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .prev-resumo { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .prev-section { page-break-inside: avoid; }
   table { page-break-inside: auto; }
   tr { page-break-inside: avoid; }
+  /* Seções com margem e separação para não ficar amontoado */
+  #print-area [style*="margin-bottom:16px"], #print-area [style*="margin-bottom:20px"] {
+    margin-bottom: 18px !important;
+    page-break-inside: avoid;
+  }
+  /* Títulos de seção com espaço antes */
+  #print-area [style*="font-weight:800"][style*="text-transform:uppercase"] {
+    margin-top: 14px !important;
+    padding-bottom: 6px !important;
+  }
 }
 
 /* ═══════════════════════════════════════
@@ -5271,7 +5287,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                   Mostrar Simples Nacional
                 </label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-                  <input type="checkbox" id="prev-show-deslocamento" checked onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
+                  <input type="checkbox" id="prev-show-deslocamento" onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
                   Mostrar Deslocamento
                 </label>
                 <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px">
@@ -8441,7 +8457,7 @@ function calcRecalcular() {
     totalH   += (item.qtd || 0) * (item.horas || 0);
   });
 
-  const desl  = km * rkm * vis;
+  const desl  = km * rkm * vis * 2;
   const bruto = subtotal + art + desl + extras;
   const impVal= bruto * (imp / 100);
   const liq   = bruto - impVal;
@@ -8460,7 +8476,7 @@ function calcRecalcular() {
   if (s('r-desc'))     s('r-desc').textContent      = fmtMoney(comDesc) + ` (−${desc}%)`;
   if (s('r-horas'))    s('r-horas').textContent     = totalH.toFixed(1) + 'h';
   if (s('r-margem'))   s('r-margem').textContent    = margem.toFixed(1) + '%';
-  if (s('r-desl-mem')) s('r-desl-mem').textContent  = `${km} km × R$${rkm}/km × ${vis} vis.`;
+  if (s('r-desl-mem')) s('r-desl-mem').textContent  = `${km} km × R$${rkm}/km × ${vis} vis. × 2 (ida/volta)`;
 
   renderCalcItens();
   // Recalcular parcelas de pagamento quando valor muda
@@ -8498,7 +8514,7 @@ async function calcSalvarNoSheets() {
   calcBlocos.forEach(bloco => {
     bloco.itens.forEach(it => { subtotal += ((it.horas||0)+(it.rev||0)) * vh; });
   });
-  const desl  = km * rkm * vis;
+  const desl  = km * rkm * vis * 2;
   const bruto = subtotal + art + desl + extras;
   const liq   = bruto - bruto * (imp/100);
 
@@ -8861,7 +8877,7 @@ function prevAtualizar() {
   const showDesc     = document.getElementById('prev-show-descricao')?.checked ?? true;
   const showArt      = document.getElementById('prev-show-art')?.checked      ?? false;
   const modoPreco    = document.getElementById('prev-modo-preco')?.value       || 'por-item';
-  const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? true;
+  const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? false;
 
   // — Dados empresa —
   const crea    = document.getElementById('prev-crea')?.value       || 'CREA/SC 000000-0';
@@ -8894,7 +8910,7 @@ function prevAtualizar() {
   const rkm    = parseFloat(document.getElementById('calc-rkm')?.value   || '0.8') || 0.8;
   const vis    = parseFloat(document.getElementById('calc-vis')?.value   || '1') || 1;
   const extras = parseFloat(document.getElementById('calc-extras')?.value|| '0') || 0;
-  const desl   = km * rkm * vis;
+  const desl   = km * rkm * vis * 2;
   
   // ART entra como item comum na tabela, não no resumo
   // Injetar ART temporariamente em prevItens para render (sem alterar o array original)
@@ -9179,7 +9195,7 @@ function prevAtualizar() {
 
   // — Resumo financeiro — (ART já está na tabela de itens como item comum)
   const linhasExtras = [
-    (desl > 0 && showDeslocamento) ? `<div class="prev-resumo-row"><span>+ Deslocamento (${km}km × ${vis} vis.)</span><span class="v">${fmt(desl)}</span></div>` : '',
+    (desl > 0 && showDeslocamento) ? `<div class="prev-resumo-row"><span>+ Deslocamento (${km}km × ${vis} vis. × 2)</span><span class="v">${fmt(desl)}</span></div>` : '',
     extras> 0 ? `<div class="prev-resumo-row"><span>+ Extras</span><span class="v">${fmt(extras)}</span></div>` : '',
   ].filter(Boolean).join('');
 
@@ -14011,7 +14027,7 @@ calcRecalcular = function() {
     totalH   += h;
   });
 
-  const desl   = km * rkm * vis;
+  const desl   = km * rkm * vis * 2;
   const bruto  = subtotal + art + desl + extras;
   const impVal = bruto * (imp / 100);
   const liq    = bruto - impVal;
@@ -14030,7 +14046,7 @@ calcRecalcular = function() {
   if (s('r-desc'))     s('r-desc').textContent     = fmtMoney(comDesc) + ` (−${desc}%)`;
   if (s('r-horas'))    s('r-horas').textContent    = totalH.toFixed(1) + 'h';
   if (s('r-margem'))   s('r-margem').textContent   = margem.toFixed(1) + '%';
-  if (s('r-desl-mem')) s('r-desl-mem').textContent = `${km} km × R$${rkm}/km × ${vis} vis.`;
+  if (s('r-desl-mem')) s('r-desl-mem').textContent = `${km} km × R$${rkm}/km × ${vis} vis. × 2 (ida/volta)`;
 
   renderCalcItens();
 };
@@ -14246,7 +14262,7 @@ function calcRenderBlocos() {
         <input class="calc-bloco-nome" placeholder="Local / Escopo (ex: Casa da Rua X)"
           value="${bloco.nome||''}" oninput="calcBlocos[${bi}].nome=this.value">
         <select class="calc-bloco-servico" onchange="calcBlocos[${bi}].servico=this.value;calcBlocoCarregarSubs(${bi},true)">
-          ${Object.keys(SUBCATEGORIAS).map(s =>
+          ${Object.keys({...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {})}).map(s =>
             `<option ${bloco.servico===s?'selected':''}>${s}</option>`
           ).join('')}
         </select>
@@ -14289,7 +14305,8 @@ function calcBlocoCarregarSubs(bi, onlyIfEmpty) {
   const bloco = calcBlocos[bi];
   if (!bloco) return;
   if (onlyIfEmpty && bloco.itens.length) return; // só carrega se vazio
-  const subs = SUBCATEGORIAS[bloco.servico] || [];
+  const todosServicos = {...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {})};
+  const subs = todosServicos[bloco.servico] || [];
   const existentes = bloco.itens.map(i => i.desc);
   subs.forEach(sub => {
     if (!existentes.includes(sub)) bloco.itens.push({ desc: sub, horas: 0, rev: 0 });
@@ -14335,7 +14352,7 @@ function calcRecalcularBlocos() {
     });
   });
 
-  const desl   = km * rkm * vis;
+  const desl   = km * rkm * vis * 2;
   const bruto  = subtotal + art + desl + extras;
   const impVal = bruto * (imp / 100);
   const liq    = bruto - impVal;
@@ -14354,7 +14371,7 @@ function calcRecalcularBlocos() {
   if (s('r-desc'))     s('r-desc').textContent     = fmtMoney(comDesc) + ` (−${desc}%)`;
   if (s('r-horas'))    s('r-horas').textContent    = totalH.toFixed(1) + 'h';
   if (s('r-margem'))   s('r-margem').textContent   = margem.toFixed(1) + '%';
-  if (s('r-desl-mem')) s('r-desl-mem').textContent = `${km} km × R$${rkm}/km × ${vis} vis.`;
+  if (s('r-desl-mem')) s('r-desl-mem').textContent = `${km} km × R$${rkm}/km × ${vis} vis. × 2 (ida/volta)`;
 
   // Atualizar subtotais nos headers dos blocos E valores individuais dos itens
   calcBlocos.forEach((bloco, bi) => {
@@ -15271,6 +15288,67 @@ function prevExportarWord() {
     toast('Selecione uma proposta primeiro', 'warning'); return;
   }
 
+  // Forçar atualização do preview para garantir conteúdo atual
+  if (typeof prevAtualizar === 'function') prevAtualizar();
+
+  const r = prevIdxCRM !== null ? DATA.crm[prevIdxCRM] : null;
+
+  // Capturar o HTML do preview (idêntico ao PDF)
+  const wrap = document.getElementById('proposta-preview-wrap');
+  if (!wrap || !wrap.innerHTML.trim() || wrap.innerHTML.length < 200) {
+    toast('Vincule uma proposta primeiro', 'warning'); return;
+  }
+
+  // Construir nome do arquivo
+  const numProp = r ? String(r[CRM_COL.ID]||1).padStart(4,'0') : '0001';
+  const cliente = r ? (r[CRM_COL.RAZAO]||'') : '';
+  let fnBase = '';
+  const nomeComp = r ? (r[5]||'') : '';
+  if (nomeComp) {
+    fnBase = nomeComp.replace(/[^a-zA-Z0-9À-ú_ -]/g,' ').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,60);
+  }
+  if (!fnBase) {
+    fnBase = `Proposta_${numProp}_${(cliente||'').replace(/[^a-zA-Z0-9À-ú]/g,'_').replace(/_+/g,'_').slice(0,30)}`;
+  }
+  if (!fnBase || fnBase === 'Proposta__') fnBase = 'Proposta_Aplica_Engenharia';
+
+  // Montar documento HTML que o Word abre perfeitamente — idêntico ao PDF
+  const htmlDoc = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta name="ProgId" content="Word.Document">
+<meta name="Generator" content="Microsoft Word 15">
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->
+<style>
+  @page { size: A4; margin: 1.5cm 2cm; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; margin: 0; padding: 0; }
+  table { border-collapse: collapse; }
+  .prev-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .prev-table th { background: #1a3c5e; color: white; padding: 8px 10px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .prev-table td { padding: 7px 10px; border-bottom: 1px solid #f3f4f6; }
+  .prev-table .num { text-align: right; }
+</style>
+</head>
+<body>
+${wrap.innerHTML}
+</body>
+</html>`;
+
+  // Download como .doc
+  const blob = new Blob(['\ufeff' + htmlDoc], { type: 'application/msword' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${fnBase}.doc`;
+  a.click();
+  toast('Word exportado com sucesso!', 'success');
+}
+
+// ── LEGACY prevExportarWord DOCX (mantido como fallback) ──
+function _prevExportarWordDocxLegacy() {
+  if (prevIdxCRM === null && !prevItens.length) {
+    toast('Selecione uma proposta primeiro', 'warning'); return;
+  }
+
   const r = prevIdxCRM !== null ? DATA.crm[prevIdxCRM] : null;
 
   // Ler dados
@@ -15298,6 +15376,7 @@ function prevExportarWord() {
   const showSimpl  = document.getElementById('prev-show-simples')?.checked ?? false;
   const showArt    = document.getElementById('prev-show-art')?.checked ?? false;
   const modPreco   = document.getElementById('prev-modo-preco')?.value || 'por-item';
+  const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? false;
 
   let subtotalItens = 0;
   prevItens.forEach(it => { subtotalItens += (it.qtd||0)*(it.unit||0); });
@@ -15306,9 +15385,10 @@ function prevExportarWord() {
   const km     = parseFloat(document.getElementById('calc-km')?.value  || '0') || 0;
   const rkm    = parseFloat(document.getElementById('calc-rkm')?.value || '0.8') || 0.8;
   const vis    = parseFloat(document.getElementById('calc-vis')?.value || '1') || 1;
-  const desl   = km*rkm*vis;
+  const desl   = km*rkm*vis*2;
+  const deslFinal = showDeslocamento ? desl : 0;
   const extras = parseFloat(document.getElementById('calc-extras')?.value || '0') || 0;
-  
+
   // ART como item comum — injetar na lista para render
   let prevItensDocx = [...prevItens];
   if (artVal > 0) {
@@ -15318,7 +15398,7 @@ function prevExportarWord() {
   const impVal = subtotalComArt*(imp/100);
   const liq    = subtotalComArt - impVal;
   // Total da proposta = bruto (o que o cliente paga), sem descontar Simples Nacional
-  const total  = subtotalComArt + desl + extras;
+  const total  = subtotalComArt + deslFinal + extras;
 
   const fmt = v => 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2});
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -15357,8 +15437,8 @@ function prevExportarWord() {
 
   const heading = (text, color = '1a3c5e') =>
     `<w:p>
-      <w:pPr><w:spacing w:before="200" w:after="80"/><w:shd w:val="clear" w:fill="e8f0f7"/></w:pPr>
-      <w:r><w:rPr><w:b/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="${color}"/></w:rPr>
+      <w:pPr><w:spacing w:before="360" w:after="120"/><w:shd w:val="clear" w:fill="e8f0f7"/><w:pBdr><w:bottom w:val="single" w:sz="4" w:color="CCCCCC"/></w:pBdr></w:pPr>
+      <w:r><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="${color}"/></w:rPr>
         <w:t>${esc(text)}</w:t>
       </w:r>
     </w:p>`;
@@ -15601,7 +15681,7 @@ function prevExportarWord() {
     bodyParts.push(heading('RESUMO FINANCEIRO'));
     const linsFin = [
       ['Subtotal Serviços', fmt(subtotalComArt)],
-      ...(desl > 0  ? [['Deslocamento', fmt(desl)]] : []),
+      ...(deslFinal > 0  ? [['Deslocamento', fmt(deslFinal)]] : []),
       ...(extras > 0? [['Extras', fmt(extras)]] : []),
       ...(showSimpl ? [['Simples Nacional (6%)', `− ${fmt(impVal)}`]] : []),
       ['TOTAL', fmt(total)],
@@ -15638,6 +15718,12 @@ function prevExportarWord() {
     pagto.split(' | ').filter(Boolean).forEach(p => bodyParts.push(para(`▸  ${p}`, {size:18, color:'374151', indent:'360'})));
     bodyParts.push(para('', {spacing:80}));
   }
+
+  // Prazo de Entrega
+  const prazoEntrega = document.getElementById('prev-prazo-entrega')?.value || 'Conforme escopo de serviços, conforme disponibilidade e agenda técnica.';
+  bodyParts.push(heading('PRAZO DE ENTREGA'));
+  bodyParts.push(para(prazoEntrega, {size:18, color:'374151'}));
+  bodyParts.push(para('', {spacing:80}));
 
   // Observações
   if (obsProp) {
@@ -15775,7 +15861,7 @@ function prevExportarWord() {
     // Fallback: carregar JSZip dinamicamente
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    script.onload = () => prevExportarWord(); // retry
+    script.onload = () => _prevExportarWordDocxLegacy(); // retry
     document.head.appendChild(script);
     toast('Carregando biblioteca... tente novamente em 2s', 'info');
   }
