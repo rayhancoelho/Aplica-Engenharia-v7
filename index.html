@@ -2642,10 +2642,20 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <div class="kpi-value loading-val" id="kpi-desp-mes">—</div>
             <div class="kpi-sub">todas as categorias</div>
           </div>
+          <div class="kpi-card coral">
+            <div class="kpi-label">Tributos do Mês</div>
+            <div class="kpi-value loading-val" id="kpi-tributos">—</div>
+            <div class="kpi-sub" id="kpi-tributos-sub">— sobre receita</div>
+          </div>
           <div class="kpi-card green">
-            <div class="kpi-label">Resultado</div>
+            <div class="kpi-label">Resultado Líquido</div>
             <div class="kpi-value loading-val" id="kpi-resultado">—</div>
-            <div class="kpi-sub">receita − despesas</div>
+            <div class="kpi-sub">receita − despesas − tributos</div>
+          </div>
+          <div class="kpi-card gold">
+            <div class="kpi-label">Margem Líquida</div>
+            <div class="kpi-value loading-val" id="kpi-margem-liq">—</div>
+            <div class="kpi-sub">resultado / receita</div>
           </div>
           <div class="kpi-card gold">
             <div class="kpi-label">NFs Emitidas</div>
@@ -7093,10 +7103,20 @@ function initFinCharts() {
     }
   });
 
+  // Tributos: alíquota do regime tributário configurado (default 6% Simples)
+  const aliqTribDash = parseFloat(document.getElementById('cad-aliquota')?.value || '6') || 0;
+  const regimeDash   = document.getElementById('cad-regime')?.value || 'Simples Nacional';
+  const tributosDash = recMes * (aliqTribDash / 100);
+  const resultadoLiq = recMes - despMes - tributosDash;
+  const margemLiq    = recMes > 0 ? (resultadoLiq / recMes * 100) : 0;
+
   set('kpi-desp-mes', fmtMoney(despMes));
-  set('kpi-resultado', fmtMoney(recMes - despMes));
+  set('kpi-tributos', fmtMoney(tributosDash));
+  set('kpi-tributos-sub', `${regimeDash} (${aliqTribDash}%)`);
+  set('kpi-resultado', fmtMoney(resultadoLiq));
+  set('kpi-margem-liq', margemLiq.toFixed(1) + '%');
   set('kpi-nfs', projPorMes[mesAtual]);
-  ['kpi-desp-mes','kpi-resultado','kpi-nfs'].forEach(id => document.getElementById(id)?.classList.remove('loading-val'));
+  ['kpi-desp-mes','kpi-tributos','kpi-resultado','kpi-margem-liq','kpi-nfs'].forEach(id => document.getElementById(id)?.classList.remove('loading-val'));
 
   // Tabela faturamento — guardar dados para filtro
   window._fatDados = [];
