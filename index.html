@@ -13000,39 +13000,101 @@ function normaSalvar(item, normas, descricao) {
 
 // ═══ GESTÃO DE SERVIÇOS E NORMAS (Configurações) ═══
 let SERVICOS_CUSTOM = JSON.parse(localStorage.getItem('servicos_custom') || '{}');
+let SERVICOS_HIDDEN = JSON.parse(localStorage.getItem('servicos_hidden') || '[]');
+
+function cfgSalvarServicos() {
+  localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  localStorage.setItem('servicos_hidden', JSON.stringify(SERVICOS_HIDDEN));
+}
+
+// Garante que um serviço (mesmo embutido) exista em SERVICOS_CUSTOM para poder ser editado
+function cfgMaterializarServico(svc) {
+  if (!SERVICOS_CUSTOM[svc]) {
+    SERVICOS_CUSTOM[svc] = [...(SUBCATEGORIAS[svc] || [])];
+  }
+}
 
 function cfgRenderServicos() {
   const wrap = document.getElementById('cfg-servicos-wrap');
   if (!wrap) return;
-  // Mesclar SUBCATEGORIAS padrão com custom
-  const todos = { ...SUBCATEGORIAS, ...SERVICOS_CUSTOM };
+  // Mesclar SUBCATEGORIAS padrão com custom, ocultando os renomeados/removidos
+  const merged = { ...SUBCATEGORIAS, ...SERVICOS_CUSTOM };
+  const todos = {};
+  Object.keys(merged).forEach(k => { if (!SERVICOS_HIDDEN.includes(k)) todos[k] = merged[k]; });
   wrap.innerHTML = Object.keys(todos).map(svc => {
     const subs = todos[svc] || [];
     const isCustom = SERVICOS_CUSTOM[svc] !== undefined;
+    const svcEsc = svc.replace(/'/g,"\\'");
     return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);cursor:pointer" onclick="if(event.target.closest('.cfg-svc-actions'))return;this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
         <div style="font-weight:700;font-size:13px">${isCustom?'⭐':'📋'} ${svc} <span style="font-size:11px;color:var(--text3)">(${subs.length} sub)</span></div>
-        <span style="font-size:11px;color:var(--text3)">▼ expandir</span>
+        <div class="cfg-svc-actions" style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();cfgRenomearServico('${svcEsc}')">✏️ Editar Nome</button>
+          <span style="font-size:11px;color:var(--text3)">▼ expandir</span>
+        </div>
       </div>
       <div style="display:none;padding:12px 14px">
         ${subs.map((sub, si) => {
           const nd = normaDe(sub);
+          const subEsc = sub.replace(/'/g,"\\'");
           return `<div style="margin-bottom:12px;padding:10px;background:var(--s3);border-radius:6px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:6px">
               <strong style="font-size:12px">${sub}</strong>
-              <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgEditarSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">✏️ Editar</button>
+              <div style="display:flex;gap:4px">
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgRenomearSubservico('${svcEsc}',${si})">✏️ Nome</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgEditarSubservico('${svcEsc}','${subEsc}')">📝 Normas/Texto</button>
+              </div>
             </div>
             <div style="font-size:11px;color:var(--teal);margin-bottom:3px"><b>Normas:</b> ${nd.normas || '<span style=color:var(--text3)>— não definida —</span>'}</div>
             <div style="font-size:11px;color:var(--text3);line-height:1.5">${nd.descricao ? nd.descricao.slice(0,120)+'...' : '<span style=color:var(--coral)>— sem texto —</span>'}</div>
           </div>`;
         }).join('')}
         <div style="display:flex;gap:6px;margin-top:8px">
-          <button class="btn btn-ghost btn-sm" onclick="cfgAddSubservico('${svc.replace(/'/g,"\\'")}')">+ Subserviço</button>
-          ${isCustom ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="cfgRemoverServico('${svc.replace(/'/g,"\\'")}')">🗑 Remover Serviço</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="cfgAddSubservico('${svcEsc}')">+ Subserviço</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="cfgRemoverServico('${svcEsc}')">🗑 Remover Serviço</button>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+function cfgRenomearServico(svc) {
+  const novo = prompt(`Renomear serviço principal:\n\nAtual: ${svc}\n\nNovo nome:`, svc);
+  if (!novo || !novo.trim()) return;
+  const novoNome = novo.trim().toUpperCase();
+  if (novoNome === svc) return;
+  const jaExiste = (SUBCATEGORIAS[novoNome] || SERVICOS_CUSTOM[novoNome]) && !SERVICOS_HIDDEN.includes(novoNome);
+  if (jaExiste) { toast('Já existe um serviço com esse nome', 'warning'); return; }
+  const subs = [...((SERVICOS_CUSTOM[svc]) || SUBCATEGORIAS[svc] || [])];
+  SERVICOS_CUSTOM[novoNome] = subs;
+  // remove entrada antiga (custom ou embutida via ocultação)
+  if (SERVICOS_CUSTOM[svc]) delete SERVICOS_CUSTOM[svc];
+  if (SUBCATEGORIAS[svc] && !SERVICOS_HIDDEN.includes(svc)) SERVICOS_HIDDEN.push(svc);
+  // se estava oculto por algum motivo e voltamos a usar, limpa
+  SERVICOS_HIDDEN = SERVICOS_HIDDEN.filter(x => x !== novoNome);
+  cfgSalvarServicos();
+  cfgRenderServicos();
+  toast(`Serviço renomeado para "${novoNome}" ✅`, 'success');
+}
+
+function cfgRenomearSubservico(svc, idx) {
+  cfgMaterializarServico(svc);
+  const atual = SERVICOS_CUSTOM[svc][idx];
+  if (atual === undefined) return;
+  const novo = prompt(`Renomear subserviço:\n\nAtual: ${atual}\n\nNovo nome:`, atual);
+  if (!novo || !novo.trim()) return;
+  const novoNome = novo.trim();
+  if (novoNome === atual) return;
+  if (SERVICOS_CUSTOM[svc].includes(novoNome)) { toast('Já existe um subserviço com esse nome', 'warning'); return; }
+  SERVICOS_CUSTOM[svc][idx] = novoNome;
+  // migra normas/descrição associadas ao nome antigo, se houver
+  try {
+    const nd = normaDe(atual);
+    if (nd && (nd.normas || nd.descricao)) normaSalvar(novoNome, nd.normas || '', nd.descricao || '');
+  } catch(e){}
+  cfgSalvarServicos();
+  cfgRenderServicos();
+  toast(`Subserviço renomeado para "${novoNome}" ✅`, 'success');
 }
 
 function cfgEditarSubservico(servico, subservico) {
@@ -13092,18 +13154,19 @@ function cfgAddServico() {
   const nome = prompt('Nome do novo serviço principal (ex: AUTOMAÇÃO INDUSTRIAL):');
   if (!nome || !nome.trim()) return;
   const nomeUp = nome.trim().toUpperCase();
-  if (SUBCATEGORIAS[nomeUp] || SERVICOS_CUSTOM[nomeUp]) { toast('Serviço já existe', 'warning'); return; }
+  if ((SUBCATEGORIAS[nomeUp] || SERVICOS_CUSTOM[nomeUp]) && !SERVICOS_HIDDEN.includes(nomeUp)) { toast('Serviço já existe', 'warning'); return; }
   SERVICOS_CUSTOM[nomeUp] = [];
-  localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
-  // Adicionar ao select de serviços da proposta
+  SERVICOS_HIDDEN = SERVICOS_HIDDEN.filter(x => x !== nomeUp);
+  cfgSalvarServicos();
   cfgRenderServicos();
   toast(`Serviço "${nomeUp}" criado — adicione subserviços`, 'success');
 }
 
 function cfgRemoverServico(servico) {
   if (!confirm(`Remover "${servico}" e todos seus subserviços?`)) return;
-  delete SERVICOS_CUSTOM[servico];
-  localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  if (SERVICOS_CUSTOM[servico]) delete SERVICOS_CUSTOM[servico];
+  if (SUBCATEGORIAS[servico] && !SERVICOS_HIDDEN.includes(servico)) SERVICOS_HIDDEN.push(servico);
+  cfgSalvarServicos();
   cfgRenderServicos();
   toast('Serviço removido', 'info');
 }
