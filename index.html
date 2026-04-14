@@ -15344,24 +15344,107 @@ nav = function(id) {
 ═══════════════════════════════════════════════════════════ */
 
 // ── EXPORTAR WORD (via docx puro em JS no browser) ─────────
-// Gera um .docx válido usando XML puro sem dependências externas
-
+// Exporta a proposta como .docx (OOXML) embutindo o HTML do preview via altChunk.
+// Resultado: cópia fiel do PDF, aceito pelo Google Docs e renderizado corretamente no Word.
 function prevExportarWord() {
-  // Se JSZip estiver disponível, gerar .docx real (Google Docs aceita).
-  if (typeof JSZip !== 'undefined' || typeof PizZip !== 'undefined') {
-    try { return _prevExportarWordDocxLegacy(); }
-    catch (e) { console.warn('Falha no .docx, caindo no MHTML:', e); }
-  } else {
-    // Carregar JSZip e tentar de novo
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    script.onload = () => prevExportarWord();
-    script.onerror = () => _prevExportarWordMhtmlFallback();
-    document.head.appendChild(script);
-    toast('Gerando Word... aguarde', 'info');
+  if (prevIdxCRM === null && !prevItens.length) {
+    toast('Selecione uma proposta primeiro', 'warning'); return;
+  }
+  if (typeof prevAtualizar === 'function') prevAtualizar();
+
+  const wrap = document.getElementById('proposta-preview-wrap');
+  if (!wrap || !wrap.innerHTML.trim() || wrap.innerHTML.length < 200) {
+    toast('Vincule uma proposta primeiro', 'warning'); return;
+  }
+
+  if (typeof JSZip === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = () => prevExportarWord();
+    s.onerror = () => _prevExportarWordMhtmlFallback();
+    document.head.appendChild(s);
+    toast('Carregando biblioteca...', 'info');
     return;
   }
-  return _prevExportarWordMhtmlFallback();
+
+  // Coletar CSS relevante ao preview
+  let cssText = '';
+  try {
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try { rules = sheet.cssRules; } catch(e){ continue; }
+      for (const rule of rules) {
+        const sel = rule.selectorText || '';
+        if (sel && (sel.includes('.prev-') || sel.includes('#proposta-preview-wrap'))) {
+          cssText += rule.cssText + '\n';
+        }
+      }
+    }
+  } catch(e){ console.warn('CSS extract falhou', e); }
+
+  const previewHtml = wrap.innerHTML;
+  const afHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    @page { size: A4; margin: 1.5cm 1.2cm; }
+    body { font-family: 'DM Sans','Calibri','Segoe UI',Arial,sans-serif; margin:0; color:#1a1a1a; font-size:13px; }
+    img { max-height: 60px; }
+    ${cssText}
+    #proposta-preview-wrap { box-shadow:none !important; border-radius:0 !important; }
+  </style></head><body><div id="proposta-preview-wrap">${previewHtml}</div></body></html>`;
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/afchunk.htm" ContentType="text/html"/>
+</Types>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+  const docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="htmlChunk1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="afchunk.htm"/>
+</Relationships>`;
+
+  const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:body>
+<w:altChunk r:id="htmlChunk1"/>
+<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="680" w:bottom="720" w:left="680" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>
+</w:body>
+</w:document>`;
+
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', contentTypes);
+  zip.file('_rels/.rels', rootRels);
+  zip.file('word/document.xml', docXml);
+  zip.file('word/_rels/document.xml.rels', docRels);
+  zip.file('word/afchunk.htm', afHtml);
+
+  zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+    .then(blob => {
+      const r = prevIdxCRM !== null ? DATA.crm[prevIdxCRM] : null;
+      const numProp = r ? String(r[CRM_COL.ID]||1).padStart(4,'0') : '0001';
+      const cliente = r ? (r[CRM_COL.RAZAO]||'') : '';
+      const nomeComp = r ? (r[5]||'') : '';
+      let fnBase = '';
+      if (nomeComp) fnBase = nomeComp.replace(/[^a-zA-Z0-9À-ú_ -]/g,' ').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,60);
+      if (!fnBase) fnBase = `Proposta_${numProp}_${(cliente||'').replace(/[^a-zA-Z0-9À-ú]/g,'_').replace(/_+/g,'_').slice(0,30)}`;
+      if (!fnBase || fnBase === 'Proposta__') fnBase = 'Proposta_Aplica_Engenharia';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${fnBase}.docx`;
+      a.click();
+      toast('✅ Word exportado (cópia fiel do PDF)', 'success');
+    })
+    .catch(err => {
+      console.error(err);
+      toast('Falha no .docx, tentando MHTML...', 'warning');
+      _prevExportarWordMhtmlFallback();
+    });
 }
 
 function _prevExportarWordMhtmlFallback() {
