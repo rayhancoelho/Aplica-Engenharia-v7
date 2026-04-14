@@ -4521,7 +4521,8 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                 <b>Cliente:</b> <code>{{RAZAO}}</code> <code>{{FANTASIA}}</code> <code>{{CNPJ}}</code> <code>{{ENDERECO}}</code> <code>{{CEP}}</code> <code>{{TELEFONE}}</code> <code>{{EMAIL}}</code> <code>{{CONTATO}}</code><br>
                 <b>Proposta:</b> <code>{{PROPID}}</code> <code>{{EMISSAO}}</code> <code>{{VENCE_EM}}</code> <code>{{VALIDADE_DIAS}}</code><br>
                 <b>Itens:</b> <code>{{ITEM1_DESC}}</code> a <code>{{ITEM10_DESC}}</code> · <code>{{ITEM1_VALOR}}</code> a <code>{{ITEM10_VALOR}}</code><br>
-                <b>Valores:</b> <code>{{VALOR_TOTAL_SERVICO}}</code> <code>{{VALOR_COM_DESCONTO}}</code> <code>{{NORMAS_TECNICAS}}</code>
+                <b>Valores:</b> <code>{{VALOR_TOTAL_SERVICO}}</code> <code>{{VALOR_COM_DESCONTO}}</code> <code>{{NORMAS_TECNICAS}}</code><br>
+                <b>Tributário:</b> <code>{{ENQUADRAMENTO_TRIBUTARIO}}</code> (texto do Anexo III ou V, conforme seleção na proposta)
               </div>
             </details>
           </div>
@@ -5366,6 +5367,21 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
               </div>
               <div class="card-body" style="padding:10px 14px">
                 <textarea class="form-control" id="prev-prazo-entrega" rows="2" style="font-size:12px;resize:vertical" placeholder="Ex: 30 dias úteis após aprovação" onchange="prevAtualizar()" oninput="setTimeout(prevAtualizar,100)">Conforme escopo de serviços, conforme disponibilidade e agenda técnica.</textarea>
+              </div>
+            </div>
+
+            <!-- Enquadramento Tributário (Simples Nacional) -->
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-header" style="padding:10px 14px">
+                <div class="card-title" style="font-size:12px">Enquadramento Tributário (Simples Nacional)</div>
+              </div>
+              <div class="card-body" style="padding:10px 14px">
+                <select class="form-control" id="prev-enquadramento" style="font-size:12px" onchange="prevAtualizar()">
+                  <option value="anexo3" selected>Anexo III (padrão — item 07.02 instalações)</option>
+                  <option value="anexo5">Anexo V (por opção do contratante — item 07.01 engenharia)</option>
+                  <option value="nenhum">Não incluir</option>
+                </select>
+                <div style="font-size:10px;color:var(--text3);margin-top:6px">O texto correspondente é inserido abaixo de Condições de Pagamento no PDF / Word.</div>
               </div>
             </div>
 
@@ -8648,6 +8664,17 @@ const RUBRICA_GERSON_B64 = 'data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4g
 let prevItens = [];
 let prevIdxCRM = null;
 
+// Textos de enquadramento tributário (conforme anexo recebido do Gerson)
+const ENQUADRAMENTO_TEXTOS = {
+  anexo3: 'A presente proposta está elaborada com base no enquadramento tributário aplicável ao Anexo III do Simples Nacional, conforme regime adotado pela Aplica Engenharia. Os valores apresentados consideram exclusivamente este enquadramento fiscal, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.02 referente a serviços de instalações. Caso haja necessidade de alteração para outro enquadramento, por solicitação do contratante ou por exigência específica, tal condição deverá ser previamente comunicada e acordada com a Aplica Engenharia, podendo implicar revisão dos valores propostos.',
+  anexo5: 'Enquadramento Fiscal por Opção do Contratante — Conforme alinhamento entre as partes, o contratante optou pelo enquadramento dos serviços no regime tributário do Anexo V do Simples Nacional. Os valores desta proposta já consideram a incidência fiscal correspondente a este enquadramento, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.01 referente a serviços de engenharia.',
+  nenhum: ''
+};
+function _prevGetEnquadramentoTexto() {
+  const v = document.getElementById('prev-enquadramento')?.value || 'anexo3';
+  return ENQUADRAMENTO_TEXTOS[v] || '';
+}
+
 // Preencher select de propostas
 function prevPopularSelect() {
   const sel = document.getElementById('prev-select-prop');
@@ -9396,6 +9423,7 @@ function prevAtualizar() {
               <div style="font-size:11px;color:#374151;line-height:1.8;margin-top:4px">
                 <strong>▸ ${pgto.formaTexto}</strong>
               </div>
+              ${_prevGetEnquadramentoTexto() ? `<div style="font-size:10px;color:#6b7280;line-height:1.6;margin-top:10px;padding-top:8px;border-top:1px dashed #e5e7eb;text-align:justify">${_prevGetEnquadramentoTexto()}</div>` : ''}
             </div>
             <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Prazo de Entrega</div>
@@ -15518,6 +15546,7 @@ function _tmplGetCampos() {
     NORMAS_TECNICAS: normasTxt,
     VALOR_TOTAL_SERVICO: fmt(total),
     VALOR_COM_DESCONTO: fmt(totalComDesc),
+    ENQUADRAMENTO_TRIBUTARIO: (typeof _prevGetEnquadramentoTexto === 'function' ? _prevGetEnquadramentoTexto() : ''),
   };
   for (let i = 1; i <= 10; i++) {
     const it = (prevItens||[])[i-1];
@@ -16231,6 +16260,12 @@ function _prevExportarWordDocxLegacy() {
   }
   let prazoBox = `<w:p><w:pPr><w:spacing w:before="160"/><w:shd w:val="clear" w:fill="f8f9fa"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PRAZO DE ENTREGA</w:t></w:r></w:p>` +
     `<w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="374151"/></w:rPr><w:t>${esc(prazoEntrega)}</w:t></w:r></w:p>`;
+
+  // Texto do enquadramento tributário (Anexo III ou V)
+  const enqTxt = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
+  if (enqTxt) {
+    pagtoBox += `<w:p><w:pPr><w:spacing w:before="120"/><w:pBdr><w:top w:val="dashed" w:sz="4" w:color="e5e7eb"/></w:pBdr></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/><w:i/></w:rPr><w:t xml:space="preserve">${esc(enqTxt)}</w:t></w:r></w:p>`;
+  }
 
   bodyParts.push(`<w:tbl>
     <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="e5e7eb"/><w:left w:val="single" w:sz="4" w:color="e5e7eb"/><w:bottom w:val="single" w:sz="4" w:color="e5e7eb"/><w:right w:val="single" w:sz="4" w:color="e5e7eb"/><w:insideV w:val="single" w:sz="4" w:color="e5e7eb"/></w:tblBorders></w:tblPr>
