@@ -4491,6 +4491,32 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           </div>
         </div>
 
+        <!-- Seção Template Word -->
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-header">
+            <div class="card-title">📄 Template Word para Exportação</div>
+          </div>
+          <div class="card-body">
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
+              Faça upload de um <b>.docx</b> com placeholders <code style="color:var(--gold)">{{RAZAO}}</code>, <code style="color:var(--gold)">{{CNPJ}}</code>, <code style="color:var(--gold)">{{ITEM1_DESC}}</code>, <code style="color:var(--gold)">{{VALOR_TOTAL_SERVICO}}</code>, etc. O sistema substitui os campos automaticamente ao exportar a proposta como Word.
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <input type="file" id="cfg-tmpl-input" accept=".docx" onchange="cfgTemplateUpload(this)" style="font-size:12px;color:var(--text2)">
+              <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="cfgTemplateRemover()">🗑 Remover Template</button>
+            </div>
+            <div id="cfg-tmpl-status" style="font-size:11px;color:var(--text3);padding:8px 12px;background:var(--s2);border-radius:6px"></div>
+            <details style="margin-top:10px;font-size:11px;color:var(--text3)">
+              <summary style="cursor:pointer">📋 Lista completa de placeholders disponíveis</summary>
+              <div style="margin-top:8px;padding:10px;background:var(--s3);border-radius:6px;line-height:1.7">
+                <b>Cliente:</b> <code>{{RAZAO}}</code> <code>{{FANTASIA}}</code> <code>{{CNPJ}}</code> <code>{{ENDERECO}}</code> <code>{{CEP}}</code> <code>{{TELEFONE}}</code> <code>{{EMAIL}}</code> <code>{{CONTATO}}</code><br>
+                <b>Proposta:</b> <code>{{PROPID}}</code> <code>{{EMISSAO}}</code> <code>{{VENCE_EM}}</code> <code>{{VALIDADE_DIAS}}</code><br>
+                <b>Itens:</b> <code>{{ITEM1_DESC}}</code> a <code>{{ITEM10_DESC}}</code> · <code>{{ITEM1_VALOR}}</code> a <code>{{ITEM10_VALOR}}</code><br>
+                <b>Valores:</b> <code>{{VALOR_TOTAL_SERVICO}}</code> <code>{{VALOR_COM_DESCONTO}}</code> <code>{{NORMAS_TECNICAS}}</code>
+              </div>
+            </details>
+          </div>
+        </div>
+
         <!-- Seção Comissões -->
         <div class="card" style="margin-bottom:14px">
           <div class="card-header">
@@ -15355,31 +15381,239 @@ nav = function(id) {
 ═══════════════════════════════════════════════════════════ */
 
 // ── EXPORTAR WORD (via docx puro em JS no browser) ─────────
-// Exporta a proposta como .docx real (OOXML nativo).
-// Google Docs e Word renderizam o conteúdo. (altChunk foi evitado porque o Docs o ignora.)
-function prevExportarWord() {
+// ═══ TEMPLATE WORD (IndexedDB + Upload + Substituição de placeholders) ═══
+const _TMPL_DB = 'aplica_tmpl_db';
+const _TMPL_STORE = 'tmpl';
+const _TMPL_KEY = 'word_template';
+
+function _tmplDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(_TMPL_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(_TMPL_STORE);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function _tmplSave(blob, meta) {
+  const db = await _tmplDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(_TMPL_STORE, 'readwrite');
+    tx.objectStore(_TMPL_STORE).put({ blob, meta }, _TMPL_KEY);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function _tmplGet() {
+  const db = await _tmplDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(_TMPL_STORE, 'readonly');
+    const req = tx.objectStore(_TMPL_STORE).get(_TMPL_KEY);
+    req.onsuccess = () => res(req.result || null);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function _tmplDelete() {
+  const db = await _tmplDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(_TMPL_STORE, 'readwrite');
+    tx.objectStore(_TMPL_STORE).delete(_TMPL_KEY);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function cfgTemplateUpload(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.docx')) { toast('Selecione um .docx', 'warning'); return; }
+  try {
+    await _tmplSave(file, { name: file.name, size: file.size, savedAt: new Date().toISOString() });
+    toast('Template salvo ✅', 'success');
+    cfgTemplateAtualizarStatus();
+  } catch (e) {
+    console.error(e); toast('Falha ao salvar template', 'error');
+  }
+}
+async function cfgTemplateRemover() {
+  if (!confirm('Remover o template Word salvo?')) return;
+  await _tmplDelete();
+  toast('Template removido', 'info');
+  cfgTemplateAtualizarStatus();
+}
+async function cfgTemplateAtualizarStatus() {
+  const el = document.getElementById('cfg-tmpl-status');
+  if (!el) return;
+  try {
+    const t = await _tmplGet();
+    if (t && t.meta) {
+      const kb = (t.meta.size/1024).toFixed(1);
+      el.innerHTML = `✅ Template ativo: <b>${t.meta.name}</b> · ${kb} KB · salvo em ${new Date(t.meta.savedAt).toLocaleString('pt-BR')}`;
+      el.style.color = 'var(--green)';
+    } else {
+      el.innerHTML = '⚠️ Nenhum template carregado — a exportação Word usará o gerador padrão.';
+      el.style.color = 'var(--text3)';
+    }
+  } catch(e) {
+    el.innerHTML = '⚠️ Erro ao ler template (IndexedDB indisponível?).';
+  }
+}
+setTimeout(cfgTemplateAtualizarStatus, 1500);
+
+// Coleta os campos da proposta atual em um mapa de placeholders
+function _tmplGetCampos() {
+  const r = prevIdxCRM !== null ? DATA.crm[prevIdxCRM] : null;
+  const numProp = r ? String(r[CRM_COL.ID]||1).padStart(4,'0') : '0001';
+  const valDias = parseInt(document.getElementById('prev-val-dias')?.value || '30') || 30;
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+  const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  const fmt = v => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+
+  let subtotal = 0;
+  (prevItens||[]).forEach(it => { subtotal += (it.qtd||0)*(it.unit||0); });
+  const showSimpl = document.getElementById('prev-show-simples')?.checked ?? false;
+  const aliq = parseFloat(document.getElementById('cad-aliquota')?.value || '6') || 6;
+  const total = subtotal;
+  const totalComDesc = showSimpl ? subtotal*(1 - aliq/100) : subtotal;
+
+  // Normas técnicas (todas dos itens)
+  const normasSet = new Set();
+  (prevItens||[]).forEach(it => {
+    try { const nd = normaDe(it.desc); if (nd?.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim())); } catch(e){}
+  });
+  const normasTxt = [...normasSet].filter(Boolean).join(' · ') || '—';
+
+  const campos = {
+    PROPID: numProp,
+    EMISSAO: dataHoje,
+    VENCE_EM: dataVal,
+    VALIDADE_DIAS: String(valDias),
+    RAZAO: r ? (r[CRM_COL.RAZAO]||'—') : '—',
+    FANTASIA: r ? (r[CRM_COL.FANTASIA]||r[CRM_COL.RAZAO]||'—') : '—',
+    CNPJ: r ? (r[CRM_COL.CNPJ]||'—') : '—',
+    ENDERECO: r ? (r[CRM_COL.ENDERECO]||'—') : '—',
+    CEP: r ? (r[CRM_COL.CEP]||'—') : '—',
+    TELEFONE: r ? (r[CRM_COL.FONE]||'—') : '—',
+    EMAIL: r ? (r[CRM_COL.EMAIL]||r[CRM_COL.EMAIL2]||'—') : '—',
+    CONTATO: r ? (r[CRM_COL.CONTATO]||'—') : '—',
+    NORMAS_TECNICAS: normasTxt,
+    VALOR_TOTAL_SERVICO: fmt(total),
+    VALOR_COM_DESCONTO: fmt(totalComDesc),
+  };
+  for (let i = 1; i <= 10; i++) {
+    const it = (prevItens||[])[i-1];
+    campos[`ITEM${i}_DESC`]  = it ? (it.desc||'') : '';
+    campos[`ITEM${i}_VALOR`] = it ? fmt((it.qtd||0)*(it.unit||0)) : '';
+  }
+  return campos;
+}
+
+// Word frequentemente quebra "{{NOME}}" em vários runs <w:t>. Concatena os runs do mesmo parágrafo
+// para que a substituição funcione mesmo com runs fragmentados.
+function _tmplSubstituirNoXml(xml, campos) {
+  // 1. Funde runs adjacentes do mesmo parágrafo: para cada <w:p>...</w:p>, junta o texto e troca o último <w:t>
+  xml = xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, p => {
+    // Se o parágrafo não contém '{{', deixa quieto
+    const textos = [...p.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map(m => m[1]);
+    const joined = textos.join('');
+    if (!joined.includes('{{')) return p;
+    // Aplica substituições no texto unido
+    let novo = joined;
+    Object.entries(campos).forEach(([k,v]) => {
+      novo = novo.split(`{{${k}}}`).join(String(v ?? ''));
+    });
+    if (novo === joined) return p;
+    // Se ainda há "{{" não substituído, deixa como está (placeholder desconhecido)
+    // Recoloca o texto: zera todos <w:t> exceto o primeiro, que recebe o texto unido
+    let primeiroSubstituido = false;
+    const novoP = p.replace(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g, (m) => {
+      if (!primeiroSubstituido) {
+        primeiroSubstituido = true;
+        return `<w:t xml:space="preserve">${novo.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</w:t>`;
+      }
+      return `<w:t xml:space="preserve"></w:t>`;
+    });
+    return novoP;
+  });
+  return xml;
+}
+
+async function prevExportarWordTemplate() {
   if (prevIdxCRM === null && !prevItens.length) {
     toast('Selecione uma proposta primeiro', 'warning'); return;
   }
   if (typeof prevAtualizar === 'function') prevAtualizar();
-
+  const tmpl = await _tmplGet();
+  if (!tmpl?.blob) { toast('Nenhum template salvo — usando gerador padrão', 'info'); return _prevExportarWordOOXML(); }
   if (typeof JSZip === 'undefined') {
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    s.onload = () => prevExportarWord();
+    s.onload = () => prevExportarWordTemplate();
+    document.head.appendChild(s);
+    toast('Carregando biblioteca...', 'info');
+    return;
+  }
+  try {
+    const zip = await JSZip.loadAsync(tmpl.blob);
+    const campos = _tmplGetCampos();
+    // Substituir em document.xml + headers + footers
+    const alvos = Object.keys(zip.files).filter(n =>
+      /^word\/(document|header\d*|footer\d*)\.xml$/.test(n)
+    );
+    for (const nome of alvos) {
+      const xml = await zip.file(nome).async('string');
+      zip.file(nome, _tmplSubstituirNoXml(xml, campos));
+    }
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const r = prevIdxCRM !== null ? DATA.crm[prevIdxCRM] : null;
+    const numProp = r ? String(r[CRM_COL.ID]||1).padStart(4,'0') : '0001';
+    const cliente = r ? (r[CRM_COL.RAZAO]||'') : '';
+    const nomeComp = r ? (r[5]||'') : '';
+    let fnBase = '';
+    if (nomeComp) fnBase = nomeComp.replace(/[^a-zA-Z0-9À-ú_ -]/g,' ').replace(/\s+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'').slice(0,60);
+    if (!fnBase) fnBase = `Proposta_${numProp}_${(cliente||'').replace(/[^a-zA-Z0-9À-ú]/g,'_').replace(/_+/g,'_').slice(0,30)}`;
+    if (!fnBase || fnBase === 'Proposta__') fnBase = 'Proposta_Aplica_Engenharia';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${fnBase}.docx`;
+    a.click();
+    toast('✅ Word exportado a partir do template', 'success');
+  } catch (e) {
+    console.error('Erro template:', e);
+    toast('Falha no template, usando gerador padrão', 'warning');
+    _prevExportarWordOOXML();
+  }
+}
+
+// Exporta a proposta como .docx — usa template salvo se houver, senão gerador OOXML padrão.
+function _prevExportarWordOOXML() {
+  if (typeof JSZip === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = () => _prevExportarWordOOXML();
     s.onerror = () => _prevExportarWordMhtmlFallback();
     document.head.appendChild(s);
     toast('Carregando biblioteca...', 'info');
     return;
   }
-
-  try {
-    return _prevExportarWordDocxLegacy();
-  } catch (e) {
+  try { return _prevExportarWordDocxLegacy(); }
+  catch (e) {
     console.error('Falha no .docx nativo:', e);
     toast('Falha no .docx, usando fallback...', 'warning');
     return _prevExportarWordMhtmlFallback();
   }
+}
+
+async function prevExportarWord() {
+  if (prevIdxCRM === null && !prevItens.length) {
+    toast('Selecione uma proposta primeiro', 'warning'); return;
+  }
+  if (typeof prevAtualizar === 'function') prevAtualizar();
+  // Se houver template salvo, usa-o; senão cai no gerador OOXML padrão
+  try {
+    const tmpl = await _tmplGet();
+    if (tmpl?.blob) return prevExportarWordTemplate();
+  } catch(e){ /* IndexedDB indisponível — segue para o padrão */ }
+  return _prevExportarWordOOXML();
 }
 
 // Versão altChunk (cópia fiel do PDF, MAS o Google Docs a ignora).
