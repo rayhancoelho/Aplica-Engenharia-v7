@@ -15507,11 +15507,19 @@ async function cfgTemplateAtualizarStatus() {
 }
 setTimeout(cfgTemplateAtualizarStatus, 1500);
 
-// Coleta os campos da proposta atual em um mapa de placeholders
+// Coleta os campos da proposta atual em um mapa de placeholders.
+// Busca em múltiplas fontes: CRM (r), formulário Nova Proposta (np-*) e pré-visualização (prev-*).
 function _tmplGetCampos() {
   const r = prevIdxCRM !== null ? DATA.crm[prevIdxCRM] : null;
-  const numProp = r ? String(r[CRM_COL.ID]||1).padStart(4,'0') : '0001';
-  const valDias = parseInt(document.getElementById('prev-val-dias')?.value || '30') || 30;
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  // pega o primeiro valor não-vazio entre várias fontes
+  const pick = (...vals) => {
+    for (const v of vals) { const s = (v == null ? '' : String(v)).trim(); if (s && s !== '—') return s; }
+    return '';
+  };
+
+  const numProp = pick(r?.[CRM_COL.ID], val('np-id-prop'), val('prev-id'), '0001');
+  const valDias = parseInt(val('prev-val-dias') || '30') || 30;
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
   const fmt = v => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
@@ -15519,7 +15527,7 @@ function _tmplGetCampos() {
   let subtotal = 0;
   (prevItens||[]).forEach(it => { subtotal += (it.qtd||0)*(it.unit||0); });
   const showSimpl = document.getElementById('prev-show-simples')?.checked ?? false;
-  const aliq = parseFloat(document.getElementById('cad-aliquota')?.value || '6') || 6;
+  const aliq = parseFloat(val('cad-aliquota') || '6') || 6;
   const total = subtotal;
   const totalComDesc = showSimpl ? subtotal*(1 - aliq/100) : subtotal;
 
@@ -15528,21 +15536,27 @@ function _tmplGetCampos() {
   (prevItens||[]).forEach(it => {
     try { const nd = normaDe(it.desc); if (nd?.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim())); } catch(e){}
   });
-  const normasTxt = [...normasSet].filter(Boolean).join(' · ') || '—';
+  const normasTxt = [...normasSet].filter(Boolean).join(' · ');
+
+  // Email/fone: busca nos contatos também
+  const contatosArr = (typeof npContatos !== 'undefined' ? npContatos : []) || [];
+  const emailPrimary = contatosArr.find(c => c?.email)?.email || '';
+  const fonePrimary  = contatosArr[0]?.telefone || contatosArr[0]?.whatsapp || contatosArr[0]?.valor || '';
+  const contatoPrim  = contatosArr[0]?.nome || '';
 
   const campos = {
-    PROPID: numProp,
+    PROPID: String(numProp).padStart(4,'0'),
     EMISSAO: dataHoje,
     VENCE_EM: dataVal,
     VALIDADE_DIAS: String(valDias),
-    RAZAO: r ? (r[CRM_COL.RAZAO]||'—') : '—',
-    FANTASIA: r ? (r[CRM_COL.FANTASIA]||r[CRM_COL.RAZAO]||'—') : '—',
-    CNPJ: r ? (r[CRM_COL.CNPJ]||'—') : '—',
-    ENDERECO: r ? (r[CRM_COL.ENDERECO]||'—') : '—',
-    CEP: r ? (r[CRM_COL.CEP]||'—') : '—',
-    TELEFONE: r ? (r[CRM_COL.FONE]||'—') : '—',
-    EMAIL: r ? (r[CRM_COL.EMAIL]||r[CRM_COL.EMAIL2]||'—') : '—',
-    CONTATO: r ? (r[CRM_COL.CONTATO]||'—') : '—',
+    RAZAO:    pick(r?.[CRM_COL.RAZAO],    val('np-razao'),    val('prev-cliente')),
+    FANTASIA: pick(r?.[CRM_COL.FANTASIA], val('np-fantasia'), r?.[CRM_COL.RAZAO], val('np-razao')),
+    CNPJ:     pick(r?.[CRM_COL.CNPJ],     val('np-cnpj')),
+    ENDERECO: pick(r?.[CRM_COL.ENDERECO], val('np-endereco'), val('np-municipio')),
+    CEP:      pick(r?.[CRM_COL.CEP],      val('np-cep')),
+    TELEFONE: pick(r?.[CRM_COL.FONE],     fonePrimary),
+    EMAIL:    pick(r?.[CRM_COL.EMAIL],    r?.[CRM_COL.EMAIL2], emailPrimary),
+    CONTATO:  pick(r?.[CRM_COL.CONTATO],  contatoPrim),
     NORMAS_TECNICAS: normasTxt,
     VALOR_TOTAL_SERVICO: fmt(total),
     VALOR_COM_DESCONTO: fmt(totalComDesc),
@@ -15553,6 +15567,8 @@ function _tmplGetCampos() {
     campos[`ITEM${i}_DESC`]  = it ? (it.desc||'') : '';
     campos[`ITEM${i}_VALOR`] = it ? fmt((it.qtd||0)*(it.unit||0)) : '';
   }
+  // Log útil para diagnóstico rápido
+  try { console.log('📄 Template — campos substituídos:', campos); } catch(e){}
   return campos;
 }
 
