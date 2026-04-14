@@ -15344,9 +15344,36 @@ nav = function(id) {
 ═══════════════════════════════════════════════════════════ */
 
 // ── EXPORTAR WORD (via docx puro em JS no browser) ─────────
-// Exporta a proposta como .docx (OOXML) embutindo o HTML do preview via altChunk.
-// Resultado: cópia fiel do PDF, aceito pelo Google Docs e renderizado corretamente no Word.
+// Exporta a proposta como .docx real (OOXML nativo).
+// Google Docs e Word renderizam o conteúdo. (altChunk foi evitado porque o Docs o ignora.)
 function prevExportarWord() {
+  if (prevIdxCRM === null && !prevItens.length) {
+    toast('Selecione uma proposta primeiro', 'warning'); return;
+  }
+  if (typeof prevAtualizar === 'function') prevAtualizar();
+
+  if (typeof JSZip === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = () => prevExportarWord();
+    s.onerror = () => _prevExportarWordMhtmlFallback();
+    document.head.appendChild(s);
+    toast('Carregando biblioteca...', 'info');
+    return;
+  }
+
+  try {
+    return _prevExportarWordDocxLegacy();
+  } catch (e) {
+    console.error('Falha no .docx nativo:', e);
+    toast('Falha no .docx, usando fallback...', 'warning');
+    return _prevExportarWordMhtmlFallback();
+  }
+}
+
+// Versão altChunk (cópia fiel do PDF, MAS o Google Docs a ignora).
+// Fica disponível se você abrir SEMPRE no Microsoft Word desktop.
+function prevExportarWordFielAoPDF() {
   if (prevIdxCRM === null && !prevItens.length) {
     toast('Selecione uma proposta primeiro', 'warning'); return;
   }
@@ -15360,8 +15387,7 @@ function prevExportarWord() {
   if (typeof JSZip === 'undefined') {
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    s.onload = () => prevExportarWord();
-    s.onerror = () => _prevExportarWordMhtmlFallback();
+    s.onload = () => prevExportarWordFielAoPDF();
     document.head.appendChild(s);
     toast('Carregando biblioteca...', 'info');
     return;
