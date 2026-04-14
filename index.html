@@ -15870,6 +15870,8 @@ function _prevExportarWordDocxLegacy() {
   const showUnit   = document.getElementById('prev-show-unit')?.checked ?? true;
   const showSimpl  = document.getElementById('prev-show-simples')?.checked ?? false;
   const showArt    = document.getElementById('prev-show-art')?.checked ?? false;
+  const showHoras  = document.getElementById('prev-show-horas')?.checked ?? false;
+  const showRubrica= document.getElementById('prev-show-assinatura')?.checked ?? true;
   const modPreco   = document.getElementById('prev-modo-preco')?.value || 'por-item';
   const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? false;
 
@@ -15897,6 +15899,18 @@ function _prevExportarWordDocxLegacy() {
 
   const fmt = v => 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2});
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  // Se "Mostrar Horas / Revisão" estiver ativo, anexa [H:Xh · R:Yh] ao final da descrição
+  if (showHoras) {
+    prevItens = prevItens.map(it => {
+      const h = (it.horas || 0), rv = (it.rev || 0);
+      if (h > 0 || rv > 0) {
+        const sufix = `  [H: ${h ? h.toFixed(1) : '—'}h · R: ${rv ? rv.toFixed(1) : '—'}h]`;
+        return { ...it, desc: (it.desc || '') + sufix };
+      }
+      return it;
+    });
+  }
 
   // Coletar normas e descrições
   const allItens = [...(calcBlocos||[]).flatMap(b => b.itens.map(i => i.desc)).filter(Boolean), ...prevItens.map(i => i.desc)];
@@ -16269,7 +16283,7 @@ function _prevExportarWordDocxLegacy() {
     </w:tblBorders></w:tblPr>
     <w:tr>
       <w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>
-        ${para('___________________________', {align:'center', color:'666666', size:18})}
+        ${showRubrica && typeof RUBRICA_GERSON_B64 !== 'undefined' ? `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="1714500" cy="523875"/><wp:docPr id="1" name="Rubrica"/><wp:cNvGraphicFramePr/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="Rubrica"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdRubrica"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1714500" cy="523875"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>` : para('___________________________', {align:'center', color:'666666', size:18})}
         ${para(resp + ' — Eng. Eletricista', {align:'center', bold:true, size:18})}
         ${para(crea, {align:'center', color:'666666', size:16})}
         ${para('Responsável Técnico', {align:'center', color:'888888', size:16})}
@@ -16312,9 +16326,22 @@ function _prevExportarWordDocxLegacy() {
   </w:body>
 </w:document>`;
 
+  // Rúbrica como imagem — só inclui se checkbox "Incluir Rúbrica Gerson" estiver marcado
+  const incluirRubrica = showRubrica && typeof RUBRICA_GERSON_B64 !== 'undefined';
+  let rubricaBytes = null;
+  if (incluirRubrica) {
+    try {
+      const b64raw = RUBRICA_GERSON_B64.includes(',') ? RUBRICA_GERSON_B64.split(',')[1] : RUBRICA_GERSON_B64;
+      const bin = atob(b64raw);
+      rubricaBytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) rubricaBytes[i] = bin.charCodeAt(i);
+    } catch(e){ console.warn('Falha ao decodificar rúbrica:', e); }
+  }
+
   const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  ${rubricaBytes ? '<Relationship Id="rIdRubrica" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/rubrica.png"/>' : ''}
 </Relationships>`;
 
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -16326,6 +16353,7 @@ function _prevExportarWordDocxLegacy() {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  ${rubricaBytes ? '<Default Extension="png" ContentType="image/png"/>' : ''}
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 </Types>`;
@@ -16345,6 +16373,7 @@ function _prevExportarWordDocxLegacy() {
     zip.file('word/document.xml', docXml);
     zip.file('word/styles.xml', stylesXml);
     zip.file('word/_rels/document.xml.rels', relsXml);
+    if (rubricaBytes) zip.file('word/media/rubrica.png', rubricaBytes, { binary: true });
     zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
       .then(blob => {
         const a = document.createElement('a');
