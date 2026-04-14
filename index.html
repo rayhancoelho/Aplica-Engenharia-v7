@@ -8,6 +8,7 @@
 <title>Aplica Engenharia — Sistema</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
 /* ═══════════════════════════════════════
@@ -15346,6 +15347,24 @@ nav = function(id) {
 // Gera um .docx válido usando XML puro sem dependências externas
 
 function prevExportarWord() {
+  // Se JSZip estiver disponível, gerar .docx real (Google Docs aceita).
+  if (typeof JSZip !== 'undefined' || typeof PizZip !== 'undefined') {
+    try { return _prevExportarWordDocxLegacy(); }
+    catch (e) { console.warn('Falha no .docx, caindo no MHTML:', e); }
+  } else {
+    // Carregar JSZip e tentar de novo
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    script.onload = () => prevExportarWord();
+    script.onerror = () => _prevExportarWordMhtmlFallback();
+    document.head.appendChild(script);
+    toast('Gerando Word... aguarde', 'info');
+    return;
+  }
+  return _prevExportarWordMhtmlFallback();
+}
+
+function _prevExportarWordMhtmlFallback() {
   if (prevIdxCRM === null && !prevItens.length) {
     toast('Selecione uma proposta primeiro', 'warning'); return;
   }
