@@ -3525,15 +3525,20 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <div class="kpi-value loading-val" id="f4-desp-mes">—</div>
             <div class="kpi-sub">todas as categorias</div>
           </div>
+          <div class="kpi-card coral">
+            <div class="kpi-label">Tributos do Mês</div>
+            <div class="kpi-value loading-val" id="f4-tributos">—</div>
+            <div class="kpi-sub" id="f4-tributos-sub">— sobre receita</div>
+          </div>
           <div class="kpi-card green">
-            <div class="kpi-label">Resultado</div>
+            <div class="kpi-label">Resultado Líquido</div>
             <div class="kpi-value loading-val" id="f4-resultado">—</div>
-            <div class="kpi-sub">receita − despesas</div>
+            <div class="kpi-sub">receita − despesas − tributos</div>
           </div>
           <div class="kpi-card gold">
-            <div class="kpi-label">Margem</div>
+            <div class="kpi-label">Margem Líquida</div>
             <div class="kpi-value loading-val" id="f4-margem">—</div>
-            <div class="kpi-sub">resultado / receita</div>
+            <div class="kpi-sub">resultado líquido / receita</div>
           </div>
           <div class="kpi-card steel">
             <div class="kpi-label">A Receber</div>
@@ -11502,7 +11507,11 @@ function f4RenderKPIs() {
     }
   });
 
-  const resultado = recMes - despMes;
+  // Tributos: alíquota do regime tributário configurado (default 6% Simples)
+  const aliqTrib  = parseFloat(document.getElementById('cad-aliquota')?.value || '6') || 0;
+  const tributos  = recMes * (aliqTrib / 100);
+  const regime    = document.getElementById('cad-regime')?.value || 'Simples Nacional';
+  const resultado = recMes - despMes - tributos;
   const margem    = recMes > 0 ? (resultado / recMes * 100) : 0;
   const delta     = recPrev > 0 ? ((recMes - recPrev) / recPrev * 100) : 0;
   const ticket    = nfCount > 0 ? recAno / nfCount : 0;
@@ -11521,6 +11530,8 @@ function f4RenderKPIs() {
   const s = (id, v) => { const el = document.getElementById(id); if (el) { el.textContent = v; el.classList.remove('loading-val'); } };
   s('f4-rec-mes',  fmtMoney(recMes));
   s('f4-desp-mes', fmtMoney(despMes));
+  s('f4-tributos', fmtMoney(tributos));
+  s('f4-tributos-sub', `${regime} (${aliqTrib}%)`);
   s('f4-resultado', fmtMoney(resultado));
   s('f4-margem',   margem.toFixed(1) + '%');
   s('f4-a-receber', fmtMoney(aReceber));
@@ -13027,9 +13038,9 @@ function cfgRenderServicos() {
     const isCustom = SERVICOS_CUSTOM[svc] !== undefined;
     const svcEsc = svc.replace(/'/g,"\\'");
     return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);cursor:pointer" onclick="if(event.target.closest('.cfg-svc-actions'))return;this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);cursor:pointer" onclick="if(event.target.tagName==='BUTTON')return;const n=this.nextElementSibling;n.style.display=n.style.display==='none'?'':'none'">
         <div style="font-weight:700;font-size:13px">${isCustom?'⭐':'📋'} ${svc} <span style="font-size:11px;color:var(--text3)">(${subs.length} sub)</span></div>
-        <div class="cfg-svc-actions" style="display:flex;gap:6px;align-items:center">
+        <div style="display:flex;gap:6px;align-items:center">
           <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();cfgRenomearServico('${svcEsc}')">✏️ Editar Nome</button>
           <span style="font-size:11px;color:var(--text3)">▼ expandir</span>
         </div>
@@ -15693,52 +15704,57 @@ function _prevExportarWordDocxLegacy() {
 
   const row = (...cells) => `<w:tr>${cells.join('')}</w:tr>`;
 
-  // Montar corpo do documento
+  // Montar corpo do documento (estrutura espelhada do PDF)
   const bodyParts = [];
 
-  // Cabeçalho empresa
-  bodyParts.push(para('PROPOSTA TÉCNICA', { bold: true, size: 36, color: '1a3c5e', align: 'center', spacing: 80 }));
-  bodyParts.push(para(`Nº ${numProp}/SC/${new Date().getFullYear()}`, { size: 22, color: '666666', align: 'center', spacing: 60 }));
-  bodyParts.push(para(`Data de emissão: ${dataHoje}  ·  Validade: ${dataVal} (${valDias} dias)`, { size: 18, color: '888888', align: 'center', spacing: 200 }));
-
-  // Empresa
-  bodyParts.push(heading('CONTRATADA'));
+  // ── 1. CABEÇALHO: empresa (esq) + Nº proposta (dir) ──
+  const headerLeftLines = [
+    `<w:p><w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="1a3c5e"/></w:rPr><w:t>GEAD APLICA ENGENHARIA LTDA</w:t></w:r></w:p>`,
+    `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">CNPJ: 39.725.915/0001-08 · ${esc(cidade)}</w:t></w:r></w:p>`,
+    `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
+  ].join('');
+  const headerRightLines = [
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
+  ].join('');
   bodyParts.push(`<w:tbl>
-    <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
-    <w:tblGrid><w:gridCol w:w="2268"/><w:gridCol w:w="6804"/></w:tblGrid>
-    ${row(cell('Empresa', {bold:true,bg:'e8f0f7'}), cell('GEAD APLICA ENGENHARIA LTDA', {}))}
-    ${row(cell('CNPJ', {bold:true,bg:'e8f0f7'}), cell('39.725.915/0001-08', {}))}
-    ${row(cell('Cidade', {bold:true,bg:'e8f0f7'}), cell(cidade, {}))}
-    ${row(cell('Telefone', {bold:true,bg:'e8f0f7'}), cell(tel, {}))}
-    ${row(cell('E-mail', {bold:true,bg:'e8f0f7'}), cell(emailEmp, {}))}
-    ${row(cell('CREA', {bold:true,bg:'e8f0f7'}), cell(crea, {}))}
-    ${row(cell('Responsável', {bold:true,bg:'e8f0f7'}), cell(resp, {}))}
+    <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tblBorders></w:tblPr>
+    <w:tblGrid><w:gridCol w:w="5040"/><w:gridCol w:w="4032"/></w:tblGrid>
+    <w:tr>
+      <w:tc><w:tcPr><w:tcW w:w="5040" w:type="dxa"/><w:tcBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tcBorders></w:tcPr>${headerLeftLines}</w:tc>
+      <w:tc><w:tcPr><w:tcW w:w="4032" w:type="dxa"/><w:tcBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tcBorders></w:tcPr>${headerRightLines}</w:tc>
+    </w:tr>
   </w:tbl>`);
+  bodyParts.push(para('', {spacing:160}));
 
-  bodyParts.push(para('', {spacing: 100}));
-
-  // Cliente
-  bodyParts.push(heading('CONTRATANTE'));
+  // ── 2. DADOS DO CONTRATANTE (grid 2 colunas) ──
+  bodyParts.push(heading('DADOS DO CONTRATANTE'));
+  const fieldCell = (label, value) => `<w:tc>
+    <w:tcPr><w:tcW w:w="4536" w:type="dxa"/><w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/></w:tcBorders></w:tcPr>
+    <w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(label)}: </w:t></w:r><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="111827"/></w:rPr><w:t>${esc(value)}</w:t></w:r></w:p>
+  </w:tc>`;
   bodyParts.push(`<w:tbl>
-    <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
-    <w:tblGrid><w:gridCol w:w="2268"/><w:gridCol w:w="6804"/></w:tblGrid>
-    ${row(cell('Razão Social', {bold:true,bg:'e8f0f7'}), cell(cliente, {}))}
-    ${row(cell('CNPJ', {bold:true,bg:'e8f0f7'}), cell(cnpj, {}))}
-    ${row(cell('Contato', {bold:true,bg:'e8f0f7'}), cell(contato, {}))}
-    ${row(cell('Telefone', {bold:true,bg:'e8f0f7'}), cell(fone, {}))}
-    ${endCli !== '—' ? row(cell('Endereço', {bold:true,bg:'e8f0f7'}), cell(endCli, {})) : ''}
+    <w:tblPr><w:tblW w:w="9072" w:type="dxa"/></w:tblPr>
+    <w:tblGrid><w:gridCol w:w="4536"/><w:gridCol w:w="4536"/></w:tblGrid>
+    <w:tr>${fieldCell('Razão Social', cliente)}${fieldCell('CNPJ/CPF', cnpj)}</w:tr>
+    <w:tr>${fieldCell('Contato', contato)}${fieldCell('Telefone', fone)}</w:tr>
+    ${endCli !== '—' ? `<w:tr>${fieldCell('Endereço', endCli)}${fieldCell('', '')}</w:tr>` : ''}
   </w:tbl>`);
+  bodyParts.push(para('', {spacing:120}));
 
-  bodyParts.push(para('', {spacing:100}));
+  // ── 3. APRESENTAÇÃO ──
+  bodyParts.push(heading('APRESENTAÇÃO'));
+  bodyParts.push(para(`A Aplica Engenharia coloca-se à disposição para oferecer seus serviços da área elétrica para atendimento a ${cliente}. Somos uma empresa especializada há mais de 15 anos na área de engenharia elétrica, trazendo soluções com amplo conhecimento técnico e prático. Isso nos permite oferecer serviços de alta qualidade, totalmente alinhados com as normas e padrões atuais.`, {size:18, color:'374151', spacing:120}));
 
-  // Normas técnicas
+  // ── 3b. (opcional) Normas técnicas ──
   if (showNormas && normasLista.length) {
     bodyParts.push(heading('REFERÊNCIAS NORMATIVAS'));
     normasLista.forEach(n => bodyParts.push(para(`▸  ${n}`, { size: 18, color: '374151', indent: '360' })));
     bodyParts.push(para('', {spacing:80}));
   }
 
-  // Escopo / descrições
+  // ── 3c. (opcional) Escopo / descrições ──
   if (showDesc && descritivos.length) {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
     descritivos.forEach(d => {
@@ -15749,7 +15765,7 @@ function _prevExportarWordDocxLegacy() {
 
   // Tabela de itens — sempre mostra, mas sem preços no modo global
   {
-    bodyParts.push(heading('ITENS / SERVIÇOS'));
+    bodyParts.push(heading('SERVIÇOS / ITENS'));
     const itensCols = modPreco === 'global'
       ? [1134, 7938]  // Só # e Descrição no global
       : modPreco === 'por-item' && showUnit
@@ -15900,69 +15916,72 @@ function _prevExportarWordDocxLegacy() {
     bodyParts.push(para('', {spacing:100}));
   }
 
-  // Valor global
-  if (modPreco === 'global') {
-    bodyParts.push(heading('VALOR GLOBAL'));
-    bodyParts.push(para(fmt(total), { bold: true, size: 48, color: '059669', align: 'center', spacing: 200 }));
-  }
-
-  // Resumo financeiro
-  if (modPreco !== 'global') {
-    bodyParts.push(heading('RESUMO FINANCEIRO'));
-    const linsFin = [
-      ['Subtotal Serviços', fmt(subtotalComArt)],
-      ...(desl > 0 && showDeslocamento ? [['Deslocamento', fmt(desl)]] : []),
-      ...(extras > 0? [['Extras', fmt(extras)]] : []),
-      ...(showSimpl ? [['Simples Nacional (6%)', `− ${fmt(impVal)}`]] : []),
-      ['TOTAL', fmt(total)],
-    ];
-    bodyParts.push(`<w:tbl>
-      <w:tblPr><w:tblW w:w="5040" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
-      <w:tblGrid><w:gridCol w:w="3240"/><w:gridCol w:w="1800"/></w:tblGrid>
-      ${linsFin.map((l,i) => {
-        const isTotal = l[0] === 'TOTAL';
-        return row(cell(l[0],{bold:isTotal,bg:isTotal?'1a3c5e':'e8f0f7',color:isTotal?'FFFFFF':'374151',w:3240}),
-                   cell(l[1],{bold:isTotal,bg:isTotal?'1a3c5e':'FFFFFF',color:isTotal?'FFFFFF':'059669',w:1800}));
-      }).join('')}
-    </w:tbl>`);
-    bodyParts.push(para('', {spacing:100}));
-  }
-
-  // Pagamento e Faturamento
+  // ── 5. RESUMO FINANCEIRO + CONDIÇÕES DE PAGAMENTO + PRAZO (lado a lado) ──
   const pgtoDocx = typeof prevGetDadosPagamento === 'function' ? prevGetDadosPagamento() : null;
   const pagto = PROPOSTA_CONTEXTO?.pagto;
-  
-  bodyParts.push(heading('FORMA DE PAGAMENTO'));
-  if (pgtoDocx) {
-    bodyParts.push(para(`▸  ${pgtoDocx.formaTexto}`, {size:18, color:'374151', indent:'360', bold:true}));
-    if (pgtoDocx.tipo === 'cnpj') {
-      bodyParts.push(para('•  Inclusa emissão de Nota Fiscal de Serviço', {size:16, color:'6b7280', indent:'720'}));
-      bodyParts.push(para('•  Retenção de ISS — por conta do cliente', {size:16, color:'6b7280', indent:'720'}));
-    } else {
-      bodyParts.push(para('•  Emissão Sem Nota Fiscal de Serviço', {size:16, color:'6b7280', indent:'720'}));
-    }
-    bodyParts.push(para('', {spacing:60}));
-  }
-  if (pagto) {
-    bodyParts.push(heading('CONDIÇÕES DE PAGAMENTO'));
-    pagto.split(' | ').filter(Boolean).forEach(p => bodyParts.push(para(`▸  ${p}`, {size:18, color:'374151', indent:'360'})));
-    bodyParts.push(para('', {spacing:80}));
-  }
-
-  // Prazo de Entrega
   const prazoEntrega = document.getElementById('prev-prazo-entrega')?.value || 'Conforme escopo de serviços, conforme disponibilidade e agenda técnica.';
-  bodyParts.push(heading('PRAZO DE ENTREGA'));
-  bodyParts.push(para(prazoEntrega, {size:18, color:'374151'}));
-  bodyParts.push(para('', {spacing:80}));
 
-  // Observações
+  // Coluna esquerda: Resumo financeiro (ou só Valor Global)
+  const linsFin = [
+    ['Subtotal Serviços', fmt(subtotalComArt), false],
+    ...(desl > 0 && showDeslocamento ? [['+ Deslocamento', fmt(desl), false]] : []),
+    ...(extras > 0 ? [['+ Extras', fmt(extras), false]] : []),
+    ...(showSimpl ? [['− Simples Nacional (6%)', `− ${fmt(impVal)}`, false]] : []),
+    ['VALOR TOTAL', fmt(total), true],
+  ];
+  let resumoLeft = '';
+  if (modPreco === 'global') {
+    resumoLeft = `<w:p><w:pPr><w:jc w:val="center"/><w:shd w:val="clear" w:fill="1a3c5e"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="FFFFFF"/></w:rPr><w:t>RESUMO FINANCEIRO</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="36"/><w:color w:val="f0a500"/></w:rPr><w:t>${esc(fmt(total))}</w:t></w:r></w:p>`;
+  } else {
+    resumoLeft = `<w:p><w:pPr><w:jc w:val="center"/><w:shd w:val="clear" w:fill="1a3c5e"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="FFFFFF"/></w:rPr><w:t>RESUMO FINANCEIRO</w:t></w:r></w:p>` +
+      linsFin.map(([k,v,total]) => `<w:tbl>
+        <w:tblPr><w:tblW w:w="4400" w:type="dxa"/></w:tblPr>
+        <w:tblGrid><w:gridCol w:w="2640"/><w:gridCol w:w="1760"/></w:tblGrid>
+        <w:tr>
+          <w:tc><w:tcPr><w:tcW w:w="2640" w:type="dxa"/><w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="single" w:sz="4" w:color="${total?'1a3c5e':'f3f4f6'}"/><w:right w:val="nil"/></w:tcBorders></w:tcPr>
+            <w:p><w:r><w:rPr>${total?'<w:b/>':''}<w:sz w:val="${total?'22':'18'}"/><w:color w:val="${total?'1a3c5e':'6b7280'}"/></w:rPr><w:t>${esc(k)}</w:t></w:r></w:p>
+          </w:tc>
+          <w:tc><w:tcPr><w:tcW w:w="1760" w:type="dxa"/><w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="single" w:sz="4" w:color="${total?'1a3c5e':'f3f4f6'}"/><w:right w:val="nil"/></w:tcBorders></w:tcPr>
+            <w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="${total?'22':'18'}"/><w:color w:val="${total?'f0a500':(String(v).includes('−')?'dc2626':'059669')}"/></w:rPr><w:t>${esc(v)}</w:t></w:r></w:p>
+          </w:tc>
+        </w:tr>
+      </w:tbl>`).join('') +
+      (pgtoDocx ? `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>${pgtoDocx.tipo === 'cnpj' ? '• Inclusa emissão de Nota Fiscal de Serviço' : '• Emissão Sem Nota Fiscal de Serviço'}</w:t></w:r></w:p>` +
+       (pgtoDocx.tipo === 'cnpj' ? `<w:p><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Retenção de ISS — por conta do cliente</w:t></w:r></w:p>` : '') : '');
+  }
+
+  // Coluna direita: Condições de pagamento + Prazo
+  let pagtoBox = `<w:p><w:pPr><w:shd w:val="clear" w:fill="f8f9fa"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="1a3c5e"/></w:rPr><w:t>CONDIÇÕES DE PAGAMENTO</w:t></w:r></w:p>`;
+  if (pagto) {
+    pagto.split(' | ').filter(Boolean).forEach(p => {
+      pagtoBox += `<w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="374151"/></w:rPr><w:t xml:space="preserve">▸ ${esc(p)}</w:t></w:r></w:p>`;
+    });
+  }
+  if (pgtoDocx) {
+    pagtoBox += `<w:p><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="374151"/></w:rPr><w:t xml:space="preserve">▸ ${esc(pgtoDocx.formaTexto)}</w:t></w:r></w:p>`;
+  }
+  let prazoBox = `<w:p><w:pPr><w:spacing w:before="160"/><w:shd w:val="clear" w:fill="f8f9fa"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PRAZO DE ENTREGA</w:t></w:r></w:p>` +
+    `<w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="374151"/></w:rPr><w:t>${esc(prazoEntrega)}</w:t></w:r></w:p>`;
+
+  bodyParts.push(`<w:tbl>
+    <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="e5e7eb"/><w:left w:val="single" w:sz="4" w:color="e5e7eb"/><w:bottom w:val="single" w:sz="4" w:color="e5e7eb"/><w:right w:val="single" w:sz="4" w:color="e5e7eb"/><w:insideV w:val="single" w:sz="4" w:color="e5e7eb"/></w:tblBorders></w:tblPr>
+    <w:tblGrid><w:gridCol w:w="4536"/><w:gridCol w:w="4536"/></w:tblGrid>
+    <w:tr>
+      <w:tc><w:tcPr><w:tcW w:w="4536" w:type="dxa"/><w:tcMar><w:top w:w="120" w:type="dxa"/><w:left w:w="160" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/><w:right w:w="160" w:type="dxa"/></w:tcMar></w:tcPr>${resumoLeft}</w:tc>
+      <w:tc><w:tcPr><w:tcW w:w="4536" w:type="dxa"/><w:tcMar><w:top w:w="120" w:type="dxa"/><w:left w:w="160" w:type="dxa"/><w:bottom w:w="120" w:type="dxa"/><w:right w:w="160" w:type="dxa"/></w:tcMar></w:tcPr>${pagtoBox}${prazoBox}</w:tc>
+    </w:tr>
+  </w:tbl>`);
+  bodyParts.push(para('', {spacing:160}));
+
+  // Observações (se houver)
   if (obsProp) {
     bodyParts.push(heading('OBSERVAÇÕES / CONDIÇÕES GERAIS'));
     bodyParts.push(para(obsProp, {size:18, color:'374151'}));
     bodyParts.push(para('', {spacing:80}));
   }
 
-  // Itens Fora do Escopo / Exclusos
+  // ── 6. ITENS EXCLUSOS NO FORNECIMENTO ──
   const _feDocx = (typeof npForaEscopo !== 'undefined' && npForaEscopo !== null && npForaEscopo.length)
     ? npForaEscopo
     : (typeof _npGetForaEscopoDefaults === 'function' ? _npGetForaEscopoDefaults() : []);
@@ -15970,13 +15989,17 @@ function _prevExportarWordDocxLegacy() {
     bodyParts.push(heading('ITENS EXCLUSOS NO FORNECIMENTO'));
     bodyParts.push(para('Fica excluso da proposta, o fornecimento de:', {size:18, color:'374151'}));
     _feDocx.forEach(item => {
-      bodyParts.push(para('▸  ' + item, {size:18, color:'374151'}));
+      bodyParts.push(para('▸  ' + item, {size:18, color:'374151', indent:'360'}));
     });
-    bodyParts.push(para('A Aplica Engenharia coloca-se à disposição para fornecer qualquer serviço conforme definido nos itens exclusos acima, disponibilizando orçamento adicional quando solicitado.', {size:16, color:'888888'}));
-    bodyParts.push(para('', {spacing:80}));
+    bodyParts.push(para('A Aplica Engenharia coloca-se à disposição para fornecer qualquer serviço conforme definido nos itens exclusos acima, disponibilizando orçamento adicional quando solicitado.', {size:16, color:'888888', spacing:80}));
   }
 
-  // Assinatura dupla (Engenheiro + Cliente)
+  // ── 7. TERMOS E CONDIÇÕES FINAIS ──
+  bodyParts.push(heading('TERMOS E CONDIÇÕES FINAIS'));
+  bodyParts.push(para(`A Aplica Engenharia tem o compromisso na entrega de soluções eficientes com total qualidade e segurança, seguindo todas as exigências normativas vigentes. O fornecimento geral será acompanhado pelo responsável técnico, ${resp}, ${crea}. É de suma importância que seja sinalizada a aprovação da proposta, para o fechamento do respectivo Contrato de Prestação de Serviço. Desde já agradecemos a oportunidade concedida e nos colocamos à disposição para quaisquer esclarecimentos.`, {size:18, color:'374151', spacing:120}));
+
+  // ── 8. Assinatura dupla (Engenheiro + Cliente) — em nova página ──
+  bodyParts.push(`<w:p><w:r><w:br w:type="page"/></w:r></w:p>`);
   bodyParts.push(para('', {spacing:300}));
   bodyParts.push(para('Atenciosamente,', {align:'center', color:'888888', size:18}));
   bodyParts.push(para('', {spacing:200}));
@@ -20858,10 +20881,10 @@ function _cliExportarWord(data) {
       <div style="background:rgba(68,147,248,0.08);border:1px solid rgba(68,147,248,0.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--steel)">
         💡 Selecione uma proposta para <b>duplicar</b>. O sistema cria uma nova ID e mantém todas as atividades. Você só precisa inserir o novo cliente.
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <div class="search-box" style="flex:1">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <div class="search-box" style="flex:1;min-width:240px">
           <span>🔍</span>
-          <input type="text" placeholder="Buscar por nome, cliente, serviço..." id="up-busca" oninput="npFiltrarPropostasExistentes()">
+          <input type="text" placeholder="Buscar (cliente, ID, qualquer texto)..." id="up-busca" oninput="npFiltrarPropostasExistentes()">
         </div>
         <select class="filter-sel" id="up-filtro-nome" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os nomes padrão</option>
@@ -20877,6 +20900,17 @@ function _cliExportarWord(data) {
           <option value="">Todos os anos</option>
           <option>2024</option><option>2025</option><option>2026</option>
         </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <select class="filter-sel" id="up-filtro-servico" onchange="npAtualizarFiltroSubservico();npFiltrarPropostasExistentes()" style="flex:1;min-width:180px">
+          <option value="">Todos os serviços principais</option>
+        </select>
+        <select class="filter-sel" id="up-filtro-subservico" onchange="npFiltrarPropostasExistentes()" style="flex:1;min-width:180px">
+          <option value="">Todos os subserviços</option>
+        </select>
+        <input type="text" class="filter-sel" id="up-filtro-local" placeholder="Local (UF/cidade)" oninput="npFiltrarPropostasExistentes()" style="flex:1;min-width:140px">
+        <input type="text" class="filter-sel" id="up-filtro-spec" placeholder="Especificação (ex: 13.8kV, 500kVA)" oninput="npFiltrarPropostasExistentes()" style="flex:1;min-width:180px">
+        <button class="btn btn-ghost btn-sm" onclick="npLimparFiltrosUP()" title="Limpar todos os filtros">↺ Limpar</button>
       </div>
       <div id="up-lista" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
         <div class="empty-state"><div class="empty-icon">📋</div><div class="empty-sub">Carregando propostas...</div></div>
@@ -21093,8 +21127,40 @@ function npUsarPropostaExistente() {
     sel.innerHTML = '<option value="">Todos os nomes padrão</option>' +
       NOMES_PADRAO_PROPOSTA.map(n => `<option>${n}</option>`).join('');
   }
+  // Popular filtro de serviço principal (mescla SUBCATEGORIAS padrão + custom, respeita ocultos)
+  const selSvc = document.getElementById('up-filtro-servico');
+  if (selSvc) {
+    const merged = { ...(typeof SUBCATEGORIAS !== 'undefined' ? SUBCATEGORIAS : {}), ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
+    const hidden = (typeof SERVICOS_HIDDEN !== 'undefined' ? SERVICOS_HIDDEN : []);
+    const nomes = Object.keys(merged).filter(k => !hidden.includes(k)).sort();
+    selSvc.innerHTML = '<option value="">Todos os serviços principais</option>' + nomes.map(n => `<option>${n}</option>`).join('');
+  }
+  npAtualizarFiltroSubservico();
   npFiltrarPropostasExistentes();
   openModal('modal-usar-proposta');
+}
+
+function npAtualizarFiltroSubservico() {
+  const selSub = document.getElementById('up-filtro-subservico');
+  const svcSel = (document.getElementById('up-filtro-servico')?.value || '');
+  if (!selSub) return;
+  const merged = { ...(typeof SUBCATEGORIAS !== 'undefined' ? SUBCATEGORIAS : {}), ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
+  let subs;
+  if (svcSel) {
+    subs = (merged[svcSel] || []).slice();
+  } else {
+    subs = [...new Set(Object.values(merged).flat())];
+  }
+  subs.sort();
+  selSub.innerHTML = '<option value="">Todos os subserviços</option>' + subs.map(s => `<option>${s}</option>`).join('');
+}
+
+function npLimparFiltrosUP() {
+  ['up-busca','up-filtro-nome','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico','up-filtro-local','up-filtro-spec'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  npAtualizarFiltroSubservico();
+  npFiltrarPropostasExistentes();
 }
 
 function npFiltrarPropostasExistentes() {
@@ -21102,12 +21168,29 @@ function npFiltrarPropostasExistentes() {
   const nomePadrao = (document.getElementById('up-filtro-nome')?.value || '').toLowerCase();
   const mes = document.getElementById('up-filtro-mes')?.value || '';
   const ano = document.getElementById('up-filtro-ano')?.value || '';
+  const fSvc = (document.getElementById('up-filtro-servico')?.value || '').toLowerCase();
+  const fSub = (document.getElementById('up-filtro-subservico')?.value || '').toLowerCase();
+  const fLocal = (document.getElementById('up-filtro-local')?.value || '').toLowerCase().trim();
+  const fSpec = (document.getElementById('up-filtro-spec')?.value || '').toLowerCase().trim();
   const container = document.getElementById('up-lista');
   if (!container) return;
 
+  // Normaliza spec para tolerar "13.8" / "13,8" / "13kv"
+  const normSpec = s => (s||'').toString().toLowerCase().replace(/\s+/g,'').replace(',','.');
+
   let rows = DATA.crm || [];
-  if (busca) rows = rows.filter(r => [r[CRM_COL.RAZAO],r[CRM_COL.SERVICO],r[CRM_COL.ID]].some(v => (v||'').toLowerCase().includes(busca)));
+  if (busca) rows = rows.filter(r => [r[CRM_COL.RAZAO],r[CRM_COL.SERVICO],r[CRM_COL.ID],r[5],r[CRM_COL.OBS]].some(v => (v||'').toString().toLowerCase().includes(busca)));
   if (nomePadrao) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(nomePadrao));
+  if (fSvc) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(fSvc));
+  if (fSub) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(fSub));
+  if (fLocal) rows = rows.filter(r => ((r[CRM_COL.ENDERECO]||'') + ' ' + (r[CRM_COL.RAZAO]||'')).toLowerCase().includes(fLocal));
+  if (fSpec) {
+    const alvo = normSpec(fSpec);
+    rows = rows.filter(r => {
+      const blob = normSpec([r[CRM_COL.SERVICO], r[CRM_COL.OBS], r[5], r[CRM_COL.RAZAO]].filter(Boolean).join(' '));
+      return blob.includes(alvo);
+    });
+  }
   if (mes || ano) {
     rows = rows.filter(r => {
       const d = r[CRM_COL.DATA_ABER] || r[CRM_COL.VALIDADE] || '';
