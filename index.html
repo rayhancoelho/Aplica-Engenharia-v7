@@ -9472,7 +9472,6 @@ function prevAtualizar() {
               <div style="font-size:11px;color:#374151;line-height:1.8;margin-top:4px">
                 <strong>▸ ${pgto.formaTexto}</strong>
               </div>
-              ${_prevGetEnquadramentoTexto() ? `<div style="font-size:10px;color:#6b7280;line-height:1.6;margin-top:10px;padding-top:8px;border-top:1px dashed #e5e7eb;text-align:justify">${_prevGetEnquadramentoTexto()}</div>` : ''}
             </div>
             <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Prazo de Entrega</div>
@@ -21333,7 +21332,6 @@ function _cliExportarWord(data) {
         <select class="filter-sel" id="up-filtro-subservico" onchange="npFiltrarPropostasExistentes()" style="flex:1;min-width:180px">
           <option value="">Todos os subserviços</option>
         </select>
-        <input type="text" class="filter-sel" id="up-filtro-local" placeholder="Local (UF/cidade)" oninput="npFiltrarPropostasExistentes()" style="flex:1;min-width:140px">
         <button class="btn btn-ghost btn-sm" onclick="npLimparFiltrosUP()" title="Limpar todos os filtros">↺ Limpar</button>
       </div>
       <div id="up-lista" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
@@ -21587,7 +21585,7 @@ function npAtualizarFiltroSubservico() {
 }
 
 function npLimparFiltrosUP() {
-  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico','up-filtro-local'].forEach(id => {
+  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   npAtualizarFiltroSubservico();
@@ -21602,7 +21600,6 @@ function npFiltrarPropostasExistentes() {
   const ano = document.getElementById('up-filtro-ano')?.value || '';
   const fSvc = (document.getElementById('up-filtro-servico')?.value || '').toLowerCase();
   const fSub = (document.getElementById('up-filtro-subservico')?.value || '').toLowerCase();
-  const fLocal = (document.getElementById('up-filtro-local')?.value || '').toLowerCase().trim();
   const container = document.getElementById('up-lista');
   if (!container) return;
 
@@ -21613,7 +21610,6 @@ function npFiltrarPropostasExistentes() {
   if (busca) rows = rows.filter(r => [r[CRM_COL.RAZAO],r[CRM_COL.SERVICO],r[CRM_COL.ID],r[5],r[CRM_COL.OBS]].some(v => (v||'').toString().toLowerCase().includes(busca)));
   if (fSvc) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(fSvc));
   if (fSub) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(fSub));
-  if (fLocal) rows = rows.filter(r => ((r[CRM_COL.ENDERECO]||'') + ' ' + (r[CRM_COL.RAZAO]||'')).toLowerCase().includes(fLocal));
   if (fTipoSub) {
     rows = rows.filter(r => {
       const blob = [r[CRM_COL.SERVICO], r[CRM_COL.OBS], r[5], r[CRM_COL.RAZAO]].filter(Boolean).join(' ').toLowerCase();
