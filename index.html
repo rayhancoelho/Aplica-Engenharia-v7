@@ -16134,7 +16134,13 @@ function _prevExportarWordDocxLegacy() {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
     descritivos.forEach(d => {
       bodyParts.push(para(d.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
-      bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
+      const topicos = d.texto.split(/\s*[\n•]+\s*|(?<=\.)\s+/).map(s => s.trim()).filter(Boolean);
+      if (topicos.length > 1) {
+        topicos.forEach(t => bodyParts.push(para(`•  ${t}`, { size: 18, color: '374151', indent: '360', spacing: 40 })));
+        bodyParts.push(para('', { spacing: 40 }));
+      } else {
+        bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
+      }
     });
   }
 
