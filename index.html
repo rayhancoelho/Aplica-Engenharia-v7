@@ -5290,9 +5290,16 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <div class="card">
               <div class="card-header"><div class="card-title">5. Observações / Condições</div></div>
               <div class="card-body">
-                <textarea class="form-control" id="prev-obs-prop" rows="4"
+                <label class="form-label" style="font-size:11px">Modelo de Observação</label>
+                <select class="form-control" id="prev-obs-modelo" style="font-size:12px;margin-bottom:8px" onchange="prevObsAplicarTemplate()">
+                  <option value="padrao" selected>Texto Padrão (Anexo III — instalações)</option>
+                  <option value="anexo5">Anexo V (engenharia — opção do contratante)</option>
+                  <option value="livre">Livre (digitar manualmente)</option>
+                </select>
+                <textarea class="form-control" id="prev-obs-prop" rows="8"
                   placeholder="Ex: Proposta válida por 30 dias. Prazo de execução: 5 dias úteis após aprovação. Pagamento: 50% entrada + 50% entrega."
                   oninput="prevAtualizar()"></textarea>
+                <div style="font-size:10px;color:var(--text3);margin-top:6px" id="prev-obs-hint">Texto preenchido automaticamente — selecione "Livre" para editar.</div>
               </div>
             </div>
           </div>
@@ -8675,6 +8682,34 @@ function _prevGetEnquadramentoTexto() {
   return ENQUADRAMENTO_TEXTOS[v] || '';
 }
 
+// Templates do campo Observações / Condições (card 5)
+const OBS_TEMPLATES = {
+  padrao: 'A presente proposta está elaborada com base no enquadramento tributário aplicável ao Anexo III do Simples Nacional, conforme regime adotado pela Aplica Engenharia.\n\nOs valores apresentados consideram exclusivamente este enquadramento fiscal, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.02 referente a serviços de instalações.\n\nCaso haja necessidade de alteração para outro enquadramento, por solicitação do contratante ou por exigência específica, tal condição deverá ser previamente comunicada e acordada com a Aplica Engenharia, podendo implicar revisão dos valores propostos.',
+  anexo5: 'Anexo 5: Enquadramento Fiscal por Opção do Contratante\n\nConforme alinhamento entre as partes, o contratante optou pelo enquadramento dos serviços no regime tributário do Anexo V do Simples Nacional.\n\nOs valores desta proposta já consideram a incidência fiscal correspondente a este enquadramento, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.01 referente a serviços de engenharia.'
+};
+function prevObsAplicarTemplate() {
+  const sel = document.getElementById('prev-obs-modelo');
+  const ta  = document.getElementById('prev-obs-prop');
+  const hint= document.getElementById('prev-obs-hint');
+  if (!sel || !ta) return;
+  const v = sel.value;
+  if (v === 'livre') {
+    ta.readOnly = false;
+    ta.style.background = '';
+    if (hint) hint.textContent = 'Edição livre — digite o texto desejado.';
+  } else {
+    ta.value = OBS_TEMPLATES[v] || '';
+    ta.readOnly = true;
+    ta.style.background = 'rgba(255,255,255,0.04)';
+    if (hint) hint.textContent = 'Texto preenchido automaticamente — selecione "Livre" para editar.';
+  }
+  if (typeof prevAtualizar === 'function') prevAtualizar();
+}
+// Aplicar template padrão na inicialização
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => { try { prevObsAplicarTemplate(); } catch(_){} }, 300);
+});
+
 // Preencher select de propostas
 function prevPopularSelect() {
   const sel = document.getElementById('prev-select-prop');
@@ -9101,7 +9136,7 @@ function prevAtualizar() {
             // No modo por-servico: subserviços aparecem SEM valor individual
             html += `<tr>
               <td style="padding:5px 12px 5px 24px;color:#6b7280;font-size:11px"></td>
-              <td style="padding:5px 12px;color:#374151;font-size:12px">• ${it.desc}</td>
+              <td style="padding:5px 12px;color:#374151;font-size:12px">${it.desc}</td>
               ${horasCols}
               ${showUnit ? `<td style="padding:5px 12px;color:#6b7280;font-size:11px;text-align:right"></td>` : ''}
             </tr>`;
@@ -9136,7 +9171,7 @@ function prevAtualizar() {
           // No modo por-servico: subserviços aparecem SEM valor individual
           html += `<tr>
             <td style="padding:5px 12px 5px 24px;color:#6b7280;font-size:11px"></td>
-            <td style="padding:5px 12px;color:#374151;font-size:12px">• ${it.desc||'Item'}</td>
+            <td style="padding:5px 12px;color:#374151;font-size:12px">${it.desc||'Item'}</td>
             ${horasCols}
             ${showUnit ? `<td style="padding:5px 12px;color:#6b7280;font-size:11px;text-align:right"></td>` : ''}
           </tr>`;
@@ -9199,7 +9234,7 @@ function prevAtualizar() {
           }
           html += `<tr>
             <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#374151">${itemNum}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#111827;font-weight:500">• ${it.desc||'Item'}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;color:#111827;font-weight:500">${it.desc||'Item'}</td>
             ${horasHtml}${precoHtml}
           </tr>`;
         });
@@ -9260,7 +9295,7 @@ function prevAtualizar() {
       ${descricoesSecs.map(d => `
         <div style="margin-bottom:12px">
           <div style="font-size:11px;font-weight:700;color:#111827;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-          <div style="font-size:11px;color:#374151;line-height:1.8">${d.texto.split(/(?<=\.)\s+/).filter(s=>s.trim()).map(s => '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• ' + s.trim() + '</div>').join('')}</div>
+          <div style="font-size:11px;color:#374151;line-height:1.8">${d.texto.split(/\s*[\n•]+\s*|(?<=\.)\s+/).filter(s=>s.trim()).map(s => '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• ' + s.trim() + '</div>').join('')}</div>
         </div>`).join('')}
     </div>` : '';
 
@@ -9360,7 +9395,7 @@ function prevAtualizar() {
           ${descricoesSecs.map(d => `
             <div style="margin-bottom:10px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-              <div style="font-size:10px;color:#374151;line-height:1.8">${d.texto.split(/(?<=\.)\s+/).filter(s=>s.trim()).map(s => '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• ' + s.trim() + '</div>').join('')}</div>
+              <div style="font-size:10px;color:#374151;line-height:1.8">${d.texto.split(/\s*[\n•]+\s*|(?<=\.)\s+/).filter(s=>s.trim()).map(s => '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• ' + s.trim() + '</div>').join('')}</div>
             </div>`).join('')}
         </div>` : ''}
 
@@ -16133,7 +16168,7 @@ function _prevExportarWordDocxLegacy() {
           grupos[svcNome].forEach(it => {
             idx++;
             const bg = idx%2===0?'FFFFFF':'f5f7fa';
-            itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell('  • '+(it.desc||'Item'),{bg,w:itensCols[1]}));
+            itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell(it.desc||'Item',{bg,w:itensCols[1]}));
           });
         });
       } else {
@@ -16167,7 +16202,7 @@ function _prevExportarWordDocxLegacy() {
         itensRows += row(cell(String(idx),{bold:true,bg:'e8f0f7',w:itensCols[0]}), cell(svcNome,{bold:true,bg:'e8f0f7',w:itensCols[1]}), cell(fmt(grp.total),{bold:true,bg:'e8f0f7',w:itensCols[2]}));
         // Subserviços como bullets sem valor
         grp.itens.forEach(it => {
-          itensRows += row(cell('',{bg:'FFFFFF',w:itensCols[0]}), cell('  • ' + (it.desc||'Item'),{bg:'FFFFFF',w:itensCols[1]}), cell('',{bg:'FFFFFF',w:itensCols[2]}));
+          itensRows += row(cell('',{bg:'FFFFFF',w:itensCols[0]}), cell(it.desc||'Item',{bg:'FFFFFF',w:itensCols[1]}), cell('',{bg:'FFFFFF',w:itensCols[2]}));
         });
       });
     } else {
@@ -16207,9 +16242,9 @@ function _prevExportarWordDocxLegacy() {
             const tot = (it.qtd||0)*(it.unit||0);
             const bg = idx%2 === 0 ? 'FFFFFF' : 'f5f7fa';
             if (showUnit) {
-              itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell('  • '+(it.desc||'Item'),{bg,w:itensCols[1]}), cell(fmt(it.unit||0),{bg,w:itensCols[2]}), cell(fmt(tot),{bold:true,bg,w:itensCols[3]}));
+              itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell(it.desc||'Item',{bg,w:itensCols[1]}), cell(fmt(it.unit||0),{bg,w:itensCols[2]}), cell(fmt(tot),{bold:true,bg,w:itensCols[3]}));
             } else {
-              itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell('  • '+(it.desc||'Item'),{bg,w:itensCols[1]}), cell(fmt(tot),{bold:true,bg,w:itensCols[2]}));
+              itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell(it.desc||'Item',{bg,w:itensCols[1]}), cell(fmt(tot),{bold:true,bg,w:itensCols[2]}));
             }
           });
         });
