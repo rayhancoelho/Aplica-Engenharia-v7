@@ -3041,6 +3041,20 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                     </select>
                   </div>
 
+                  <div class="form-group">
+                    <label class="form-label">Tipo de Subestação</label>
+                    <select class="form-control sel-tipo-subestacao" id="np-tipo-subestacao">
+                      <option value="">— Selecionar —</option>
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Nível de Tensão (kV)</label>
+                    <select class="form-control sel-nivel-kv" id="np-kv">
+                      <option value="">— Selecionar —</option>
+                    </select>
+                  </div>
+
                   <!-- Tipo de Serviço com subcategorias -->
                   <div class="form-group" style="grid-column:1/-1">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -20506,6 +20520,8 @@ const CFG_CADASTROS_DEFAULTS = {
   forma_envio_nf: ['E-mail', 'Correios', 'Portal do Cliente', 'Entrega em mãos'],
   categorias_despesa_real: ['Combustível', 'Alimentação', 'Hospedagem', 'Hora Técnico', 'Material', 'Outros'],
   tipos_cliente: ['Pessoa Física', 'Pessoa Jurídica', 'Condomínio', 'Órgão Público', 'Construtora', 'Indústria', 'Comércio', 'Incorporadora'],
+  tipos_subestacao: ['Aérea', 'Abrigada', 'Pedestal', 'Blindada (GIS)', 'Compacta', 'Subterrânea', 'Simplificada'],
+  niveis_kv: ['13.8 kV', '23 kV', '34.5 kV', '69 kV', '138 kV', '230 kV', '440 kV'],
 };
 
 const CFG_CADASTROS_LABELS = {
@@ -20524,6 +20540,8 @@ const CFG_CADASTROS_LABELS = {
   forma_envio_nf: '🧾 Formas de Envio NF',
   categorias_despesa_real: '📦 Categorias Despesa Real (por Serviço)',
   tipos_cliente: '🏷️ Tipos de Cliente',
+  tipos_subestacao: '⚡ Tipos de Subestação (Proposta)',
+  niveis_kv: '🔌 Níveis de Tensão kV (Proposta)',
 };
 
 // Carregar do localStorage ou usar defaults
@@ -20726,6 +20744,12 @@ function cfgPopularTodosSelects() {
 
   // ── CATEGORIAS DESPESA REAL ──
   document.querySelectorAll('.sel-cat-despesa-real').forEach(sel => _pop(sel, 'categorias_despesa_real', false));
+
+  // ── TIPO DE SUBESTAÇÃO ──
+  document.querySelectorAll('.sel-tipo-subestacao').forEach(sel => _pop(sel, 'tipos_subestacao'));
+
+  // ── NÍVEL kV ──
+  document.querySelectorAll('.sel-nivel-kv').forEach(sel => _pop(sel, 'niveis_kv'));
 }
 
 // Chamar render e popular ao navegar para QUALQUER aba
@@ -21284,8 +21308,11 @@ function _cliExportarWord(data) {
           <span>🔍</span>
           <input type="text" placeholder="Buscar (cliente, ID, qualquer texto)..." id="up-busca" oninput="npFiltrarPropostasExistentes()">
         </div>
-        <select class="filter-sel" id="up-filtro-nome" onchange="npFiltrarPropostasExistentes()">
-          <option value="">Todos os nomes padrão</option>
+        <select class="filter-sel" id="up-filtro-tipo-sub" onchange="npFiltrarPropostasExistentes()">
+          <option value="">Todos os tipos de subestação</option>
+        </select>
+        <select class="filter-sel" id="up-filtro-kv" onchange="npFiltrarPropostasExistentes()">
+          <option value="">Todos os níveis kV</option>
         </select>
         <select class="filter-sel" id="up-filtro-mes" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os meses</option>
@@ -21307,7 +21334,6 @@ function _cliExportarWord(data) {
           <option value="">Todos os subserviços</option>
         </select>
         <input type="text" class="filter-sel" id="up-filtro-local" placeholder="Local (UF/cidade)" oninput="npFiltrarPropostasExistentes()" style="flex:1;min-width:140px">
-        <input type="text" class="filter-sel" id="up-filtro-spec" placeholder="Especificação (ex: 13.8kV, 500kVA)" oninput="npFiltrarPropostasExistentes()" style="flex:1;min-width:180px">
         <button class="btn btn-ghost btn-sm" onclick="npLimparFiltrosUP()" title="Limpar todos os filtros">↺ Limpar</button>
       </div>
       <div id="up-lista" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
@@ -21519,11 +21545,18 @@ if (_origOpenModal) {
 // 2. USAR PROPOSTA EXISTENTE / DUPLICAR
 // ══════════════════════════════════════════════════════
 function npUsarPropostaExistente() {
-  // Popular filtro de nomes padrão
-  const sel = document.getElementById('up-filtro-nome');
-  if (sel) {
-    sel.innerHTML = '<option value="">Todos os nomes padrão</option>' +
-      NOMES_PADRAO_PROPOSTA.map(n => `<option>${n}</option>`).join('');
+  // Popular filtros de Tipo de Subestação e kV a partir dos cadastros
+  const selTipoSub = document.getElementById('up-filtro-tipo-sub');
+  if (selTipoSub) {
+    const opts = (typeof cfgGetOpcoes === 'function' ? cfgGetOpcoes('tipos_subestacao') : []);
+    selTipoSub.innerHTML = '<option value="">Todos os tipos de subestação</option>' +
+      opts.map(n => `<option>${n}</option>`).join('');
+  }
+  const selKv = document.getElementById('up-filtro-kv');
+  if (selKv) {
+    const opts = (typeof cfgGetOpcoes === 'function' ? cfgGetOpcoes('niveis_kv') : []);
+    selKv.innerHTML = '<option value="">Todos os níveis kV</option>' +
+      opts.map(n => `<option>${n}</option>`).join('');
   }
   // Popular filtro de serviço principal (mescla SUBCATEGORIAS padrão + custom, respeita ocultos)
   const selSvc = document.getElementById('up-filtro-servico');
@@ -21554,7 +21587,7 @@ function npAtualizarFiltroSubservico() {
 }
 
 function npLimparFiltrosUP() {
-  ['up-busca','up-filtro-nome','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico','up-filtro-local','up-filtro-spec'].forEach(id => {
+  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico','up-filtro-local'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   npAtualizarFiltroSubservico();
@@ -21563,27 +21596,32 @@ function npLimparFiltrosUP() {
 
 function npFiltrarPropostasExistentes() {
   const busca = (document.getElementById('up-busca')?.value || '').toLowerCase();
-  const nomePadrao = (document.getElementById('up-filtro-nome')?.value || '').toLowerCase();
+  const fTipoSub = (document.getElementById('up-filtro-tipo-sub')?.value || '').toLowerCase().trim();
+  const fKv = (document.getElementById('up-filtro-kv')?.value || '').toLowerCase().trim();
   const mes = document.getElementById('up-filtro-mes')?.value || '';
   const ano = document.getElementById('up-filtro-ano')?.value || '';
   const fSvc = (document.getElementById('up-filtro-servico')?.value || '').toLowerCase();
   const fSub = (document.getElementById('up-filtro-subservico')?.value || '').toLowerCase();
   const fLocal = (document.getElementById('up-filtro-local')?.value || '').toLowerCase().trim();
-  const fSpec = (document.getElementById('up-filtro-spec')?.value || '').toLowerCase().trim();
   const container = document.getElementById('up-lista');
   if (!container) return;
 
-  // Normaliza spec para tolerar "13.8" / "13,8" / "13kv"
+  // Normaliza para tolerar "13.8" / "13,8" / "13kv"
   const normSpec = s => (s||'').toString().toLowerCase().replace(/\s+/g,'').replace(',','.');
 
   let rows = DATA.crm || [];
   if (busca) rows = rows.filter(r => [r[CRM_COL.RAZAO],r[CRM_COL.SERVICO],r[CRM_COL.ID],r[5],r[CRM_COL.OBS]].some(v => (v||'').toString().toLowerCase().includes(busca)));
-  if (nomePadrao) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(nomePadrao));
   if (fSvc) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(fSvc));
   if (fSub) rows = rows.filter(r => (r[CRM_COL.SERVICO]||'').toLowerCase().includes(fSub));
   if (fLocal) rows = rows.filter(r => ((r[CRM_COL.ENDERECO]||'') + ' ' + (r[CRM_COL.RAZAO]||'')).toLowerCase().includes(fLocal));
-  if (fSpec) {
-    const alvo = normSpec(fSpec);
+  if (fTipoSub) {
+    rows = rows.filter(r => {
+      const blob = [r[CRM_COL.SERVICO], r[CRM_COL.OBS], r[5], r[CRM_COL.RAZAO]].filter(Boolean).join(' ').toLowerCase();
+      return blob.includes(fTipoSub);
+    });
+  }
+  if (fKv) {
+    const alvo = normSpec(fKv);
     rows = rows.filter(r => {
       const blob = normSpec([r[CRM_COL.SERVICO], r[CRM_COL.OBS], r[5], r[CRM_COL.RAZAO]].filter(Boolean).join(' '));
       return blob.includes(alvo);
