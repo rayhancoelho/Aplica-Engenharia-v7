@@ -4409,6 +4409,18 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                       placeholder="Ex: 50% na aprovação + 50% na entrega do laudo.">50% na aprovação da proposta + 50% na conclusão do serviço.</textarea>
                   </div>
                   <div class="form-group">
+                    <label class="form-label">Prazo de Entrega (padrão)</label>
+                    <div style="display:flex;gap:6px;align-items:start">
+                      <select class="form-control" id="cad-prazo-sel" onchange="cadPrazoSel()" style="flex:1;font-size:11px">
+                        <!-- populado via JS -->
+                      </select>
+                      <button class="btn btn-ghost btn-sm" onclick="cadPrazoAdd()" title="Novo padrão" style="font-size:14px;padding:4px 8px">+</button>
+                      <button class="btn btn-ghost btn-sm" onclick="cadPrazoRemove()" title="Remover padrão selecionado" style="font-size:14px;padding:4px 8px;color:var(--coral)">×</button>
+                    </div>
+                    <textarea class="form-control" id="cad-prazo-entrega" rows="2" style="margin-top:6px;font-size:11px"
+                      placeholder="Texto do prazo de entrega" oninput="cadPrazoUpdate()">Conforme escopo de serviços, conforme disponibilidade e agenda técnica.</textarea>
+                  </div>
+                  <div class="form-group">
                     <label class="form-label">Nota de Rodapé das Propostas</label>
                     <textarea class="form-control" id="cad-rodape" rows="3"
                       placeholder="Ex: Proposta válida por 30 dias. Preços sujeitos a alteração sem aviso prévio.">Esta proposta é válida pelo período indicado. Os serviços serão executados por profissional habilitado com ART recolhida. Quaisquer alterações no escopo serão formalizadas por adendo.</textarea>
@@ -5396,6 +5408,9 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                 <div class="card-title" style="font-size:12px">Prazo de Entrega</div>
               </div>
               <div class="card-body" style="padding:10px 14px">
+                <select class="form-control" id="prev-prazo-sel" onchange="prevPrazoSel()" style="font-size:11px;margin-bottom:6px">
+                  <!-- populado via JS -->
+                </select>
                 <textarea class="form-control" id="prev-prazo-entrega" rows="2" style="font-size:12px;resize:vertical" placeholder="Ex: 30 dias úteis após aprovação" onchange="prevAtualizar()" oninput="setTimeout(prevAtualizar,100)">Conforme escopo de serviços, conforme disponibilidade e agenda técnica.</textarea>
               </div>
             </div>
@@ -12920,6 +12935,7 @@ function salvarCadastro() {
     meta:      get('cad-meta'),
     desc_max:  get('cad-desc-max'),
     cond_pagto:get('cad-cond-pagto'),
+    prazo_entrega: get('cad-prazo-entrega'),
     rodape:    get('cad-rodape'),
     email2:    get('cad-email2'),
     telFixo:   get('cad-tel-fixo'),
@@ -12943,6 +12959,7 @@ function salvarCadastro() {
   setEl('prev-email-emp', cadastro.email);
   setEl('prev-cidade', cadastro.cidade + (cadastro.uf ? ' / ' + cadastro.uf : ''));
   setEl('prev-val-dias', cadastro.val_dias);
+  setEl('prev-prazo-entrega', cadastro.prazo_entrega);
   setEl('prev-obs-prop', cadastro.rodape);
 
   // Salvar no Sheets aba CADASTRO (opcional)
@@ -12975,7 +12992,8 @@ function loadCadastroFromStorage() {
       'cad-rkm': cadastro.rkm, 'cad-val-dias': cadastro.val_dias,
       'cad-meta': cadastro.meta, 'cad-desc-max': cadastro.desc_max,
       'cad-aliquota': cadastro.aliquota,
-      'cad-cond-pagto': cadastro.cond_pagto, 'cad-rodape': cadastro.rodape,
+      'cad-cond-pagto': cadastro.cond_pagto, 'cad-prazo-entrega': cadastro.prazo_entrega,
+      'cad-rodape': cadastro.rodape,
       'cad-email2': cadastro.email2, 'cad-tel-fixo': cadastro.telFixo,
     }).forEach(([id, v]) => setEl(id, v));
 
@@ -12983,6 +13001,8 @@ function loadCadastroFromStorage() {
     if (cadastro.vh)       { setEl('calc-vh', cadastro.vh); }
     if (cadastro.art)      { setEl('calc-art', cadastro.art); }
     if (cadastro.aliquota) { setEl('calc-imp', cadastro.aliquota); }
+    if (cadastro.prazo_entrega) { setEl('prev-prazo-entrega', cadastro.prazo_entrega); }
+    if (cadastro.val_dias) { setEl('prev-val-dias', cadastro.val_dias); }
   } catch(e) {}
 }
 
@@ -12995,6 +13015,99 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   loadCadastroFromStorage();
   cadAtualizar();
+});
+
+// ── PADRÕES DE PRAZO DE ENTREGA ──────────────────────────────
+const PRAZO_PADROES_DEFAULT = [
+  'Conforme escopo de serviços, conforme disponibilidade e agenda técnica.',
+  '30 dias úteis após aprovação da proposta.',
+  '15 dias úteis após aprovação da proposta.',
+  '45 dias úteis após aprovação da proposta.',
+  'A combinar conforme cronograma do contratante.',
+];
+
+function _getPrazoPadroes() {
+  try {
+    const saved = localStorage.getItem('prazo_padroes');
+    if (saved) { const arr = JSON.parse(saved); if (arr.length) return arr; }
+  } catch(e) {}
+  return [...PRAZO_PADROES_DEFAULT];
+}
+function _savePrazoPadroes(arr) {
+  localStorage.setItem('prazo_padroes', JSON.stringify(arr));
+}
+
+function _renderPrazoSelect(selId, textareaId) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  const padroes = _getPrazoPadroes();
+  const textoAtual = document.getElementById(textareaId)?.value || '';
+  sel.innerHTML = padroes.map((p, i) =>
+    `<option value="${i}" ${p === textoAtual ? 'selected' : ''}>${p.length > 80 ? p.substring(0,80) + '…' : p}</option>`
+  ).join('') + '<option value="custom">✏️ Texto personalizado</option>';
+  // Se o texto atual não é um padrão, selecionar "custom"
+  if (!padroes.includes(textoAtual) && textoAtual) sel.value = 'custom';
+}
+
+// Funções para o Cadastro
+function cadPrazoSel() {
+  const sel = document.getElementById('cad-prazo-sel');
+  const ta = document.getElementById('cad-prazo-entrega');
+  if (!sel || !ta) return;
+  if (sel.value === 'custom') { ta.focus(); return; }
+  const padroes = _getPrazoPadroes();
+  ta.value = padroes[parseInt(sel.value)] || '';
+}
+function cadPrazoUpdate() {
+  // Atualiza o select se o texto editado coincide com um padrão
+  _renderPrazoSelect('cad-prazo-sel', 'cad-prazo-entrega');
+}
+function cadPrazoAdd() {
+  const texto = prompt('Digite o novo padrão de prazo de entrega:');
+  if (!texto || !texto.trim()) return;
+  const padroes = _getPrazoPadroes();
+  if (padroes.includes(texto.trim())) { toast('Padrão já existe', 'warning'); return; }
+  padroes.push(texto.trim());
+  _savePrazoPadroes(padroes);
+  const ta = document.getElementById('cad-prazo-entrega');
+  if (ta) ta.value = texto.trim();
+  _renderPrazoSelect('cad-prazo-sel', 'cad-prazo-entrega');
+  _renderPrazoSelect('prev-prazo-sel', 'prev-prazo-entrega');
+  toast('Padrão adicionado!', 'success');
+}
+function cadPrazoRemove() {
+  const sel = document.getElementById('cad-prazo-sel');
+  if (!sel || sel.value === 'custom') return;
+  const idx = parseInt(sel.value);
+  const padroes = _getPrazoPadroes();
+  if (padroes.length <= 1) { toast('Mantenha pelo menos 1 padrão', 'warning'); return; }
+  if (!confirm(`Remover padrão: "${padroes[idx]}"?`)) return;
+  padroes.splice(idx, 1);
+  _savePrazoPadroes(padroes);
+  const ta = document.getElementById('cad-prazo-entrega');
+  if (ta) ta.value = padroes[0] || '';
+  _renderPrazoSelect('cad-prazo-sel', 'cad-prazo-entrega');
+  _renderPrazoSelect('prev-prazo-sel', 'prev-prazo-entrega');
+  toast('Padrão removido', 'success');
+}
+
+// Funções para o Preview/Calculadora
+function prevPrazoSel() {
+  const sel = document.getElementById('prev-prazo-sel');
+  const ta = document.getElementById('prev-prazo-entrega');
+  if (!sel || !ta) return;
+  if (sel.value === 'custom') { ta.focus(); return; }
+  const padroes = _getPrazoPadroes();
+  ta.value = padroes[parseInt(sel.value)] || '';
+  prevAtualizar();
+}
+
+// Inicializar selects de prazo ao carregar
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    _renderPrazoSelect('cad-prazo-sel', 'cad-prazo-entrega');
+    _renderPrazoSelect('prev-prazo-sel', 'prev-prazo-entrega');
+  }, 200);
 });
 
 // Atualizar PAGE_TITLES com Fases 5 e 6
@@ -13017,8 +13130,8 @@ nav = function(id) {
   _navOrig(id);
   if (id === 'marketing') renderMarketing();
   if (id === 'prospecao') renderLeads();
-  if (id === 'cadastro')  cadAtualizar();
-  if (id === 'nova-proposta-page') npInit();
+  if (id === 'cadastro')  { cadAtualizar(); _renderPrazoSelect('cad-prazo-sel', 'cad-prazo-entrega'); }
+  if (id === 'nova-proposta-page') { npInit(); setTimeout(() => _renderPrazoSelect('prev-prazo-sel', 'prev-prazo-entrega'), 100); }
 };
 </script>
 
@@ -14018,7 +14131,7 @@ salvarProposta = async function() {
     d.status,      // M - Status
     '','','','','','','','','','','', // N-W
     d.canal,       // X... Y
-    '','','','',   // Z-AB
+    '','','',      // Z-AB
     '',            // AC - Retorno
     '',            // AD
     contato,       // AE - Contato
