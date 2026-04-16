@@ -3028,6 +3028,15 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                       style="font-size:13px;font-weight:600;color:var(--gold)">
                   </div>
                   <div class="form-group">
+                    <label class="form-label">Local da Obra</label>
+                    <input type="text" class="form-control" id="np-local-obra" placeholder="Ex: Unidade Joinville, Galpão 3, Bloco B...">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Campo Especial</label>
+                    <input type="text" class="form-control" id="np-campo-especial" placeholder="Informação adicional...">
+                  </div>
+
+                  <div class="form-group">
                     <label class="form-label">Pessoa Responsável <span style="color:var(--text3);font-size:10px">(solicitante)</span></label>
                     <input type="text" class="form-control" id="np-pessoa-responsavel" placeholder="Nome de quem solicitou">
                   </div>
@@ -4269,7 +4278,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                       <input type="text" class="form-control" id="cad-cnpj" value="39.725.915/0001-08">
                     </div>
                     <div class="form-group">
-                      <label class="form-label">Inscrição Estadual</label>
+                      <label class="form-label">Inscrição Municipal</label>
                       <input type="text" class="form-control" id="cad-ie" placeholder="000.000.000">
                     </div>
                     <div class="form-group">
@@ -7461,7 +7470,7 @@ async function salvarProposta() {
     '',          // N-W
     '','','','','','','','','','',
     canal,       // Y - Canal
-    '','','','', // Z-AB
+    '','','',    // Z-AB
     '',          // AC - Retorno
     '',          // AD
     contato,     // AE - Contato
@@ -7544,10 +7553,9 @@ async function salvarPropostaModal() {
 
 async function _saveProposta(row, prefix) {
   const idProp = row[0] || row[CRM_COL.ID] || '';
-  const isEdit = PROPOSTA_CONTEXTO?.modoEdicao && idProp;
   let existIdx = -1;
-  if (isEdit) {
-    existIdx = DATA.crm.findIndex(r => String(r[CRM_COL.ID]) === String(idProp));
+  if (idProp) {
+    existIdx = DATA.crm.findIndex(r => String(r[CRM_COL.ID]).trim() === String(idProp).trim());
   }
 
   // 1. Salvar localmente (sempre)
@@ -7632,7 +7640,7 @@ async function _saveProposta(row, prefix) {
 
 function clearForm() {
   ['np-cnpj','np-razao','np-fantasia','np-endereco','np-municipio',
-   'np-valor','np-validade','np-followup','np-obs','np-id-prop','np-nome-proposta'].forEach(id => {
+   'np-valor','np-validade','np-followup','np-obs','np-id-prop','np-nome-proposta','np-local-obra','np-campo-especial'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -9021,9 +9029,12 @@ function prevAtualizar() {
   const cliente = r ? (r[CRM_COL.RAZAO]   ||'—') : '—';
   const cnpj    = r ? (r[CRM_COL.CNPJ]    ||'—') : '—';
   const serv    = r ? (r[CRM_COL.SERVICO] ||'—') : '—';
-  const contato = r ? (r[CRM_COL.CONTATO] ||'—') : '—';
-  const fone    = r ? (r[CRM_COL.FONE]    ||'—') : '—';
+  const _ctArr  = (typeof npContatos !== 'undefined' ? npContatos : []) || [];
+  const contato = r ? (r[CRM_COL.CONTATO] || _ctArr[0]?.nome || '—') : (_ctArr[0]?.nome || '—');
+  const fone    = r ? (r[CRM_COL.FONE]    || _ctArr[0]?.telefone || _ctArr[0]?.whatsapp || '—') : (_ctArr[0]?.telefone || _ctArr[0]?.whatsapp || '—');
   const endCli  = r ? (r[CRM_COL.ENDERECO]||'—') : '—';
+  const localObra     = document.getElementById('np-local-obra')?.value || '';
+  const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
 
@@ -9309,7 +9320,7 @@ function prevAtualizar() {
       ${descricoesSecs.map(d => `
         <div style="margin-bottom:12px">
           <div style="font-size:11px;font-weight:700;color:#111827;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-          <div style="font-size:11px;color:#374151;line-height:1.8">${d.texto.split(/\s*[\n•]+\s*|(?<=\.)\s+/).filter(s=>s.trim()).map(s => '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• ' + s.trim() + '</div>').join('')}</div>
+          <div style="font-size:11px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>
         </div>`).join('')}
     </div>` : '';
 
@@ -9382,6 +9393,8 @@ function prevAtualizar() {
             <div><span style="color:#6b7280">Contato:</span> <strong>${contato}</strong></div>
             <div><span style="color:#6b7280">Telefone:</span> <strong>${fone}</strong></div>
             ${endCli !== '—' ? `<div style="grid-column:1/-1"><span style="color:#6b7280">Endereço:</span> <strong>${endCli}</strong></div>` : ''}
+            ${localObra ? `<div><span style="color:#6b7280">Local da Obra:</span> <strong>${localObra}</strong></div>` : ''}
+            ${campoEspecial ? `<div><span style="color:#6b7280">Campo Especial:</span> <strong>${campoEspecial}</strong></div>` : ''}
           </div>
         </div>
 
@@ -9409,7 +9422,7 @@ function prevAtualizar() {
           ${descricoesSecs.map(d => `
             <div style="margin-bottom:10px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-              <div style="font-size:10px;color:#374151;line-height:1.8">${d.texto.split(/\s*[\n•]+\s*|(?<=\.)\s+/).filter(s=>s.trim()).map(s => '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• ' + s.trim() + '</div>').join('')}</div>
+              <div style="font-size:10px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>
             </div>`).join('')}
         </div>` : ''}
 
@@ -13382,7 +13395,7 @@ function npIniciarNova() {
   setTimeout(() => {
     // Limpar todos os campos
     ['np-id-prop','np-cnpj','np-razao','np-fantasia','np-endereco','np-cep','np-municipio',
-     'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel'].forEach(id => {
+     'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel','np-local-obra','np-campo-especial'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
     // Limpar calculadora
@@ -13930,6 +13943,8 @@ function npColetarDados() {
     obs:       document.getElementById('np-obs')?.value       || '',
     nome_proposta:      document.getElementById('np-nome-proposta')?.value || '',
     pessoa_responsavel: document.getElementById('np-pessoa-responsavel')?.value || '',
+    local_obra:         document.getElementById('np-local-obra')?.value || '',
+    campo_especial:     document.getElementById('np-campo-especial')?.value || '',
   };
 }
 
@@ -14159,7 +14174,7 @@ async function npSalvarEPreview() {
 const _clearFormOrig = clearForm;
 clearForm = function() {
   _clearFormOrig();
-  ['np-id-prop','np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel'].forEach(id => {
+  ['np-id-prop','np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel','np-local-obra','np-campo-especial'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   npContatos = [{ tipo: 'WhatsApp', nome: '', cargo: '', area: 'Geral', telefone: '', email: '', valor: '' }];
@@ -15009,7 +15024,7 @@ function npNovaPropostaNova() {
   npServicos = [{ servico: '', subcats: [] }];
   // Limpar campos
   ['np-id-prop','np-cnpj','np-razao','np-fantasia','np-endereco','np-municipio',
-   'np-valor','np-validade','np-followup','np-obs','np-nome-proposta'].forEach(id => {
+   'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-local-obra','np-campo-especial'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -15605,6 +15620,8 @@ function _tmplGetCampos() {
     TELEFONE: pick(r?.[CRM_COL.FONE],     fonePrimary),
     EMAIL:    pick(r?.[CRM_COL.EMAIL],    r?.[CRM_COL.EMAIL2], emailPrimary),
     CONTATO:  pick(r?.[CRM_COL.CONTATO],  contatoPrim),
+    LOCAL_OBRA: val('np-local-obra'),
+    CAMPO_ESPECIAL: val('np-campo-especial'),
     NORMAS_TECNICAS: normasTxt,
     VALOR_TOTAL_SERVICO: fmt(total),
     VALOR_COM_DESCONTO: fmt(totalComDesc),
@@ -15952,9 +15969,12 @@ function _prevExportarWordDocxLegacy() {
   const cliente = r ? (r[CRM_COL.RAZAO]   ||'—') : '—';
   const cnpj    = r ? (r[CRM_COL.CNPJ]    ||'—') : '—';
   const serv    = r ? (r[CRM_COL.SERVICO] ||'—') : '—';
-  const contato = r ? (r[CRM_COL.CONTATO] ||'—') : '—';
-  const fone    = r ? (r[CRM_COL.FONE]    ||'—') : '—';
+  const _ctArr  = (typeof npContatos !== 'undefined' ? npContatos : []) || [];
+  const contato = r ? (r[CRM_COL.CONTATO] || _ctArr[0]?.nome || '—') : (_ctArr[0]?.nome || '—');
+  const fone    = r ? (r[CRM_COL.FONE]    || _ctArr[0]?.telefone || _ctArr[0]?.whatsapp || '—') : (_ctArr[0]?.telefone || _ctArr[0]?.whatsapp || '—');
   const endCli  = r ? (r[CRM_COL.ENDERECO]||'—') : '—';
+  const localObra     = document.getElementById('np-local-obra')?.value || '';
+  const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
 
@@ -16115,6 +16135,8 @@ function _prevExportarWordDocxLegacy() {
     <w:tr>${fieldCell('Razão Social', cliente)}${fieldCell('CNPJ/CPF', cnpj)}</w:tr>
     <w:tr>${fieldCell('Contato', contato)}${fieldCell('Telefone', fone)}</w:tr>
     ${endCli !== '—' ? `<w:tr>${fieldCell('Endereço', endCli)}${fieldCell('', '')}</w:tr>` : ''}
+    ${localObra ? `<w:tr>${fieldCell('Local da Obra', localObra)}${fieldCell('', '')}</w:tr>` : ''}
+    ${campoEspecial ? `<w:tr>${fieldCell('Campo Especial', campoEspecial)}${fieldCell('', '')}</w:tr>` : ''}
   </w:tbl>`);
   bodyParts.push(para('', {spacing:120}));
 
@@ -16134,9 +16156,20 @@ function _prevExportarWordDocxLegacy() {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
     descritivos.forEach(d => {
       bodyParts.push(para(d.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
-      const topicos = d.texto.split(/\s*[\n•]+\s*|(?<=\.)\s+/).map(s => s.trim()).filter(Boolean);
+      let txt = d.texto || '';
+      // Normalizar quebras de linha Windows
+      txt = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      // Inserir quebra antes de bullet • se colado no texto anterior
+      txt = txt.replace(/([^\n])•/g, '$1\n•');
+      // Inserir quebra após ponto seguido de maiúscula (com ou sem espaço)
+      txt = txt.replace(/\.(\s*)([A-Z])/g, '.\n$2');
+      const topicos = txt.split('\n').map(s => s.trim()).filter(s => s.length > 0);
       if (topicos.length > 1) {
-        topicos.forEach(t => bodyParts.push(para(`•  ${t}`, { size: 18, color: '374151', indent: '360', spacing: 40 })));
+        topicos.forEach(t => {
+          const limpo = t.replace(/^[•\-–—▸]\s*/, '');
+          const final = limpo.endsWith('.') ? limpo : limpo + '.';
+          bodyParts.push(para(`•  ${final}`, { size: 18, color: '374151', indent: '360', spacing: 60 }));
+        });
         bodyParts.push(para('', { spacing: 40 }));
       } else {
         bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
