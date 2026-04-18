@@ -4421,11 +4421,13 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                       placeholder="Texto do prazo de entrega" oninput="cadPrazoUpdate()">Conforme escopo de serviços, conforme disponibilidade e agenda técnica.</textarea>
                   </div>
                   <div class="form-group">
-                    <label class="form-label">Descrição Padrão da Proposta
-                      <span style="color:var(--text3);font-size:10px">(aparece abaixo do valor total — use {{VALIDADE}} para inserir a data)</span>
+                    <label class="form-label">Descrição — VALIDADE DA PROPOSTA
+                      <span style="color:var(--text3);font-size:10px">
+                        (use <code>{{DIAS}}</code> para os dias de validade ou <code>{{VALIDADE}}</code> para a data)
+                      </span>
                     </label>
                     <textarea class="form-control" id="cad-descricao-padrao" rows="4"
-                      placeholder="Ex: A presente proposta é válida até {{VALIDADE}}. Os valores permanecem os mesmos durante o período de validade.">A presente proposta tem validade até {{VALIDADE}}. Após esta data, os valores poderão ser revisados.</textarea>
+                      placeholder="Ex: A presente proposta possui validade de {{DIAS}} dias corridos...">A presente proposta possui validade de {{DIAS}} dias corridos a partir da data de sua emissão. Após este período, os valores e condições aqui apresentados poderão ser revisados, mediante nova negociação entre as partes.</textarea>
                   </div>
                   <div class="form-group">
                     <label class="form-label">Nota de Rodapé das Propostas</label>
@@ -5332,10 +5334,16 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <div class="card">
               <div class="card-header"><div class="card-title">5. Observações / Condições</div></div>
               <div class="card-body">
+                <label class="form-label" style="font-size:11px">Modelo de Observação</label>
+                <select class="form-control" id="prev-obs-modelo" style="font-size:12px;margin-bottom:8px" onchange="prevObsAplicarTemplate()">
+                  <option value="padrao" selected>Texto Padrão (Anexo III — instalações)</option>
+                  <option value="anexo5">Anexo V (engenharia — opção do contratante)</option>
+                  <option value="livre">Livre (digitar manualmente)</option>
+                </select>
                 <textarea class="form-control" id="prev-obs-prop" rows="8"
                   placeholder="Ex: Proposta válida por 30 dias. Prazo de execução: 5 dias úteis após aprovação. Pagamento: 50% entrada + 50% entrega."
                   oninput="prevAtualizar()"></textarea>
-                <div style="font-size:10px;color:var(--text3);margin-top:6px" id="prev-obs-hint">Edite livremente. O enquadramento tributário (Anexo III/V) é configurado abaixo.</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:6px" id="prev-obs-hint">Texto preenchido automaticamente — selecione "Livre" para editar.</div>
               </div>
             </div>
           </div>
@@ -5416,20 +5424,13 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
               </div>
             </div>
 
-            <!-- Enquadramento Tributário (Simples Nacional) -->
-            <div class="card" style="margin-bottom:12px">
-              <div class="card-header" style="padding:10px 14px">
-                <div class="card-title" style="font-size:12px">Enquadramento Tributário (Simples Nacional)</div>
-              </div>
-              <div class="card-body" style="padding:10px 14px">
-                <select class="form-control" id="prev-enquadramento" style="font-size:12px" onchange="prevAtualizar()">
-                  <option value="anexo3" selected>Anexo III (padrão — item 07.02 instalações)</option>
-                  <option value="anexo5">Anexo V (por opção do contratante — item 07.01 engenharia)</option>
-                  <option value="nenhum">Não incluir</option>
-                </select>
-                <div style="font-size:10px;color:var(--text3);margin-top:6px">O texto correspondente é inserido abaixo de Condições de Pagamento no PDF / Word.</div>
-              </div>
-            </div>
+            <!-- Enquadramento Tributário removido da UI: a escolha agora vem do "Modelo de Observação" (card 5). -->
+            <!-- Mantemos um select oculto espelhando prev-obs-modelo para preservar compatibilidade com código legado. -->
+            <select id="prev-enquadramento" style="display:none">
+              <option value="anexo3" selected>anexo3</option>
+              <option value="anexo5">anexo5</option>
+              <option value="nenhum">nenhum</option>
+            </select>
 
             <!-- Tipo de Faturamento: CNPJ ou CPF -->
             <div class="card" style="margin-bottom:12px">
@@ -5955,12 +5956,23 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           <div id="cont-doc-feedback" style="font-size:11px;margin-top:4px"></div>
         </div>
         <div class="form-group">
+          <label class="form-label">Cargo</label>
+          <input type="text" class="form-control" id="cont-cargo" placeholder="Ex: Gerente de Compras">
+        </div>
+        <div class="form-group">
           <label class="form-label">WhatsApp</label>
           <input type="text" class="form-control" id="cont-fone" placeholder="(48) 9XXXX-XXXX">
         </div>
         <div class="form-group">
           <label class="form-label">E-mail</label>
           <input type="email" class="form-control" id="cont-email" placeholder="email@exemplo.com">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label class="form-label" style="margin:0">Contatos Adicionais <span style="color:var(--text3);font-size:10px">(opcional — nome, cargo, telefone e e-mail)</span></label>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="contExtrasAdd()">+ Contato</button>
+          </div>
+          <div id="cont-extras-wrap"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Estado (UF)</label>
@@ -7847,9 +7859,11 @@ function fmtMoney(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-// Retorna o texto padrão da descrição da proposta (cadastrado em Configurações),
-// substituindo {{VALIDADE}} / {{DATA_VALIDADE}} pela data informada.
-function propostaDescricaoPadrao(dataValidade) {
+// Retorna o texto padrão da descrição "VALIDADE DA PROPOSTA" (cadastrado em Configurações).
+// Placeholders suportados:
+//   {{DIAS}} / {{VALIDADE_DIAS}}   → número de dias (ex: "30")
+//   {{VALIDADE}} / {{DATA_VALIDADE}} → data formatada DD/MM/YYYY
+function propostaDescricaoPadrao(dataValidade, valDias) {
   let tpl = '';
   try {
     const el = document.getElementById('cad-descricao-padrao');
@@ -7860,8 +7874,16 @@ function propostaDescricaoPadrao(dataValidade) {
       tpl = saved.descricao_padrao || '';
     }
   } catch(_){}
-  if (!tpl) return '';
+  if (!tpl) {
+    // Texto padrão oficial (se usuário não configurou nada)
+    tpl = 'A presente proposta possui validade de {{DIAS}} dias corridos a partir da data de sua emissão. Após este período, os valores e condições aqui apresentados poderão ser revisados, mediante nova negociação entre as partes.';
+  }
+  const dias = (typeof valDias === 'number' || (typeof valDias === 'string' && valDias))
+    ? String(valDias)
+    : '30';
   return tpl
+    .replace(/\{\{\s*DIAS\s*\}\}/gi, dias)
+    .replace(/\{\{\s*VALIDADE_DIAS\s*\}\}/gi, dias)
     .replace(/\{\{\s*VALIDADE\s*\}\}/gi, dataValidade || '')
     .replace(/\{\{\s*DATA_VALIDADE\s*\}\}/gi, dataValidade || '');
 }
@@ -8801,6 +8823,13 @@ function prevObsAplicarTemplate() {
     return;
   }
   const v = sel.value;
+  // Espelha para o select oculto 'prev-enquadramento' (compatibilidade com render)
+  const enq = document.getElementById('prev-enquadramento');
+  if (enq) {
+    if (v === 'padrao') enq.value = 'anexo3';
+    else if (v === 'anexo5') enq.value = 'anexo5';
+    else if (v === 'livre') enq.value = 'nenhum';
+  }
   if (v === 'livre') {
     ta.readOnly = false;
     ta.style.background = '';
@@ -9560,10 +9589,6 @@ function prevAtualizar() {
               <div style="padding:6px 0 0;font-size:10px;color:#374151;font-style:italic;line-height:1.45;border-top:1px dashed #e5e7eb">
                 <span style="font-weight:600">Valor total por extenso:</span> ${valorPorExtenso(total)}.
               </div>
-              <div style="padding:4px 0 0;font-size:10px;color:#374151">
-                <span style="font-weight:600">Validade da proposta:</span> ${dataVal}${valDias ? ` (${valDias} dias)` : ''}.
-              </div>
-              ${(() => { const d = propostaDescricaoPadrao(dataVal); return d ? `<div style="padding:6px 0 0;font-size:10px;color:#374151;line-height:1.5;white-space:pre-wrap">${d}</div>` : ''; })()}
             </div>
             <div style="background:#f8f9fa;padding:8px 12px;font-size:10px;color:#6b7280;line-height:1.6;border-top:1px solid #e5e7eb">
               ${pgto.tipo === 'cnpj' ? '• Retenção de ISS — por conta do cliente' : '• Não está incluso Nota Fiscal de Serviço'}
@@ -9585,6 +9610,16 @@ function prevAtualizar() {
             </div>
           </div>
         </div>
+
+        <!-- VALIDADE DA PROPOSTA (seção configurável em Configurações) -->
+        ${(() => {
+          const txt = propostaDescricaoPadrao(dataVal, valDias);
+          if (!txt) return '';
+          return `<div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Validade da Proposta</div>
+            <div style="font-size:11px;color:#374151;line-height:1.8;white-space:pre-wrap">${txt}</div>
+          </div>`;
+        })()}
 
         <!-- 7. ITENS EXCLUSOS -->
         <div style="margin-bottom:16px">
@@ -13593,21 +13628,32 @@ function npInit() {
     if (el) el.min = hoje;
   });
 
-  // Puxar dados da empresa (CREA, resp., etc.) do cadastro para o preview
+  // Puxar dados da empresa (CREA, resp., etc.) do cadastro para o preview.
+  // Primeiro tenta localStorage (cad_empresa salvo); senão, lê direto dos inputs cad-*.
   try {
-    const saved = JSON.parse(localStorage.getItem('cad_empresa') || '{}');
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('cad_empresa') || '{}') || {}; } catch(_){}
+    const _formVal = (id) => document.getElementById(id)?.value || '';
+    const get = (key, formId) => saved[key] || _formVal(formId);
+    const crea     = get('crea',     'cad-crea');
+    const resp     = get('resp',     'cad-resp');
+    const tel      = get('tel',      'cad-tel');
+    const email    = get('email',    'cad-email');
+    const cidade   = get('cidade',   'cad-cidade');
+    const uf       = get('uf',       'cad-uf');
+    const valDias  = get('val_dias', 'cad-val-dias');
     const _setIfEmpty = (id, v) => {
       const el = document.getElementById(id);
       if (!el || !v) return;
       const defaults = ['CREA/SC 000000-0','Gerson — Engenheiro Eletricista','(47) 9XXXX-XXXX','contato@aplicaengenharia.com.br','Schroeder / SC'];
       if (!el.value || defaults.includes(el.value)) el.value = v;
     };
-    if (saved.crea)  _setIfEmpty('prev-crea', saved.crea);
-    if (saved.resp)  _setIfEmpty('prev-resp', saved.resp + (saved.resp.includes('Engenheiro') ? '' : ' — Engenheiro Eletricista'));
-    if (saved.tel)   _setIfEmpty('prev-tel', saved.tel);
-    if (saved.email) _setIfEmpty('prev-email-emp', saved.email);
-    if (saved.cidade)_setIfEmpty('prev-cidade', saved.cidade + (saved.uf ? ' / ' + saved.uf : ''));
-    if (saved.val_dias) _setIfEmpty('prev-val-dias', saved.val_dias);
+    if (crea)   _setIfEmpty('prev-crea', crea);
+    if (resp)   _setIfEmpty('prev-resp', resp + (resp.includes('Engenheiro') ? '' : ' — Engenheiro Eletricista'));
+    if (tel)    _setIfEmpty('prev-tel', tel);
+    if (email)  _setIfEmpty('prev-email-emp', email);
+    if (cidade) _setIfEmpty('prev-cidade', cidade + (uf ? ' / ' + uf : ''));
+    if (valDias)_setIfEmpty('prev-val-dias', valDias);
   } catch(_){}
 
   // Se tiver contexto de edição ativo, não resetar
@@ -16669,22 +16715,11 @@ function _prevExportarWordDocxLegacy() {
       ) : '');
   }
 
-  // ── Valor total por extenso + Validade da proposta (abaixo do resumo financeiro) ──
+  // ── Valor total por extenso (abaixo do resumo financeiro) ──
   try {
     const _extenso = (typeof valorPorExtenso === 'function') ? valorPorExtenso(total) : '';
     if (_extenso) {
       resumoLeft += `<w:p><w:pPr><w:spacing w:before="160"/><w:pBdr><w:top w:val="dashed" w:sz="4" w:color="e5e7eb"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="1a3c5e"/></w:rPr><w:t xml:space="preserve">Valor total por extenso: </w:t></w:r><w:r><w:rPr><w:i/><w:sz w:val="16"/><w:color w:val="374151"/></w:rPr><w:t>${esc(_extenso)}.</w:t></w:r></w:p>`;
-    }
-    if (typeof dataVal !== 'undefined' && dataVal) {
-      resumoLeft += `<w:p><w:pPr><w:spacing w:before="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="1a3c5e"/></w:rPr><w:t xml:space="preserve">Validade da proposta: </w:t></w:r><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="374151"/></w:rPr><w:t>${esc(dataVal)}${valDias?` (${valDias} dias)`:''}.</w:t></w:r></w:p>`;
-    }
-    const _descPad = (typeof propostaDescricaoPadrao === 'function') ? propostaDescricaoPadrao(dataVal) : '';
-    if (_descPad) {
-      // Quebra por linha para preservar parágrafos
-      _descPad.split(/\r?\n/).forEach(ln => {
-        if (!ln.trim()) return;
-        resumoLeft += `<w:p><w:pPr><w:spacing w:before="60"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="374151"/></w:rPr><w:t xml:space="preserve">${esc(ln)}</w:t></w:r></w:p>`;
-      });
     }
   } catch(_){}
 
@@ -16713,6 +16748,18 @@ function _prevExportarWordDocxLegacy() {
     </w:tr>
   </w:tbl>`);
   bodyParts.push(para('', {spacing:160}));
+
+  // ── VALIDADE DA PROPOSTA (seção configurável) ──
+  try {
+    const _valDesc = (typeof propostaDescricaoPadrao === 'function') ? propostaDescricaoPadrao(undefined, valDias) : '';
+    if (_valDesc) {
+      bodyParts.push(heading('VALIDADE DA PROPOSTA'));
+      _valDesc.split(/\n\n+/).forEach(par => {
+        if (par.trim()) bodyParts.push(para(par.trim(), {size:18, color:'374151', spacing:120}));
+      });
+      bodyParts.push(para('', {spacing:80}));
+    }
+  } catch(_){}
 
   // Observações + Enquadramento Tributário (parte inferior)
   const _enqTxtInf = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
@@ -19268,8 +19315,9 @@ function cliContatoAbrirNovo(tipo) {
   document.getElementById('contato-tipo').value = tipo;
   const titulos = { projetistas:'📐 Novo Projetista', representantes:'🤝 Novo Representante', outros:'📦 Novo Contato' };
   document.getElementById('modal-contato-titulo').textContent = titulos[tipo] || '+ Novo Contato';
-  ['cont-nome','cont-doc','cont-fone','cont-email','cont-obs'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['cont-nome','cont-doc','cont-cargo','cont-fone','cont-email','cont-obs'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('cont-uf').value = '';
+  if (typeof _contExtras !== 'undefined') { _contExtras = []; if (typeof contExtrasRender === 'function') contExtrasRender(); }
   // Mostrar campos condicionais
   document.getElementById('cont-campo-esp-wrap').style.display  = tipo === 'projetistas' ? '' : 'none';
   document.getElementById('cont-campo-val-wrap').style.display  = tipo !== 'outros' ? '' : 'none';
@@ -19288,6 +19336,7 @@ function cliContatoEditar(tipo, idx) {
   document.getElementById('contato-tipo').value = tipo;
   document.getElementById('cont-nome').value  = c.nome  || '';
   document.getElementById('cont-doc').value   = c.doc   || '';
+  if (document.getElementById('cont-cargo')) document.getElementById('cont-cargo').value = c.cargo || '';
   document.getElementById('cont-fone').value  = c.fone  || '';
   document.getElementById('cont-email').value = c.email || '';
   document.getElementById('cont-uf').value    = c.uf    || '';
@@ -19298,6 +19347,9 @@ function cliContatoEditar(tipo, idx) {
   _contPopularTiposCliente(c.cat || '');
   if (document.getElementById('cont-custo')) document.getElementById('cont-custo').value = c.custo || '';
   document.getElementById('cont-obs').value   = c.obs   || '';
+  // Carregar contatos adicionais, se houver
+  _contExtras = Array.isArray(c.extras) ? JSON.parse(JSON.stringify(c.extras)) : [];
+  contExtrasRender();
   // Guardar índice para edição
   document.getElementById('modal-novo-contato').dataset.editIdx = idx;
 }
@@ -19468,6 +19520,7 @@ function contSalvar() {
     nome,
     doc,
     tipoPessoa,
+    cargo:     document.getElementById('cont-cargo')?.value     || '',
     fone:      document.getElementById('cont-fone')?.value      || '',
     email:     document.getElementById('cont-email')?.value     || '',
     uf:        document.getElementById('cont-uf')?.value        || '',
@@ -19478,6 +19531,7 @@ function contSalvar() {
     cat:       document.getElementById('cont-cat')?.value       || '',
     custo:     document.getElementById('cont-custo')?.value     || '',
     obs:       document.getElementById('cont-obs')?.value       || '',
+    extras:    (typeof _contExtras !== 'undefined' ? JSON.parse(JSON.stringify(_contExtras)) : []),
   };
 
   const editIdx = parseInt(document.getElementById('modal-novo-contato').dataset.editIdx ?? '-1');
@@ -21471,15 +21525,53 @@ function _contPopularTiposCliente(valorAtual) {
 function cliCadastrarCliente() {
   document.getElementById('contato-tipo').value = 'outros';
   document.getElementById('modal-contato-titulo').textContent = '🏢 Novo Cliente';
-  ['cont-nome','cont-doc','cont-fone','cont-email','cont-obs','cont-cidade','cont-atividade'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['cont-nome','cont-doc','cont-cargo','cont-fone','cont-email','cont-obs','cont-cidade','cont-atividade'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('cont-uf').value = '';
   document.getElementById('cont-campo-esp-wrap').style.display = 'none';
   document.getElementById('cont-campo-val-wrap').style.display = 'none';
   document.getElementById('cont-campo-cat-wrap').style.display = '';
   document.getElementById('cont-campo-custo-wrap').style.display = '';
   _contPopularTiposCliente();
+  _contExtras = [];
+  contExtrasRender();
   document.getElementById('modal-novo-contato').dataset.editIdx = '-1';
   openModal('modal-novo-contato');
+}
+
+// ── CONTATOS ADICIONAIS (múltiplos) no modal de Novo Cliente ──
+let _contExtras = [];
+function contExtrasAdd() {
+  _contExtras.push({ nome:'', cargo:'', telefone:'', email:'' });
+  contExtrasRender();
+}
+function contExtrasRemove(i) {
+  _contExtras.splice(i, 1);
+  contExtrasRender();
+}
+function contExtrasRender() {
+  const wrap = document.getElementById('cont-extras-wrap');
+  if (!wrap) return;
+  if (!_contExtras.length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--text3);padding:6px 10px;background:var(--s2);border:1px dashed var(--border);border-radius:6px">Nenhum contato adicional. Use "+ Contato" para adicionar.</div>';
+    return;
+  }
+  wrap.innerHTML = _contExtras.map((c, i) => `
+    <div style="padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;position:relative">
+      <button class="contato-remove" type="button" onclick="contExtrasRemove(${i})" title="Remover"
+        style="position:absolute;top:6px;right:6px">×</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <input class="form-control" style="font-size:12px" placeholder="Nome" value="${c.nome.replace(/"/g,'&quot;')}"
+          oninput="_contExtras[${i}].nome=this.value">
+        <input class="form-control" style="font-size:12px" placeholder="Cargo" value="${c.cargo.replace(/"/g,'&quot;')}"
+          oninput="_contExtras[${i}].cargo=this.value">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <input class="form-control" style="font-size:12px" placeholder="📱 Telefone" value="${c.telefone.replace(/"/g,'&quot;')}"
+          oninput="_contExtras[${i}].telefone=this.value">
+        <input class="form-control" type="email" style="font-size:12px" placeholder="✉️ E-mail" value="${c.email.replace(/"/g,'&quot;')}"
+          oninput="_contExtras[${i}].email=this.value">
+      </div>
+    </div>`).join('');
 }
 
 function _cliGetDadosExportacao() {
@@ -21678,6 +21770,9 @@ function _cliExportarWord(data) {
         </select>
         <select class="filter-sel" id="up-filtro-local-obra" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os Locais da Obra</option>
+        </select>
+        <select class="filter-sel" id="up-filtro-campo-especial" onchange="npFiltrarPropostasExistentes()">
+          <option value="">Todos os Campos Especiais</option>
         </select>
         <select class="filter-sel" id="up-filtro-mes" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os meses</option>
@@ -21935,6 +22030,19 @@ function npUsarPropostaExistente() {
     selLocal.innerHTML = '<option value="">Todos os Locais da Obra</option>' +
       arr.map(n => `<option>${n.replace(/</g,'&lt;')}</option>`).join('');
   }
+  // Popular filtro de Campo Especial a partir das propostas existentes
+  const selEsp = document.getElementById('up-filtro-campo-especial');
+  if (selEsp && typeof DATA !== 'undefined' && DATA.crm) {
+    const esps = new Set();
+    DATA.crm.forEach(r => {
+      const obs = r[CRM_COL.OBS] || '';
+      const m = obs.match(/Campo Especial:\s*([^\n]+)/i);
+      if (m && m[1].trim()) esps.add(m[1].trim());
+    });
+    const arr = Array.from(esps).sort();
+    selEsp.innerHTML = '<option value="">Todos os Campos Especiais</option>' +
+      arr.map(n => `<option>${n.replace(/</g,'&lt;')}</option>`).join('');
+  }
   // Popular filtro de serviço principal (mescla SUBCATEGORIAS padrão + custom, respeita ocultos)
   const selSvc = document.getElementById('up-filtro-servico');
   if (selSvc) {
@@ -21964,7 +22072,7 @@ function npAtualizarFiltroSubservico() {
 }
 
 function npLimparFiltrosUP() {
-  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-local-obra','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico'].forEach(id => {
+  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-local-obra','up-filtro-campo-especial','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   npAtualizarFiltroSubservico();
@@ -21976,6 +22084,7 @@ function npFiltrarPropostasExistentes() {
   const fTipoSub = (document.getElementById('up-filtro-tipo-sub')?.value || '').toLowerCase().trim();
   const fKv = (document.getElementById('up-filtro-kv')?.value || '').toLowerCase().trim();
   const fLocal = (document.getElementById('up-filtro-local-obra')?.value || '').toLowerCase().trim();
+  const fCampoEsp = (document.getElementById('up-filtro-campo-especial')?.value || '').toLowerCase().trim();
   const mes = document.getElementById('up-filtro-mes')?.value || '';
   const ano = document.getElementById('up-filtro-ano')?.value || '';
   const fSvc = (document.getElementById('up-filtro-servico')?.value || '').toLowerCase();
@@ -22009,6 +22118,12 @@ function npFiltrarPropostasExistentes() {
       return m && m[1].toLowerCase().trim().includes(fLocal);
     });
   }
+  if (fCampoEsp) {
+    rows = rows.filter(r => {
+      const m = (r[CRM_COL.OBS] || '').match(/Campo Especial:\s*([^\n]+)/i);
+      return m && m[1].toLowerCase().trim().includes(fCampoEsp);
+    });
+  }
   if (mes || ano) {
     rows = rows.filter(r => {
       const d = r[CRM_COL.DATA_ABER] || r[CRM_COL.VALIDADE] || '';
@@ -22024,18 +22139,39 @@ function npFiltrarPropostasExistentes() {
     return;
   }
 
+  // Formata qualquer data em DD/MM/YYYY (aceita ISO, DD/MM/YYYY, etc.)
+  const _fmtData = (d) => {
+    if (!d || d === '—') return '—';
+    const s = String(d);
+    // Já no formato DD/MM/YYYY
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+    const dt = new Date(s);
+    if (isNaN(dt.getTime())) return s;
+    return dt.toLocaleDateString('pt-BR');
+  };
+
   container.innerHTML = rows.map((r, i) => {
     const idx = DATA.crm.indexOf(r);
     const id = r[CRM_COL.ID] || idx+1;
     const razao = r[CRM_COL.RAZAO] || '—';
     const serv = r[CRM_COL.SERVICO] || '—';
     const valor = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
-    const data = r[CRM_COL.DATA_ABER] || r[CRM_COL.VALIDADE] || '—';
+    const data = _fmtData(r[CRM_COL.DATA_ABER] || r[CRM_COL.VALIDADE] || '—');
+    const obsRaw = r[CRM_COL.OBS] || '';
+    const mLocal = obsRaw.match(/Local da Obra:\s*([^\n]+)/i);
+    const mEsp   = obsRaw.match(/Campo Especial:\s*([^\n]+)/i);
+    const localObra = mLocal ? mLocal[1].trim() : '';
+    const campoEsp  = mEsp   ? mEsp[1].trim()   : '';
+    const extraLinha = [
+      localObra ? `📍 <b>Local:</b> ${localObra}` : '',
+      campoEsp  ? `⭐ <b>Campo Especial:</b> ${campoEsp}` : ''
+    ].filter(Boolean).join(' · ');
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:border-color 0.15s"
         onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-      <div>
+      <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px">#${String(id).padStart(4,'0')} — ${razao}</div>
-        <div style="font-size:12px;color:var(--text3)">${serv} · ${data} · ${typeof fmtMoney === 'function' ? fmtMoney(valor) : 'R$ '+valor.toFixed(2)}</div>
+        ${extraLinha ? `<div style="font-size:11px;color:var(--teal);margin-top:2px">${extraLinha}</div>` : ''}
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${serv} · ${data} · ${typeof fmtMoney === 'function' ? fmtMoney(valor) : 'R$ '+valor.toFixed(2)}</div>
       </div>
       <button class="btn btn-teal btn-sm" onclick="npDuplicarProposta(${idx})">📋 Duplicar</button>
     </div>`;
