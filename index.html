@@ -4421,6 +4421,13 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                       placeholder="Texto do prazo de entrega" oninput="cadPrazoUpdate()">Conforme escopo de serviços, conforme disponibilidade e agenda técnica.</textarea>
                   </div>
                   <div class="form-group">
+                    <label class="form-label">Descrição Padrão da Proposta
+                      <span style="color:var(--text3);font-size:10px">(aparece abaixo do valor total — use {{VALIDADE}} para inserir a data)</span>
+                    </label>
+                    <textarea class="form-control" id="cad-descricao-padrao" rows="4"
+                      placeholder="Ex: A presente proposta é válida até {{VALIDADE}}. Os valores permanecem os mesmos durante o período de validade.">A presente proposta tem validade até {{VALIDADE}}. Após esta data, os valores poderão ser revisados.</textarea>
+                  </div>
+                  <div class="form-group">
                     <label class="form-label">Nota de Rodapé das Propostas</label>
                     <textarea class="form-control" id="cad-rodape" rows="3"
                       placeholder="Ex: Proposta válida por 30 dias. Preços sujeitos a alteração sem aviso prévio.">Esta proposta é válida pelo período indicado. Os serviços serão executados por profissional habilitado com ART recolhida. Quaisquer alterações no escopo serão formalizadas por adendo.</textarea>
@@ -5325,16 +5332,10 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <div class="card">
               <div class="card-header"><div class="card-title">5. Observações / Condições</div></div>
               <div class="card-body">
-                <label class="form-label" style="font-size:11px">Modelo de Observação</label>
-                <select class="form-control" id="prev-obs-modelo" style="font-size:12px;margin-bottom:8px" onchange="prevObsAplicarTemplate()">
-                  <option value="padrao" selected>Texto Padrão (Anexo III — instalações)</option>
-                  <option value="anexo5">Anexo V (engenharia — opção do contratante)</option>
-                  <option value="livre">Livre (digitar manualmente)</option>
-                </select>
                 <textarea class="form-control" id="prev-obs-prop" rows="8"
                   placeholder="Ex: Proposta válida por 30 dias. Prazo de execução: 5 dias úteis após aprovação. Pagamento: 50% entrada + 50% entrega."
                   oninput="prevAtualizar()"></textarea>
-                <div style="font-size:10px;color:var(--text3);margin-top:6px" id="prev-obs-hint">Texto preenchido automaticamente — selecione "Livre" para editar.</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:6px" id="prev-obs-hint">Edite livremente. O enquadramento tributário (Anexo III/V) é configurado abaixo.</div>
               </div>
             </div>
           </div>
@@ -5368,7 +5369,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                   Mostrar Preço por Item
                 </label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-                  <input type="checkbox" id="prev-show-simples" checked onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
+                  <input type="checkbox" id="prev-show-simples" onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
                   Mostrar Simples Nacional
                 </label>
                 <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
@@ -7846,6 +7847,71 @@ function fmtMoney(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+// Retorna o texto padrão da descrição da proposta (cadastrado em Configurações),
+// substituindo {{VALIDADE}} / {{DATA_VALIDADE}} pela data informada.
+function propostaDescricaoPadrao(dataValidade) {
+  let tpl = '';
+  try {
+    const el = document.getElementById('cad-descricao-padrao');
+    if (el && el.value) {
+      tpl = el.value;
+    } else {
+      const saved = JSON.parse(localStorage.getItem('cad_empresa') || '{}');
+      tpl = saved.descricao_padrao || '';
+    }
+  } catch(_){}
+  if (!tpl) return '';
+  return tpl
+    .replace(/\{\{\s*VALIDADE\s*\}\}/gi, dataValidade || '')
+    .replace(/\{\{\s*DATA_VALIDADE\s*\}\}/gi, dataValidade || '');
+}
+
+// Converte valor numérico em reais para texto por extenso (pt-BR)
+function valorPorExtenso(valor) {
+  const n = Number(valor);
+  if (!isFinite(n) || n < 0) return '';
+  const reais = Math.floor(n);
+  const centavos = Math.round((n - reais) * 100);
+  const unidades = ['','um','dois','três','quatro','cinco','seis','sete','oito','nove'];
+  const dez10 = ['dez','onze','doze','treze','quatorze','quinze','dezesseis','dezessete','dezoito','dezenove'];
+  const dezenas = ['','','vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+  const centenas = ['','cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+  function ate999(num) {
+    if (num === 0) return '';
+    if (num === 100) return 'cem';
+    const c = Math.floor(num / 100);
+    const d = Math.floor((num % 100) / 10);
+    const u = num % 10;
+    const partes = [];
+    if (c) partes.push(centenas[c]);
+    if (d === 1) { partes.push(dez10[u]); }
+    else {
+      if (d) partes.push(dezenas[d]);
+      if (u) partes.push(unidades[u]);
+    }
+    return partes.join(' e ');
+  }
+  function inteiroExtenso(num) {
+    if (num === 0) return 'zero';
+    const milhoes = Math.floor(num / 1000000);
+    const milhares = Math.floor((num % 1000000) / 1000);
+    const resto = num % 1000;
+    const out = [];
+    if (milhoes) out.push(ate999(milhoes) + (milhoes === 1 ? ' milhão' : ' milhões'));
+    if (milhares) out.push(ate999(milhares) + ' mil');
+    if (resto)   out.push(ate999(resto));
+    return out.filter(Boolean).join(milhoes || milhares ? ', ' : ' e ');
+  }
+  const partes = [];
+  if (reais > 0) partes.push(inteiroExtenso(reais) + (reais === 1 ? ' real' : ' reais'));
+  if (centavos > 0) {
+    if (partes.length) partes.push('e');
+    partes.push(inteiroExtenso(centavos) + (centavos === 1 ? ' centavo' : ' centavos'));
+  }
+  if (!partes.length) return 'zero real';
+  return partes.join(' ');
+}
+
 function fmtTime(d) {
   return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
 }
@@ -8728,7 +8794,12 @@ function prevObsAplicarTemplate() {
   const sel = document.getElementById('prev-obs-modelo');
   const ta  = document.getElementById('prev-obs-prop');
   const hint= document.getElementById('prev-obs-hint');
-  if (!sel || !ta) return;
+  if (!ta) return;
+  if (!sel) {
+    ta.readOnly = false;
+    ta.style.background = '';
+    return;
+  }
   const v = sel.value;
   if (v === 'livre') {
     ta.readOnly = false;
@@ -9371,7 +9442,7 @@ function prevAtualizar() {
       <div style="margin-top:4px;padding-left:8px">
         ${_feItems.map(item => '▸ ' + item).join('<br>')}
       </div>
-      <div style="margin-top:6px;font-size:10px;color:#6b7280">
+      <div style="margin-top:6px;font-size:11px;color:#374151;line-height:1.8">
         A Aplica Engenharia coloca-se à disposição para fornecer qualquer serviço conforme definido nos itens exclusos acima, disponibilizando orçamento adicional quando solicitado.
       </div>
     </div>`;
@@ -9486,9 +9557,16 @@ function prevAtualizar() {
                 <span style="color:#1a3c5e">VALOR TOTAL</span>
                 <span style="color:#059669">${fmt(total)}</span>
               </div>
+              <div style="padding:6px 0 0;font-size:10px;color:#374151;font-style:italic;line-height:1.45;border-top:1px dashed #e5e7eb">
+                <span style="font-weight:600">Valor total por extenso:</span> ${valorPorExtenso(total)}.
+              </div>
+              <div style="padding:4px 0 0;font-size:10px;color:#374151">
+                <span style="font-weight:600">Validade da proposta:</span> ${dataVal}${valDias ? ` (${valDias} dias)` : ''}.
+              </div>
+              ${(() => { const d = propostaDescricaoPadrao(dataVal); return d ? `<div style="padding:6px 0 0;font-size:10px;color:#374151;line-height:1.5;white-space:pre-wrap">${d}</div>` : ''; })()}
             </div>
             <div style="background:#f8f9fa;padding:8px 12px;font-size:10px;color:#6b7280;line-height:1.6;border-top:1px solid #e5e7eb">
-              ${pgto.tipo === 'cnpj' ? '• Inclusa emissão de Nota Fiscal de Serviço<br>• Retenção de ISS — por conta do cliente' : '• Emissão Sem Nota Fiscal de Serviço'}
+              ${pgto.tipo === 'cnpj' ? '• Retenção de ISS — por conta do cliente' : '• Não está incluso Nota Fiscal de Serviço'}
             </div>
           </div>` : ''}
 
@@ -9514,11 +9592,16 @@ function prevAtualizar() {
           ${itensExclusos}
         </div>
 
-        <!-- 8. OBSERVAÇÕES -->
-        ${obsProp ? `<div style="margin-bottom:16px">
-          <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Observações / Condições Gerais</div>
-          <div style="font-size:11px;color:#374151;line-height:1.8">${obsProp}</div>
-        </div>` : ''}
+        <!-- 8. OBSERVAÇÕES + ENQUADRAMENTO TRIBUTÁRIO (parte inferior) -->
+        ${(() => {
+          const _enq = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
+          const _full = [obsProp, _enq].filter(Boolean).join('\n\n');
+          if (!_full) return '';
+          return `<div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Observações / Condições Gerais</div>
+            <div style="font-size:11px;color:#374151;line-height:1.8;white-space:pre-wrap">${_full}</div>
+          </div>`;
+        })()}
 
         <!-- 9. TERMOS E CONDIÇÕES -->
         <div style="margin-bottom:20px">
@@ -9634,12 +9717,11 @@ function prevGetDadosPagamento() {
   let nfTexto = '';
   if (tipo === 'cnpj') {
     nfTexto = '<div style="margin-top:8px;font-size:10px;color:#6b7280;line-height:1.6">' +
-      '• Inclusa emissão de Nota Fiscal de Serviço<br>' +
       '• Retenção de ISS — por conta do cliente' +
       '</div>';
   } else {
     nfTexto = '<div style="margin-top:8px;font-size:10px;color:#6b7280;line-height:1.6">' +
-      '• Emissão Sem Nota Fiscal de Serviço' +
+      '• Não está incluso Nota Fiscal de Serviço' +
       '</div>';
   }
   
@@ -12936,6 +13018,7 @@ function salvarCadastro() {
     desc_max:  get('cad-desc-max'),
     cond_pagto:get('cad-cond-pagto'),
     prazo_entrega: get('cad-prazo-entrega'),
+    descricao_padrao: get('cad-descricao-padrao'),
     rodape:    get('cad-rodape'),
     email2:    get('cad-email2'),
     telFixo:   get('cad-tel-fixo'),
@@ -12993,6 +13076,7 @@ function loadCadastroFromStorage() {
       'cad-meta': cadastro.meta, 'cad-desc-max': cadastro.desc_max,
       'cad-aliquota': cadastro.aliquota,
       'cad-cond-pagto': cadastro.cond_pagto, 'cad-prazo-entrega': cadastro.prazo_entrega,
+      'cad-descricao-padrao': cadastro.descricao_padrao,
       'cad-rodape': cadastro.rodape,
       'cad-email2': cadastro.email2, 'cad-tel-fixo': cadastro.telFixo,
     }).forEach(([id, v]) => setEl(id, v));
@@ -13003,6 +13087,12 @@ function loadCadastroFromStorage() {
     if (cadastro.aliquota) { setEl('calc-imp', cadastro.aliquota); }
     if (cadastro.prazo_entrega) { setEl('prev-prazo-entrega', cadastro.prazo_entrega); }
     if (cadastro.val_dias) { setEl('prev-val-dias', cadastro.val_dias); }
+    // Propagar dados da empresa para o preview da proposta
+    if (cadastro.crea)  { setEl('prev-crea', cadastro.crea); }
+    if (cadastro.resp)  { setEl('prev-resp', cadastro.resp + (cadastro.resp.includes('Engenheiro') ? '' : ' — Engenheiro Eletricista')); }
+    if (cadastro.tel)   { setEl('prev-tel', cadastro.tel); }
+    if (cadastro.email) { setEl('prev-email-emp', cadastro.email); }
+    if (cadastro.cidade){ setEl('prev-cidade', cadastro.cidade + (cadastro.uf ? ' / ' + cadastro.uf : '')); }
   } catch(e) {}
 }
 
@@ -13297,12 +13387,16 @@ function cfgRenderServicos() {
         ${subs.map((sub, si) => {
           const nd = normaDe(sub);
           const subEsc = sub.replace(/'/g,"\\'");
-          return `<div style="margin-bottom:12px;padding:10px;background:var(--s3);border-radius:6px">
+          return `<div class="cfg-sub-item" draggable="true"
+              data-svc="${svcEsc}" data-idx="${si}"
+              ondragstart="cfgSubDragStart(event)" ondragover="cfgSubDragOver(event)" ondragleave="cfgSubDragLeave(event)" ondrop="cfgSubDrop(event)" ondragend="cfgSubDragEnd(event)"
+              style="margin-bottom:12px;padding:10px;background:var(--s3);border-radius:6px;cursor:grab">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:6px">
-              <strong style="font-size:12px">${sub}</strong>
+              <strong style="font-size:12px"><span style="color:var(--text3);margin-right:6px;cursor:grab" title="Arraste para reordenar">⋮⋮</span>${sub}</strong>
               <div style="display:flex;gap:4px">
                 <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgRenomearSubservico('${svcEsc}',${si})">✏️ Nome</button>
                 <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgEditarSubservico('${svcEsc}','${subEsc}')">📝 Normas/Texto</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;color:var(--coral)" onclick="cfgExcluirSubservico('${svcEsc}',${si})">🗑 Excluir</button>
               </div>
             </div>
             <div style="font-size:11px;color:var(--teal);margin-bottom:3px"><b>Normas:</b> ${nd.normas || '<span style=color:var(--text3)>— não definida —</span>'}</div>
@@ -13410,6 +13504,58 @@ function cfgAddSubservico(servico) {
   toast(`Subserviço "${nome.trim()}" adicionado`, 'success');
 }
 
+function cfgExcluirSubservico(servico, idx) {
+  cfgMaterializarServico(servico);
+  const nome = SERVICOS_CUSTOM[servico][idx];
+  if (nome === undefined) return;
+  if (!confirm(`Excluir o subserviço "${nome}" de ${servico}?`)) return;
+  SERVICOS_CUSTOM[servico].splice(idx, 1);
+  cfgSalvarServicos();
+  cfgRenderServicos();
+  toast(`Subserviço "${nome}" removido`, 'success');
+}
+
+// ═══ Drag & drop para reordenar subserviços ═══
+let _cfgDrag = null;
+function cfgSubDragStart(ev) {
+  const el = ev.currentTarget;
+  _cfgDrag = { svc: el.dataset.svc, idx: parseInt(el.dataset.idx, 10) };
+  el.style.opacity = '0.4';
+  try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(_cfgDrag.idx)); } catch(_){}
+}
+function cfgSubDragOver(ev) {
+  if (!_cfgDrag) return;
+  const el = ev.currentTarget;
+  if (el.dataset.svc !== _cfgDrag.svc) return;
+  ev.preventDefault();
+  el.style.borderTop = '2px solid var(--teal)';
+}
+function cfgSubDragLeave(ev) {
+  ev.currentTarget.style.borderTop = '';
+}
+function cfgSubDrop(ev) {
+  ev.preventDefault();
+  const el = ev.currentTarget;
+  el.style.borderTop = '';
+  if (!_cfgDrag) return;
+  const svc = _cfgDrag.svc;
+  if (el.dataset.svc !== svc) return;
+  const from = _cfgDrag.idx;
+  const to = parseInt(el.dataset.idx, 10);
+  if (from === to) return;
+  cfgMaterializarServico(svc);
+  const arr = SERVICOS_CUSTOM[svc];
+  const [moved] = arr.splice(from, 1);
+  arr.splice(to, 0, moved);
+  cfgSalvarServicos();
+  cfgRenderServicos();
+}
+function cfgSubDragEnd(ev) {
+  ev.currentTarget.style.opacity = '';
+  document.querySelectorAll('.cfg-sub-item').forEach(x => { x.style.borderTop = ''; });
+  _cfgDrag = null;
+}
+
 function cfgAddServico() {
   const nome = prompt('Nome do novo serviço principal (ex: AUTOMAÇÃO INDUSTRIAL):');
   if (!nome || !nome.trim()) return;
@@ -13446,6 +13592,23 @@ function npInit() {
     const el = document.getElementById(id);
     if (el) el.min = hoje;
   });
+
+  // Puxar dados da empresa (CREA, resp., etc.) do cadastro para o preview
+  try {
+    const saved = JSON.parse(localStorage.getItem('cad_empresa') || '{}');
+    const _setIfEmpty = (id, v) => {
+      const el = document.getElementById(id);
+      if (!el || !v) return;
+      const defaults = ['CREA/SC 000000-0','Gerson — Engenheiro Eletricista','(47) 9XXXX-XXXX','contato@aplicaengenharia.com.br','Schroeder / SC'];
+      if (!el.value || defaults.includes(el.value)) el.value = v;
+    };
+    if (saved.crea)  _setIfEmpty('prev-crea', saved.crea);
+    if (saved.resp)  _setIfEmpty('prev-resp', saved.resp + (saved.resp.includes('Engenheiro') ? '' : ' — Engenheiro Eletricista'));
+    if (saved.tel)   _setIfEmpty('prev-tel', saved.tel);
+    if (saved.email) _setIfEmpty('prev-email-emp', saved.email);
+    if (saved.cidade)_setIfEmpty('prev-cidade', saved.cidade + (saved.uf ? ' / ' + saved.uf : ''));
+    if (saved.val_dias) _setIfEmpty('prev-val-dias', saved.val_dias);
+  } catch(_){}
 
   // Se tiver contexto de edição ativo, não resetar
   if (PROPOSTA_CONTEXTO?.modoEdicao) {
@@ -13709,7 +13872,7 @@ function npRenderContatos() {
   wrap.innerHTML = npContatos.map((c, i) => {
     const isPrimeiro = i === 0;
     if (isPrimeiro) {
-      // 1º contato: layout especial com WhatsApp + E-mail separados
+      // 1º contato: layout especial — Nome + Cargo + WhatsApp + E-mail separados
       return `
       <div style="background:rgba(46,196,160,0.05);border:1px solid rgba(46,196,160,0.2);
         border-radius:10px;padding:10px 12px;margin-bottom:8px">
@@ -13719,25 +13882,23 @@ function npRenderContatos() {
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div>
-            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Tipo</label>
-            <select class="form-control" style="font-size:12px"
-              onchange="npContatos[0].tipo=this.value">
-              ${tipoOpts.map(t => `<option ${c.tipo===t?'selected':''}>${t}</option>`).join('')}
-            </select>
+            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Nome</label>
+            <input class="form-control" style="font-size:12px" placeholder="Ex: Eng. Carlos Silva"
+              value="${c.nome||''}" oninput="npContatos[0].nome=this.value">
           </div>
           <div>
-            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Nome / Cargo</label>
-            <input class="form-control" style="font-size:12px" placeholder="Ex: Eng. Carlos — Compras"
-              value="${c.nome||''}" oninput="npContatos[0].nome=this.value">
+            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">Cargo</label>
+            <input class="form-control" style="font-size:12px" placeholder="Ex: Engenheiro de Manutenção"
+              value="${c.cargo||''}" oninput="npContatos[0].cargo=this.value">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div>
             <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">
-              📱 WhatsApp <span style="color:var(--text3)">(follow-up)</span>
+              📱 WhatsApp / Telefone <span style="color:var(--text3)">(follow-up)</span>
             </label>
             <input class="form-control" style="font-size:12px" placeholder="(47) 9XXXX-XXXX"
-              value="${c.whatsapp||c.valor||''}" oninput="npContatos[0].whatsapp=this.value;npContatos[0].valor=this.value">
+              value="${c.whatsapp||c.telefone||c.valor||''}" oninput="npContatos[0].telefone=this.value;npContatos[0].whatsapp=this.value;npContatos[0].valor=this.value">
           </div>
           <div>
             <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">
@@ -13749,18 +13910,28 @@ function npRenderContatos() {
         </div>
       </div>`;
     }
-    // Demais contatos: layout compacto
+    // Demais contatos: agora com 4 campos separados (Nome, Cargo, Telefone, E-mail)
     return `
-    <div class="contato-row" style="align-items:flex-start;gap:6px;padding:8px;
-      background:var(--s2);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
-      <select onchange="npContatos[${i}].tipo=this.value" style="flex:0 0 auto;width:130px">
-        ${tipoOpts.map(t => `<option ${c.tipo===t?'selected':''}>${t}</option>`).join('')}
-      </select>
-      <input placeholder="Nome / Cargo" value="${c.nome||''}"
-        oninput="npContatos[${i}].nome=this.value" style="flex:1">
-      <input placeholder="WhatsApp ou e-mail" value="${c.valor||''}"
-        oninput="npContatos[${i}].valor=this.value" style="flex:1">
-      <button class="contato-remove" onclick="npRemoveContato(${i})" title="Remover">×</button>
+    <div style="padding:10px;background:var(--s2);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">
+          Contato Adicional #${i}
+        </div>
+        <button class="contato-remove" onclick="npRemoveContato(${i})" title="Remover">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <input class="form-control" style="font-size:12px" placeholder="Nome"
+          value="${c.nome||''}" oninput="npContatos[${i}].nome=this.value">
+        <input class="form-control" style="font-size:12px" placeholder="Cargo"
+          value="${c.cargo||''}" oninput="npContatos[${i}].cargo=this.value">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <input class="form-control" style="font-size:12px" placeholder="📱 Telefone / WhatsApp"
+          value="${c.telefone||c.whatsapp||c.valor||''}"
+          oninput="npContatos[${i}].telefone=this.value;npContatos[${i}].whatsapp=this.value;npContatos[${i}].valor=this.value">
+        <input class="form-control" type="email" style="font-size:12px" placeholder="✉️ E-mail"
+          value="${c.email||''}" oninput="npContatos[${i}].email=this.value">
+      </div>
     </div>`;
   }).join('');
 }
@@ -14098,8 +14269,13 @@ salvarProposta = async function() {
     }).join(' | ');
   }
 
-  // Formatar obs com subcategorias
-  const obsCompleta = [d.obs, subcatsStr ? 'Serviços: ' + subcatsStr : ''].filter(Boolean).join('\n');
+  // Formatar obs com subcategorias, local da obra e campo especial (para busca/duplicação)
+  const obsCompleta = [
+    d.obs,
+    subcatsStr ? 'Serviços: ' + subcatsStr : '',
+    d.local_obra ? 'Local da Obra: ' + d.local_obra : '',
+    d.campo_especial ? 'Campo Especial: ' + d.campo_especial : ''
+  ].filter(Boolean).join('\n');
 
   // Contatos adicionais agora salvos na aba CONTATOS (não mais no OBS)
   const contatosJSON = '';
@@ -15452,6 +15628,19 @@ function renderClientesV2(filtro) {
     if (dt > mapa[key].ultima) mapa[key].ultima = dt;
   });
 
+  // Incluir também clientes cadastrados diretamente na aba Clientes (sem proposta ainda)
+  try {
+    const contatosOutros = (typeof CONTATOS !== 'undefined' && CONTATOS.outros) ? CONTATOS.outros : [];
+    contatosOutros.forEach(c => {
+      if (!c || !c.nome) return;
+      const cnpj = (c.doc || '').trim();
+      const key = cnpj || c.nome;
+      if (!mapa[key]) {
+        mapa[key] = { razao: c.nome, cnpj, total: 0, ganhas: 0, perdidas: 0, abertas: 0, ultima: '', receita: 0, semProposta: true };
+      }
+    });
+  } catch(_){}
+
   let clientes = Object.values(mapa);
 
   // Filtro busca
@@ -16474,9 +16663,30 @@ function _prevExportarWordDocxLegacy() {
           </w:tc>
         </w:tr>
       </w:tbl>`).join('') +
-      (pgtoDocx ? `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>${pgtoDocx.tipo === 'cnpj' ? '• Inclusa emissão de Nota Fiscal de Serviço' : '• Emissão Sem Nota Fiscal de Serviço'}</w:t></w:r></w:p>` +
-       (pgtoDocx.tipo === 'cnpj' ? `<w:p><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Retenção de ISS — por conta do cliente</w:t></w:r></w:p>` : '') : '');
+      (pgtoDocx ? (pgtoDocx.tipo === 'cnpj'
+        ? `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Retenção de ISS — por conta do cliente</w:t></w:r></w:p>`
+        : `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Não está incluso Nota Fiscal de Serviço</w:t></w:r></w:p>`
+      ) : '');
   }
+
+  // ── Valor total por extenso + Validade da proposta (abaixo do resumo financeiro) ──
+  try {
+    const _extenso = (typeof valorPorExtenso === 'function') ? valorPorExtenso(total) : '';
+    if (_extenso) {
+      resumoLeft += `<w:p><w:pPr><w:spacing w:before="160"/><w:pBdr><w:top w:val="dashed" w:sz="4" w:color="e5e7eb"/></w:pBdr></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="1a3c5e"/></w:rPr><w:t xml:space="preserve">Valor total por extenso: </w:t></w:r><w:r><w:rPr><w:i/><w:sz w:val="16"/><w:color w:val="374151"/></w:rPr><w:t>${esc(_extenso)}.</w:t></w:r></w:p>`;
+    }
+    if (typeof dataVal !== 'undefined' && dataVal) {
+      resumoLeft += `<w:p><w:pPr><w:spacing w:before="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="1a3c5e"/></w:rPr><w:t xml:space="preserve">Validade da proposta: </w:t></w:r><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="374151"/></w:rPr><w:t>${esc(dataVal)}${valDias?` (${valDias} dias)`:''}.</w:t></w:r></w:p>`;
+    }
+    const _descPad = (typeof propostaDescricaoPadrao === 'function') ? propostaDescricaoPadrao(dataVal) : '';
+    if (_descPad) {
+      // Quebra por linha para preservar parágrafos
+      _descPad.split(/\r?\n/).forEach(ln => {
+        if (!ln.trim()) return;
+        resumoLeft += `<w:p><w:pPr><w:spacing w:before="60"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="374151"/></w:rPr><w:t xml:space="preserve">${esc(ln)}</w:t></w:r></w:p>`;
+      });
+    }
+  } catch(_){}
 
   // Coluna direita: Condições de pagamento + Prazo
   let pagtoBox = `<w:p><w:pPr><w:shd w:val="clear" w:fill="f8f9fa"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="1a3c5e"/></w:rPr><w:t>CONDIÇÕES DE PAGAMENTO</w:t></w:r></w:p>`;
@@ -16491,11 +16701,8 @@ function _prevExportarWordDocxLegacy() {
   let prazoBox = `<w:p><w:pPr><w:spacing w:before="160"/><w:shd w:val="clear" w:fill="f8f9fa"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PRAZO DE ENTREGA</w:t></w:r></w:p>` +
     `<w:p><w:r><w:rPr><w:sz w:val="18"/><w:color w:val="374151"/></w:rPr><w:t>${esc(prazoEntrega)}</w:t></w:r></w:p>`;
 
-  // Texto do enquadramento tributário (Anexo III ou V)
-  const enqTxt = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
-  if (enqTxt) {
-    pagtoBox += `<w:p><w:pPr><w:spacing w:before="120"/><w:pBdr><w:top w:val="dashed" w:sz="4" w:color="e5e7eb"/></w:pBdr></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/><w:i/></w:rPr><w:t xml:space="preserve">${esc(enqTxt)}</w:t></w:r></w:p>`;
-  }
+  // Texto do enquadramento tributário movido para a seção Observações (parte inferior).
+  // Removido daqui para evitar duplicação com o texto já presente embaixo.
 
   bodyParts.push(`<w:tbl>
     <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="e5e7eb"/><w:left w:val="single" w:sz="4" w:color="e5e7eb"/><w:bottom w:val="single" w:sz="4" w:color="e5e7eb"/><w:right w:val="single" w:sz="4" w:color="e5e7eb"/><w:insideV w:val="single" w:sz="4" w:color="e5e7eb"/></w:tblBorders></w:tblPr>
@@ -16507,10 +16714,14 @@ function _prevExportarWordDocxLegacy() {
   </w:tbl>`);
   bodyParts.push(para('', {spacing:160}));
 
-  // Observações (se houver)
-  if (obsProp) {
+  // Observações + Enquadramento Tributário (parte inferior)
+  const _enqTxtInf = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
+  const _obsFinal  = [obsProp, _enqTxtInf].filter(Boolean).join('\n\n');
+  if (_obsFinal) {
     bodyParts.push(heading('OBSERVAÇÕES / CONDIÇÕES GERAIS'));
-    bodyParts.push(para(obsProp, {size:18, color:'374151'}));
+    _obsFinal.split(/\n\n+/).forEach(par => {
+      if (par.trim()) bodyParts.push(para(par.trim(), {size:18, color:'374151'}));
+    });
     bodyParts.push(para('', {spacing:80}));
   }
 
@@ -16524,7 +16735,7 @@ function _prevExportarWordDocxLegacy() {
     _feDocx.forEach(item => {
       bodyParts.push(para('▸  ' + item, {size:18, color:'374151', indent:'360'}));
     });
-    bodyParts.push(para('A Aplica Engenharia coloca-se à disposição para fornecer qualquer serviço conforme definido nos itens exclusos acima, disponibilizando orçamento adicional quando solicitado.', {size:16, color:'888888', spacing:80}));
+    bodyParts.push(para('A Aplica Engenharia coloca-se à disposição para fornecer qualquer serviço conforme definido nos itens exclusos acima, disponibilizando orçamento adicional quando solicitado.', {size:18, color:'374151', spacing:120}));
   }
 
   // ── 7. TERMOS E CONDIÇÕES FINAIS ──
@@ -21457,13 +21668,16 @@ function _cliExportarWord(data) {
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
         <div class="search-box" style="flex:1;min-width:240px">
           <span>🔍</span>
-          <input type="text" placeholder="Buscar (cliente, ID, qualquer texto)..." id="up-busca" oninput="npFiltrarPropostasExistentes()">
+          <input type="text" placeholder="Buscar (cliente, ID, Local da Obra, Campo Especial...)" id="up-busca" oninput="npFiltrarPropostasExistentes()">
         </div>
         <select class="filter-sel" id="up-filtro-tipo-sub" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os tipos de subestação</option>
         </select>
         <select class="filter-sel" id="up-filtro-kv" onchange="npFiltrarPropostasExistentes()">
-          <option value="">Todos os níveis kV</option>
+          <option value="">Todas as voltagens (kV)</option>
+        </select>
+        <select class="filter-sel" id="up-filtro-local-obra" onchange="npFiltrarPropostasExistentes()">
+          <option value="">Todos os Locais da Obra</option>
         </select>
         <select class="filter-sel" id="up-filtro-mes" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os meses</option>
@@ -21705,8 +21919,21 @@ function npUsarPropostaExistente() {
   const selKv = document.getElementById('up-filtro-kv');
   if (selKv) {
     const opts = (typeof cfgGetOpcoes === 'function' ? cfgGetOpcoes('niveis_kv') : []);
-    selKv.innerHTML = '<option value="">Todos os níveis kV</option>' +
+    selKv.innerHTML = '<option value="">Todas as voltagens (kV)</option>' +
       opts.map(n => `<option>${n}</option>`).join('');
+  }
+  // Popular filtro de Local da Obra a partir das propostas existentes
+  const selLocal = document.getElementById('up-filtro-local-obra');
+  if (selLocal && typeof DATA !== 'undefined' && DATA.crm) {
+    const locais = new Set();
+    DATA.crm.forEach(r => {
+      const obs = r[CRM_COL.OBS] || '';
+      const m = obs.match(/Local da Obra:\s*([^\n]+)/i);
+      if (m && m[1].trim()) locais.add(m[1].trim());
+    });
+    const arr = Array.from(locais).sort();
+    selLocal.innerHTML = '<option value="">Todos os Locais da Obra</option>' +
+      arr.map(n => `<option>${n.replace(/</g,'&lt;')}</option>`).join('');
   }
   // Popular filtro de serviço principal (mescla SUBCATEGORIAS padrão + custom, respeita ocultos)
   const selSvc = document.getElementById('up-filtro-servico');
@@ -21737,7 +21964,7 @@ function npAtualizarFiltroSubservico() {
 }
 
 function npLimparFiltrosUP() {
-  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico'].forEach(id => {
+  ['up-busca','up-filtro-tipo-sub','up-filtro-kv','up-filtro-local-obra','up-filtro-mes','up-filtro-ano','up-filtro-servico','up-filtro-subservico'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   npAtualizarFiltroSubservico();
@@ -21748,6 +21975,7 @@ function npFiltrarPropostasExistentes() {
   const busca = (document.getElementById('up-busca')?.value || '').toLowerCase();
   const fTipoSub = (document.getElementById('up-filtro-tipo-sub')?.value || '').toLowerCase().trim();
   const fKv = (document.getElementById('up-filtro-kv')?.value || '').toLowerCase().trim();
+  const fLocal = (document.getElementById('up-filtro-local-obra')?.value || '').toLowerCase().trim();
   const mes = document.getElementById('up-filtro-mes')?.value || '';
   const ano = document.getElementById('up-filtro-ano')?.value || '';
   const fSvc = (document.getElementById('up-filtro-servico')?.value || '').toLowerCase();
@@ -21773,6 +22001,12 @@ function npFiltrarPropostasExistentes() {
     rows = rows.filter(r => {
       const blob = normSpec([r[CRM_COL.SERVICO], r[CRM_COL.OBS], r[5], r[CRM_COL.RAZAO]].filter(Boolean).join(' '));
       return blob.includes(alvo);
+    });
+  }
+  if (fLocal) {
+    rows = rows.filter(r => {
+      const m = (r[CRM_COL.OBS] || '').match(/Local da Obra:\s*([^\n]+)/i);
+      return m && m[1].toLowerCase().trim().includes(fLocal);
     });
   }
   if (mes || ano) {
@@ -21894,8 +22128,20 @@ function npDuplicarProposta(idx) {
       [...el('np-canal').options].forEach(o => { if (o.value === canal || o.text === canal) o.selected = true; });
     }
 
-    // Copiar observação
-    if (el('np-obs')) el('np-obs').value = r[CRM_COL.OBS] || '';
+    // Copiar observação — e extrair Local da Obra / Campo Especial se presentes
+    const obsRaw = r[CRM_COL.OBS] || '';
+    const mLocal = obsRaw.match(/Local da Obra:\s*([^\n]+)/i);
+    const mEsp   = obsRaw.match(/Campo Especial:\s*([^\n]+)/i);
+    if (el('np-local-obra') && mLocal)    el('np-local-obra').value = mLocal[1].trim();
+    if (el('np-campo-especial') && mEsp)  el('np-campo-especial').value = mEsp[1].trim();
+    // Remover linhas 'Local da Obra' / 'Campo Especial' / 'Serviços' da OBS livre
+    const obsClean = obsRaw
+      .replace(/^\s*Local da Obra:.*$/gim, '')
+      .replace(/^\s*Campo Especial:.*$/gim, '')
+      .replace(/^\s*Serviços:.*$/gim, '')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+    if (el('np-obs')) el('np-obs').value = obsClean;
 
     // Atualizar nome composto
     if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto();
