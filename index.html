@@ -3051,14 +3051,14 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                   </div>
 
                   <div class="form-group">
-                    <label class="form-label">Tipo de Subestação</label>
+                    <label class="form-label">Especial 1</label>
                     <select class="form-control sel-tipo-subestacao" id="np-tipo-subestacao">
                       <option value="">— Selecionar —</option>
                     </select>
                   </div>
 
                   <div class="form-group">
-                    <label class="form-label">Nível de Tensão (kV)</label>
+                    <label class="form-label">Especial 2</label>
                     <select class="form-control sel-nivel-kv" id="np-kv">
                       <option value="">— Selecionar —</option>
                     </select>
@@ -9590,9 +9590,9 @@ function prevAtualizar() {
                 <span style="font-weight:600">Valor total por extenso:</span> ${valorPorExtenso(total)}.
               </div>
             </div>
-            <div style="background:#f8f9fa;padding:8px 12px;font-size:10px;color:#6b7280;line-height:1.6;border-top:1px solid #e5e7eb">
-              ${pgto.tipo === 'cnpj' ? '• Retenção de ISS — por conta do cliente' : '• Não está incluso Nota Fiscal de Serviço'}
-            </div>
+            ${pgto.tipo === 'cnpj' ? '' : `<div style="background:#f8f9fa;padding:8px 12px;font-size:10px;color:#6b7280;line-height:1.6;border-top:1px solid #e5e7eb">
+              • Não está incluso Nota Fiscal de Serviço
+            </div>`}
           </div>` : ''}
 
           <!-- CONDIÇÕES DE PAGAMENTO + PRAZO -->
@@ -9751,9 +9751,8 @@ function prevGetDadosPagamento() {
   
   let nfTexto = '';
   if (tipo === 'cnpj') {
-    nfTexto = '<div style="margin-top:8px;font-size:10px;color:#6b7280;line-height:1.6">' +
-      '• Retenção de ISS — por conta do cliente' +
-      '</div>';
+    // CNPJ com nota: não exibe nenhuma descrição adicional (é o padrão)
+    nfTexto = '';
   } else {
     nfTexto = '<div style="margin-top:8px;font-size:10px;color:#6b7280;line-height:1.6">' +
       '• Não está incluso Nota Fiscal de Serviço' +
@@ -13004,12 +13003,34 @@ function cadAtualizar() {
   const tel      = get('cad-tel')      || '—';
   const email    = get('cad-email')    || '—';
   const crea     = get('cad-crea')     || '—';
+  const resp     = get('cad-resp')     || '';
 
   const s = id => document.getElementById(id);
   if (s('cprev-fantasia')) s('cprev-fantasia').textContent = fantasia;
   if (s('cprev-razao'))    s('cprev-razao').textContent    = razao;
   if (s('cprev-detalhe'))  s('cprev-detalhe').innerHTML    =
     `CNPJ: ${cnpj}<br>${cidade}${uf?' / '+uf:''}<br>${tel} · ${email}<br>${crea}`;
+
+  // ── Propaga em TEMPO REAL para o Preview da Proposta (sem precisar clicar em Salvar) ──
+  // Sobrescreve apenas se o campo estiver vazio ou com o valor default hardcoded (mantém edições manuais).
+  const _defaults = {
+    'prev-crea':      'CREA/SC 000000-0',
+    'prev-resp':      'Gerson — Engenheiro Eletricista',
+    'prev-tel':       '(47) 9XXXX-XXXX',
+    'prev-email-emp': 'contato@aplicaengenharia.com.br',
+    'prev-cidade':    'Schroeder / SC',
+  };
+  const _setLive = (id, v) => {
+    const el = s(id);
+    if (!el || !v || v === '—') return;
+    const def = _defaults[id] || '';
+    if (!el.value || el.value === def) el.value = v;
+  };
+  if (crea && crea !== '—')    _setLive('prev-crea', crea);
+  if (resp)                    _setLive('prev-resp', resp.includes('Engenheiro') ? resp : (resp + ' — Engenheiro Eletricista'));
+  if (tel && tel !== '—')      _setLive('prev-tel', tel);
+  if (email && email !== '—')  _setLive('prev-email-emp', email);
+  if (cidade)                  _setLive('prev-cidade', cidade + (uf ? ' / ' + uf : ''));
 
   // Parâmetros
   const vh    = parseFloat(get('cad-vh')   || '200') || 200;
@@ -15973,6 +15994,8 @@ function _tmplGetCampos() {
     NORMAS_TECNICAS: normasTxt,
     VALOR_TOTAL_SERVICO: fmt(total),
     VALOR_COM_DESCONTO: fmt(totalComDesc),
+    VALOR_TOTAL_EXTENSO: (typeof valorPorExtenso === 'function' ? valorPorExtenso(total) : ''),
+    DESCRICAO_VALIDADE: (typeof propostaDescricaoPadrao === 'function' ? propostaDescricaoPadrao(dataVal, valDias) : ''),
     ENQUADRAMENTO_TRIBUTARIO: (typeof _prevGetEnquadramentoTexto === 'function' ? _prevGetEnquadramentoTexto() : ''),
   };
   for (let i = 1; i <= 10; i++) {
@@ -16709,10 +16732,9 @@ function _prevExportarWordDocxLegacy() {
           </w:tc>
         </w:tr>
       </w:tbl>`).join('') +
-      (pgtoDocx ? (pgtoDocx.tipo === 'cnpj'
-        ? `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Retenção de ISS — por conta do cliente</w:t></w:r></w:p>`
-        : `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Não está incluso Nota Fiscal de Serviço</w:t></w:r></w:p>`
-      ) : '');
+      (pgtoDocx && pgtoDocx.tipo !== 'cnpj'
+        ? `<w:p><w:pPr><w:spacing w:before="80"/></w:pPr><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="6b7280"/></w:rPr><w:t>• Não está incluso Nota Fiscal de Serviço</w:t></w:r></w:p>`
+        : '');
   }
 
   // ── Valor total por extenso (abaixo do resumo financeiro) ──
@@ -20956,8 +20978,8 @@ const CFG_CADASTROS_LABELS = {
   forma_envio_nf: '🧾 Formas de Envio NF',
   categorias_despesa_real: '📦 Categorias Despesa Real (por Serviço)',
   tipos_cliente: '🏷️ Tipos de Cliente',
-  tipos_subestacao: '⚡ Tipos de Subestação (Proposta)',
-  niveis_kv: '🔌 Níveis de Tensão kV (Proposta)',
+  tipos_subestacao: '⭐ Especial 1 (Proposta)',
+  niveis_kv: '⭐ Especial 2 (Proposta)',
 };
 
 // Carregar do localStorage ou usar defaults
@@ -21763,10 +21785,10 @@ function _cliExportarWord(data) {
           <input type="text" placeholder="Buscar (cliente, ID, Local da Obra, Campo Especial...)" id="up-busca" oninput="npFiltrarPropostasExistentes()">
         </div>
         <select class="filter-sel" id="up-filtro-tipo-sub" onchange="npFiltrarPropostasExistentes()">
-          <option value="">Todos os tipos de subestação</option>
+          <option value="">Todos Especial 1</option>
         </select>
         <select class="filter-sel" id="up-filtro-kv" onchange="npFiltrarPropostasExistentes()">
-          <option value="">Todas as voltagens (kV)</option>
+          <option value="">Todos Especial 2</option>
         </select>
         <select class="filter-sel" id="up-filtro-local-obra" onchange="npFiltrarPropostasExistentes()">
           <option value="">Todos os Locais da Obra</option>
@@ -22004,17 +22026,17 @@ if (_origOpenModal) {
 // 2. USAR PROPOSTA EXISTENTE / DUPLICAR
 // ══════════════════════════════════════════════════════
 function npUsarPropostaExistente() {
-  // Popular filtros de Tipo de Subestação e kV a partir dos cadastros
+  // Popular filtros de Especial 1 e Especial 2 a partir dos cadastros
   const selTipoSub = document.getElementById('up-filtro-tipo-sub');
   if (selTipoSub) {
     const opts = (typeof cfgGetOpcoes === 'function' ? cfgGetOpcoes('tipos_subestacao') : []);
-    selTipoSub.innerHTML = '<option value="">Todos os tipos de subestação</option>' +
+    selTipoSub.innerHTML = '<option value="">Todos Especial 1</option>' +
       opts.map(n => `<option>${n}</option>`).join('');
   }
   const selKv = document.getElementById('up-filtro-kv');
   if (selKv) {
     const opts = (typeof cfgGetOpcoes === 'function' ? cfgGetOpcoes('niveis_kv') : []);
-    selKv.innerHTML = '<option value="">Todas as voltagens (kV)</option>' +
+    selKv.innerHTML = '<option value="">Todos Especial 2</option>' +
       opts.map(n => `<option>${n}</option>`).join('');
   }
   // Popular filtro de Local da Obra a partir das propostas existentes
