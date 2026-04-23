@@ -18818,6 +18818,7 @@ function notifAtualizar() {
     const alertCfg = statusAlerts[st];
     if (!alertCfg) return;
     const cliente = r[CRM_COL.RAZAO] || '—';
+    const contato = r[CRM_COL.CONTATO] || '';
     const email = r[CRM_COL.EMAIL] || '';
     const dp = parseDate(r[CRM_COL.DATA_PROP]) || parseDate(r[CRM_COL.DATA_ABER]);
     if (!dp) return;
@@ -18828,7 +18829,7 @@ function notifAtualizar() {
         msg: `${alertCfg.msg}: <b>${cliente}</b>`,
         sub: `${alertCfg.alerta} ${dias}d · #${r[CRM_COL.ID]||''}`,
         page: 'crm',
-        email: !!email, emailTo: email, emailCliente: cliente,
+        email: !!email, emailTo: email, emailCliente: cliente, emailContato: contato,
         agenda: true, agendaData: new Date().toLocaleDateString('pt-BR'),
         agendaDesc: `Follow-up: ${cliente} (${st})`
       });
@@ -18925,7 +18926,7 @@ function notifAtualizar() {
         <div style="font-size:11px;color:var(--text3);margin-top:2px">${n.sub}</div>
       </div>
       <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
-        ${n.email ? `<button onclick="event.stopPropagation();notifEnviarFollowUp('${(n.emailTo||'').replace(/'/g,'\\\'')}',' ${(n.emailCliente||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--teal);color:var(--teal)">📧 Email</button>` : ''}
+        ${n.email ? `<button onclick="event.stopPropagation();notifEnviarFollowUp('${(n.emailTo||'').replace(/'/g,'\\\'')}','${(n.emailCliente||'').replace(/'/g,'\\\'')}','${(n.emailContato||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--teal);color:var(--teal)">📧 Email</button>` : ''}
         ${n.agenda ? `<button onclick="event.stopPropagation();notifAgendarEvento('${(n.agendaDesc||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--steel);color:var(--steel)">📅 Agendar</button>` : ''}
       </div>
     </div>`).join('');
@@ -18969,11 +18970,12 @@ function notifRenderAgenda() {
     const diff = Math.floor((d - hoje) / 86400000);
     if (diff < -7 || diff > 14) return;
     const cliente = r[CRM_COL.RAZAO] || '—';
+    const contato = r[CRM_COL.CONTATO] || '';
     const email = r[CRM_COL.EMAIL] || '';
     const canal = r[CRM_COL.CANAL] || 'WhatsApp';
     const status = r[CRM_COL.STATUS] || '';
     const cor = diff < 0 ? 'coral' : diff === 0 ? 'gold' : 'teal';
-    items.push({ data: fu, diff, cor, cliente, email, canal, status,
+    items.push({ data: fu, diff, cor, cliente, contato, email, canal, status,
       label: diff < 0 ? `${Math.abs(diff)}d atrasado` : diff === 0 ? 'HOJE' : `em ${diff}d`,
       id: r[CRM_COL.ID]
     });
@@ -18996,7 +18998,7 @@ function notifRenderAgenda() {
         <span style="font-size:10px;color:var(--text3)">#${it.id||''}</span>
       </div>
       <div style="display:flex;gap:4px;margin-top:6px">
-        ${it.email ? `<button onclick="notifEnviarFollowUp('${it.email.replace(/'/g,"\\'")}','${it.cliente.replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--teal);border:1px solid var(--teal)">📧 E-mail</button>` : ''}
+        ${it.email ? `<button onclick="notifEnviarFollowUp('${it.email.replace(/'/g,"\\'")}','${it.cliente.replace(/'/g,"\\'")}','${(it.contato||'').replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--teal);border:1px solid var(--teal)">📧 E-mail</button>` : ''}
         <button onclick="window.open('https://wa.me/55${(it.canal||'').replace(/\D/g,'')}','_blank')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--green);border:1px solid var(--green)">💬 WhatsApp</button>
         <button onclick="notifAgendarCalendar('${it.data}','Follow-up: ${it.cliente.replace(/'/g,"\\'")}','${it.email.replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--steel);border:1px solid var(--steel)">📅 Calendar</button>
       </div>
@@ -19084,17 +19086,21 @@ function npGetFollowupCanal() {
   return radio ? radio.value : 'WhatsApp';
 }
 
-function notifEnviarFollowUp(email, cliente) {
+function notifEnviarFollowUp(email, cliente, contato) {
   if (!email) { toast('E-mail do cliente não cadastrado', 'warning'); return; }
-  const empresa = document.getElementById('cad-razao')?.value || 'Aplica Engenharia';
-  const resp = document.getElementById('cad-responsavel')?.value || 'Gerson';
-  const subject = encodeURIComponent(`Follow-up — Proposta Técnica — ${empresa}`);
+  // Saudação conforme horário
+  const h = new Date().getHours();
+  const saud = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  // Primeiro nome do contato principal (fallback para cliente)
+  const nomeCompleto = (contato && contato.trim()) || (cliente && cliente.trim()) || '';
+  const primeiroNome = nomeCompleto.split(/\s+/)[0] || '';
+  const subject = encodeURIComponent('Aplica Engenharia · Proposta Técnica');
   const body = encodeURIComponent(
-    `Prezado(a) ${cliente.trim()},\n\n` +
+    `${saud}${primeiroNome ? ', ' + primeiroNome : ''}, tudo bem?\n\n` +
     `Espero que esteja bem. Gostaria de dar continuidade à nossa proposta técnica enviada recentemente.\n\n` +
-    `Caso tenha alguma dúvida ou precise de ajustes, estou à disposição para agendar uma conversa.\n\n` +
+    `Caso tenha alguma dúvida ou precise de ajustes, estou à disposição.\n\n` +
     `Aguardo seu retorno.\n\n` +
-    `Atenciosamente,\n${resp}\n${empresa}`
+    `Atenciosamente,`
   );
   window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
   toast('E-mail de follow-up aberto ✅', 'success');
@@ -23372,9 +23378,3 @@ setTimeout(() => {
     topRight.insertBefore(btn, topRight.firstChild);
   }
 }, 2000);
-
-console.log('✅ Sistema v17 carregado — Todas as funcionalidades implementadas');
-</script>
-
-</body>
-</html>
