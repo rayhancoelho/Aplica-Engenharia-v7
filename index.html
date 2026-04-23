@@ -4533,7 +4533,11 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
         <div class="card" style="margin-bottom:14px">
           <div class="card-header">
             <div class="card-title">📋 Gestão de Serviços, Normas e Textos</div>
-            <button class="btn btn-ghost btn-sm" onclick="cfgAddServico()">+ Novo Serviço</button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-ghost btn-sm" onclick="cfgExportarServicosCSV()" title="Exportar todos os serviços, subserviços, normas e descrições em CSV">📊 Exportar CSV</button>
+              <button class="btn btn-ghost btn-sm" onclick="cfgExportarServicosPDF()" title="Exportar todos os serviços, subserviços, normas e descrições em PDF">📄 Exportar PDF</button>
+              <button class="btn btn-ghost btn-sm" onclick="cfgAddServico()">+ Novo Serviço</button>
+            </div>
           </div>
           <div class="card-body">
             <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
@@ -5958,6 +5962,10 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
         <div class="form-group">
           <label class="form-label">Cargo</label>
           <input type="text" class="form-control" id="cont-cargo" placeholder="Ex: Gerente de Compras">
+        </div>
+        <div class="form-group" id="cont-pessoa-wrap" style="grid-column:1/-1">
+          <label class="form-label" id="cont-pessoa-label">Nome da Pessoa Responsável</label>
+          <input type="text" class="form-control" id="cont-pessoa" placeholder="Ex: João da Silva">
         </div>
         <div class="form-group">
           <label class="form-label">WhatsApp</label>
@@ -9627,10 +9635,9 @@ function prevAtualizar() {
           ${itensExclusos}
         </div>
 
-        <!-- 8. OBSERVAÇÕES + ENQUADRAMENTO TRIBUTÁRIO (parte inferior) -->
+        <!-- 8. OBSERVAÇÕES (texto único; o enquadramento já está incluído via template de Observações) -->
         ${(() => {
-          const _enq = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
-          const _full = [obsProp, _enq].filter(Boolean).join('\n\n');
+          const _full = obsProp || '';
           if (!_full) return '';
           return `<div style="margin-bottom:16px">
             <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Observações / Condições Gerais</div>
@@ -13431,15 +13438,17 @@ function cfgRenderServicos() {
     const subs = todos[svc] || [];
     const isCustom = SERVICOS_CUSTOM[svc] !== undefined;
     const svcEsc = svc.replace(/'/g,"\\'");
+    const isOpen = _cfgOpenSvcs.has(svc);
     return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);cursor:pointer" onclick="if(event.target.tagName==='BUTTON')return;const n=this.nextElementSibling;n.style.display=n.style.display==='none'?'':'none'">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);cursor:pointer" onclick="if(event.target.tagName==='BUTTON')return;const n=this.nextElementSibling;const aberto=n.style.display!=='none';n.style.display=aberto?'none':'';cfgToggleSvcAberto('${svcEsc}')">
         <div style="font-weight:700;font-size:13px">${isCustom?'⭐':'📋'} ${svc} <span style="font-size:11px;color:var(--text3)">(${subs.length} sub)</span></div>
         <div style="display:flex;gap:6px;align-items:center">
           <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="event.stopPropagation();cfgRenomearServico('${svcEsc}')">✏️ Editar Nome</button>
-          <span style="font-size:11px;color:var(--text3)">▼ expandir</span>
+          <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;color:var(--coral)" onclick="event.stopPropagation();cfgRemoverServico('${svcEsc}')" title="Excluir este serviço e todos os subserviços">🗑 Apagar</button>
+          <span style="font-size:11px;color:var(--text3)">${isOpen?'▲ recolher':'▼ expandir'}</span>
         </div>
       </div>
-      <div style="display:none;padding:12px 14px">
+      <div style="display:${isOpen?'':'none'};padding:12px 14px">
         ${subs.map((sub, si) => {
           const nd = normaDe(sub);
           const subEsc = sub.replace(/'/g,"\\'");
@@ -13604,6 +13613,8 @@ function cfgSubDrop(ev) {
   const [moved] = arr.splice(from, 1);
   arr.splice(to, 0, moved);
   cfgSalvarServicos();
+  // Manter o serviço expandido após reordenar (evita fechar a aba)
+  _cfgOpenSvcs.add(svc);
   cfgRenderServicos();
 }
 function cfgSubDragEnd(ev) {
@@ -13631,6 +13642,115 @@ function cfgRemoverServico(servico) {
   cfgSalvarServicos();
   cfgRenderServicos();
   toast('Serviço removido', 'info');
+}
+
+// ═══ Exportação de Serviços/Subserviços com Normas e Descrições ═══
+function _cfgColetarServicos() {
+  const merged = { ...SUBCATEGORIAS, ...SERVICOS_CUSTOM };
+  const linhas = [];
+  Object.keys(merged).forEach(svc => {
+    if (SERVICOS_HIDDEN.includes(svc)) return;
+    const subs = merged[svc] || [];
+    if (!subs.length) {
+      linhas.push({ servico: svc, subservico: '', normas: '', descricao: '' });
+    } else {
+      subs.forEach(sub => {
+        const nd = (typeof normaDe === 'function') ? normaDe(sub) : { normas: '', descricao: '' };
+        linhas.push({
+          servico: svc,
+          subservico: sub,
+          normas: nd.normas || '',
+          descricao: nd.descricao || ''
+        });
+      });
+    }
+  });
+  return linhas;
+}
+
+function cfgExportarServicosCSV() {
+  const linhas = _cfgColetarServicos();
+  if (!linhas.length) { toast('Nenhum serviço para exportar', 'warning'); return; }
+  const esc = (v) => {
+    const s = String(v ?? '').replace(/"/g, '""');
+    return /[",;\n\r]/.test(s) ? `"${s}"` : s;
+  };
+  const header = ['Serviço', 'Subserviço', 'Normas', 'Descrição'];
+  const rows = [header.map(esc).join(';')];
+  linhas.forEach(l => rows.push([l.servico, l.subservico, l.normas, l.descricao].map(esc).join(';')));
+  // BOM UTF-8 para Excel reconhecer acentos
+  const csv = '﻿' + rows.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const hoje = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `servicos-normas-${hoje}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('CSV exportado ✅', 'success');
+}
+
+function cfgExportarServicosPDF() {
+  const linhas = _cfgColetarServicos();
+  if (!linhas.length) { toast('Nenhum serviço para exportar', 'warning'); return; }
+  const escHtml = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Agrupar por serviço
+  const grupos = {};
+  linhas.forEach(l => { (grupos[l.servico] = grupos[l.servico] || []).push(l); });
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const secoes = Object.keys(grupos).map(svc => {
+    const subs = grupos[svc];
+    const itens = subs.map(s => {
+      if (!s.subservico) return '<p style="color:#888;font-style:italic">— sem subserviços cadastrados —</p>';
+      return `
+        <div class="sub">
+          <div class="sub-titulo">${escHtml(s.subservico)}</div>
+          ${s.normas ? `<div class="sub-normas"><b>Normas:</b> ${escHtml(s.normas)}</div>` : ''}
+          ${s.descricao ? `<div class="sub-desc">${escHtml(s.descricao)}</div>` : ''}
+        </div>`;
+    }).join('');
+    return `<section class="svc">
+      <h2>${escHtml(svc)}</h2>
+      ${itens}
+    </section>`;
+  }).join('');
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Serviços, Normas e Descrições</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: Arial, Helvetica, sans-serif; color:#1f2937; font-size:11pt; line-height:1.45; }
+  h1 { color:#1a3c5e; font-size:18pt; margin:0 0 4px; }
+  .sub-header { color:#6b7280; font-size:9pt; margin-bottom:14px; border-bottom:1px solid #e5e7eb; padding-bottom:8px; }
+  section.svc { page-break-inside: avoid; margin-bottom:14px; }
+  section.svc h2 { background:#1a3c5e; color:#fff; font-size:12pt; padding:6px 10px; margin:10px 0 6px; border-radius:3px; }
+  .sub { padding:6px 10px; border-left:3px solid #2ec4a0; background:#f8fafc; margin:6px 0; }
+  .sub-titulo { font-weight:700; color:#1a3c5e; font-size:11pt; margin-bottom:2px; }
+  .sub-normas { color:#0f766e; font-size:10pt; margin:2px 0; }
+  .sub-desc { color:#374151; font-size:10pt; text-align:justify; }
+  .noprint { margin:12px 0; }
+  @media print { .noprint { display:none; } }
+</style></head><body>
+  <h1>Serviços, Normas e Descrições</h1>
+  <div class="sub-header">Gerado em ${hoje} · ${linhas.length} subserviço(s)</div>
+  <div class="noprint">
+    <button onclick="window.print()" style="padding:8px 14px;background:#1a3c5e;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11pt">🖨 Imprimir / Salvar como PDF</button>
+  </div>
+  ${secoes}
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Bloqueador de pop-ups impediu a exportação', 'error'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+  setTimeout(() => { try { win.focus(); win.print(); } catch(_){} }, 400);
+  toast('PDF pronto — use o diálogo de impressão para salvar ✅', 'success');
+}
+
+// Controle de quais serviços estão expandidos (preserva ao re-renderizar após drag & drop)
+let _cfgOpenSvcs = new Set();
+function cfgToggleSvcAberto(svc) {
+  if (_cfgOpenSvcs.has(svc)) _cfgOpenSvcs.delete(svc);
+  else _cfgOpenSvcs.add(svc);
 }
 
 // Renderizar ao abrir config
@@ -16783,9 +16903,8 @@ function _prevExportarWordDocxLegacy() {
     }
   } catch(_){}
 
-  // Observações + Enquadramento Tributário (parte inferior)
-  const _enqTxtInf = (typeof _prevGetEnquadramentoTexto === 'function') ? _prevGetEnquadramentoTexto() : '';
-  const _obsFinal  = [obsProp, _enqTxtInf].filter(Boolean).join('\n\n');
+  // Observações (o enquadramento já está no texto de obsProp via template — evita duplicação)
+  const _obsFinal = obsProp || '';
   if (_obsFinal) {
     bodyParts.push(heading('OBSERVAÇÕES / CONDIÇÕES GERAIS'));
     _obsFinal.split(/\n\n+/).forEach(par => {
@@ -19337,7 +19456,7 @@ function cliContatoAbrirNovo(tipo) {
   document.getElementById('contato-tipo').value = tipo;
   const titulos = { projetistas:'📐 Novo Projetista', representantes:'🤝 Novo Representante', outros:'📦 Novo Contato' };
   document.getElementById('modal-contato-titulo').textContent = titulos[tipo] || '+ Novo Contato';
-  ['cont-nome','cont-doc','cont-cargo','cont-fone','cont-email','cont-obs'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['cont-nome','cont-doc','cont-cargo','cont-pessoa','cont-fone','cont-email','cont-obs'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('cont-uf').value = '';
   if (typeof _contExtras !== 'undefined') { _contExtras = []; if (typeof contExtrasRender === 'function') contExtrasRender(); }
   // Mostrar campos condicionais
@@ -19348,6 +19467,8 @@ function cliContatoAbrirNovo(tipo) {
   if (tipo === 'representantes') {
     document.getElementById('cont-campo-val-label').textContent = 'Comissão (valor fixo ou %)';
   }
+  // Sincroniza visibilidade do campo "Nome da Pessoa" com o radio de tipo selecionado
+  if (typeof contTipoPessoaChanged === 'function') contTipoPessoaChanged();
   openModal('modal-novo-contato');
 }
 
@@ -19359,6 +19480,7 @@ function cliContatoEditar(tipo, idx) {
   document.getElementById('cont-nome').value  = c.nome  || '';
   document.getElementById('cont-doc').value   = c.doc   || '';
   if (document.getElementById('cont-cargo')) document.getElementById('cont-cargo').value = c.cargo || '';
+  if (document.getElementById('cont-pessoa')) document.getElementById('cont-pessoa').value = c.pessoa || '';
   document.getElementById('cont-fone').value  = c.fone  || '';
   document.getElementById('cont-email').value = c.email || '';
   document.getElementById('cont-uf').value    = c.uf    || '';
@@ -19383,19 +19505,27 @@ function contTipoPessoaChanged() {
   const docLabel = document.getElementById('cont-doc-label');
   const docInput = document.getElementById('cont-doc');
   const feedback = document.getElementById('cont-doc-feedback');
+  const pessoaWrap = document.getElementById('cont-pessoa-wrap');
+  const pessoaInput = document.getElementById('cont-pessoa');
   if (feedback) feedback.innerHTML = '';
-  
+
   if (tipo === 'nome') {
     if (docWrap) docWrap.style.display = 'none';
     if (docInput) docInput.value = '';
+    if (pessoaWrap) pessoaWrap.style.display = 'none';
+    if (pessoaInput) pessoaInput.value = '';
   } else {
     if (docWrap) docWrap.style.display = '';
     if (tipo === 'cnpj') {
       if (docLabel) docLabel.textContent = 'CNPJ';
       if (docInput) { docInput.placeholder = '00.000.000/0000-00'; docInput.value = ''; }
+      if (pessoaWrap) pessoaWrap.style.display = '';
     } else {
       if (docLabel) docLabel.textContent = 'CPF';
       if (docInput) { docInput.placeholder = '000.000.000-00'; docInput.value = ''; }
+      // CPF já é pessoa física — campo "Nome da Pessoa" é redundante
+      if (pessoaWrap) pessoaWrap.style.display = 'none';
+      if (pessoaInput) pessoaInput.value = '';
     }
   }
 }
@@ -19543,6 +19673,7 @@ function contSalvar() {
     doc,
     tipoPessoa,
     cargo:     document.getElementById('cont-cargo')?.value     || '',
+    pessoa:    document.getElementById('cont-pessoa')?.value    || '',
     fone:      document.getElementById('cont-fone')?.value      || '',
     email:     document.getElementById('cont-email')?.value     || '',
     uf:        document.getElementById('cont-uf')?.value        || '',
@@ -21547,7 +21678,7 @@ function _contPopularTiposCliente(valorAtual) {
 function cliCadastrarCliente() {
   document.getElementById('contato-tipo').value = 'outros';
   document.getElementById('modal-contato-titulo').textContent = '🏢 Novo Cliente';
-  ['cont-nome','cont-doc','cont-cargo','cont-fone','cont-email','cont-obs','cont-cidade','cont-atividade'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  ['cont-nome','cont-doc','cont-cargo','cont-pessoa','cont-fone','cont-email','cont-obs','cont-cidade','cont-atividade'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('cont-uf').value = '';
   document.getElementById('cont-campo-esp-wrap').style.display = 'none';
   document.getElementById('cont-campo-val-wrap').style.display = 'none';
@@ -21556,6 +21687,8 @@ function cliCadastrarCliente() {
   _contPopularTiposCliente();
   _contExtras = [];
   contExtrasRender();
+  // Garantir visibilidade correta do campo "Nome da Pessoa" conforme tipo selecionado
+  if (typeof contTipoPessoaChanged === 'function') contTipoPessoaChanged();
   document.getElementById('modal-novo-contato').dataset.editIdx = '-1';
   openModal('modal-novo-contato');
 }
