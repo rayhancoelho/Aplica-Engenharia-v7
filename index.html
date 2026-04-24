@@ -4767,6 +4767,13 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                     <label class="form-label">Pedágio + Alim. + Hosp. (R$)</label>
                     <input type="number" class="form-control" id="calc-extras" value="0" oninput="calcRecalcular()">
                   </div>
+                  <div class="form-group" style="grid-column:1/-1">
+                    <label class="form-label">🗺️ Link das Rotas (Google Maps / Waze) <span style="color:var(--text3);font-size:10px">— uso interno, não aparece na proposta</span></label>
+                    <div style="display:flex;gap:6px">
+                      <input type="url" class="form-control" id="calc-rota-link" placeholder="https://maps.app.goo.gl/... ou https://waze.com/..." oninput="localStorage.setItem('calc_rota_'+(document.getElementById('calc-id-proposta')?.value||'atual'), this.value)">
+                      <button type="button" class="btn btn-ghost" onclick="{const u=document.getElementById('calc-rota-link').value.trim();if(u)window.open(u,'_blank');else toast('Informe o link da rota','warning');}" style="white-space:nowrap">Abrir</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -6247,6 +6254,15 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             </label>
           </div>
         </div>
+        <div class="form-group" style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gold);cursor:pointer;font-weight:600">
+            <input type="checkbox" id="rev-subir" checked style="accent-color:var(--gold);width:16px;height:16px">
+            ⬆️ Subir esta revisão no CRM (incrementa Nº da revisão e atualiza valor na proposta)
+          </label>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;padding-left:24px">
+            Desmarque para salvar apenas no histórico sem alterar a proposta original (solicitação de revisão pelo cliente).
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -7603,6 +7619,8 @@ async function _saveProposta(row, prefix) {
   saveDataLocal();
   window._lastSavedPropId = idProp;
   window._lastSavedRazao = row[2] || '';
+  // Proposta salva — limpar rascunho "atual" para não puxar dados antigos na próxima nova
+  try { localStorage.removeItem('np_draft_atual'); } catch(_){}
 
   // Persistir calcBlocos e prevItens
   if (idProp && typeof calcBlocos !== 'undefined' && calcBlocos.length && calcBlocos.some(b => b.itens?.some(it => it.desc))) {
@@ -8603,6 +8621,9 @@ function calcVincularProposta(silencioso) {
     if (el3) {
       [...el3.options].forEach(o => { o.selected = o.value === servico; });
     }
+    // Carregar link de rotas salvo para esta proposta
+    const elRota = document.getElementById('calc-rota-link');
+    if (elRota) elRota.value = localStorage.getItem('calc_rota_' + id) || '';
     if (!silencioso) toast('Proposta #' + id + ' vinculada ✅', 'success');
     // NÃO auto-carregar subcategorias — user controla no Step 1
     // calcCarregarSubcategorias só deve ser chamado pelo botão "⟳ Do Serviço"
@@ -9427,7 +9448,7 @@ function prevAtualizar() {
     }
   });
 
-  const normasLista = [...normasSet].filter(Boolean);
+  const normasLista = _ordenarNormas([...normasSet].filter(Boolean));
 
   const secaoNormas = showNormas && normasLista.length ? `
     <div class="prev-section" style="margin-bottom:16px">
@@ -9493,7 +9514,7 @@ function prevAtualizar() {
           <div>
             <div style="font-size:9px;color:#6b7280;letter-spacing:0.5px">GEAD APLICA ENGENHARIA LTDA</div>
             <div style="font-size:9px;color:#9ca3af;line-height:1.6;margin-top:2px">
-              CNPJ: 39.725.915/0001-08 · ${cidade}<br>
+              CNPJ: 39.725.915/0001-08${(document.getElementById('cad-ie')?.value||'').trim() ? ' · IM: ' + (document.getElementById('cad-ie').value.trim()) : ''} · ${cidade}<br>
               ${tel} · ${emailEmp}
             </div>
           </div>
@@ -9535,7 +9556,7 @@ function prevAtualizar() {
         ${secaoNormas ? `<div style="margin-bottom:16px">
           <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Normas e Documentos de Referência</div>
           <div style="font-size:10px;color:#374151;line-height:2;columns:2;gap:20px">
-            ${[...normasSet].filter(Boolean).map(n => `<div>▸ ${n}</div>`).join('')}
+            ${_ordenarNormas([...normasSet].filter(Boolean)).map(n => `<div>▸ ${n}</div>`).join('')}
           </div>
         </div>` : ''}
 
@@ -9927,6 +9948,7 @@ function prevSalvarRevisao() {
 ═══════════════════════════════════════════ */
 // Cache local de revisões (também salva no Sheets aba HISTORICO_PROPOSTAS)
 let DATA_revisoes = [];
+try { DATA_revisoes = JSON.parse(localStorage.getItem('revisoes_data') || '[]'); } catch(_){ DATA_revisoes = []; }
 
 function renderRevisoes(filtro = '') {
   const container = document.getElementById('revisoes-list');
@@ -9957,6 +9979,10 @@ function renderRevisoes(filtro = '') {
         <span class="badge ${statusBadge[rev.status]||'badge-dim'}">${rev.status||'—'}</span>
       </div>
       <div class="revisao-desc">${rev.motivo || 'Sem descrição'}</div>
+      ${(rev.campos_alterados && rev.campos_alterados.length) ? `<div style="margin:6px 0;display:flex;gap:4px;flex-wrap:wrap">
+        ${rev.campos_alterados.map(c => `<span class="badge badge-steel" style="font-size:10px">${c}</span>`).join('')}
+      </div>` : ''}
+      ${rev.subir === false ? `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">📁 <em>Apenas histórico — não subida no CRM</em></div>` : ''}
       <div class="revisao-valores">
         <div class="rv-item">
           <span class="rv-label">Valor Anterior</span>
@@ -10002,6 +10028,19 @@ async function salvarRevisao() {
 
   if (!idProp) { toast('Informe o ID da proposta', 'warning'); return; }
 
+  const subir = document.getElementById('rev-subir')?.checked !== false; // default true
+  const altServicos = document.getElementById('rev-alt-servicos')?.checked || false;
+  const altValor    = document.getElementById('rev-alt-valor')?.checked || false;
+  const altPagto    = document.getElementById('rev-alt-pagamento')?.checked || false;
+  const altPrazo    = document.getElementById('rev-alt-prazo')?.checked || false;
+  const altEscopo   = document.getElementById('rev-alt-escopo')?.checked || false;
+  const altOutro    = document.getElementById('rev-alt-outro')?.checked || false;
+  const camposAlterados = [
+    altServicos && 'Serviços', altValor && 'Valor', altPagto && 'Pagamento',
+    altPrazo && 'Prazo', altEscopo && 'Escopo', altOutro && 'Outro'
+  ].filter(Boolean);
+  const delta = valAnt > 0 ? ((valNovo - valAnt) / valAnt * 100) : 0;
+
   const rev = {
     proposta: idProp,
     cliente,
@@ -10010,10 +10049,16 @@ async function salvarRevisao() {
     val_ant:  valAnt,
     val_novo: valNovo,
     motivo,
+    subir,
+    campos_alterados: camposAlterados,
+    delta_pct: Number(delta.toFixed(2)),
+    delta_abs: Number((valNovo - valAnt).toFixed(2)),
     data:     new Date().toLocaleDateString('pt-BR'),
+    ts:       Date.now(),
   };
 
   DATA_revisoes.push(rev);
+  try { localStorage.setItem('revisoes_data', JSON.stringify(DATA_revisoes)); } catch(_){}
 
   // Salvar no Sheets aba HISTORICO_PROPOSTAS
   if (CONFIG.APPS_SCRIPT_URL) {
@@ -10028,8 +10073,8 @@ async function salvarRevisao() {
     toast('Revisão salva', 'success');
   }
 
-  // Atualizar valor no CRM se o novo valor foi informado
-  if (valNovo > 0) {
+  // Atualizar valor no CRM SOMENTE se o user escolheu "subir" a revisão
+  if (subir && valNovo > 0) {
     const idx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === parseInt(idProp));
     if (idx >= 0) {
       DATA.crm[idx][CRM_COL.VALOR] = valNovo.toString();
@@ -10043,14 +10088,16 @@ async function salvarRevisao() {
       renderDashboardCRM(); renderCRMTable(); renderPipeline();
       toast(`💰 Valor da proposta #${idProp} atualizado para ${fmtMoney(valNovo)}`, 'success');
     }
+  } else if (!subir) {
+    toast('Revisão salva apenas no histórico (não subida no CRM)', 'info');
   }
 
   closeModal('modal-nova-revisao');
   renderRevisoes();
 
-  // Atualizar nº revisão no CRM (coluna REVISAO = 37)
+  // Atualizar nº revisão no CRM SOMENTE se "subir"
   const crmIdx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === parseInt(idProp));
-  if (crmIdx >= 0) {
+  if (subir && crmIdx >= 0) {
     DATA.crm[crmIdx][CRM_COL.REVISAO] = rev.num;
     // Atualizar nome composto com nº revisão se existir
     if (DATA.crm[crmIdx][5]) {
@@ -13411,6 +13458,26 @@ function normaSalvar(item, normas, descricao) {
   localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
 }
 
+// Ordena normas: ABNT primeiro, depois outras por nome, NR por último (alfa-numérico crescente).
+function _ordenarNormas(lista) {
+  const rank = n => {
+    const s = String(n||'').trim().toUpperCase();
+    if (/^NR[\s-]?\d/.test(s)) return 3;      // NR por último
+    if (s.startsWith('ABNT'))   return 1;     // ABNT primeiro
+    return 2;                                 // Demais no meio
+  };
+  const nrNum = n => {
+    const m = String(n||'').match(/NR[\s-]?(\d+)/i);
+    return m ? parseInt(m[1],10) : 0;
+  };
+  return lista.slice().sort((a,b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 3) return nrNum(a) - nrNum(b); // NR por número
+    return a.localeCompare(b, 'pt-BR', { numeric: true });
+  });
+}
+
 // ═══ GESTÃO DE SERVIÇOS E NORMAS (Configurações) ═══
 let SERVICOS_CUSTOM = JSON.parse(localStorage.getItem('servicos_custom') || '{}');
 let SERVICOS_HIDDEN = JSON.parse(localStorage.getItem('servicos_hidden') || '[]');
@@ -14135,8 +14202,44 @@ function npRemoveContato(i) {
 }
 
 // ── SERVIÇOS MÚLTIPLOS + SUBCATEGORIAS ───────────────────
+function _npSalvarRascunhoAtual() {
+  try {
+    const chave = 'np_draft_atual';
+    const draft = {
+      idProp:   document.getElementById('np-id-prop')?.value || '',
+      servicos: npServicos,
+      contatos: npContatos,
+      razao:    document.getElementById('np-razao')?.value || '',
+      validade: document.getElementById('np-validade')?.value || '',
+      followup: document.getElementById('np-followup')?.value || '',
+      valor:    document.getElementById('np-valor')?.value || '',
+      ts: Date.now(),
+    };
+    localStorage.setItem(chave, JSON.stringify(draft));
+  } catch(_){}
+}
+function _npRestaurarRascunhoAtual() {
+  try {
+    const raw = localStorage.getItem('np_draft_atual');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    // Não sobrescrever se já há proposta em edição com dados carregados
+    const temPropCtx = PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.idProp;
+    const temServicos = npServicos.length && npServicos.some(s => s.servico);
+    if (temPropCtx || temServicos) return;
+    if (d.servicos && d.servicos.length) npServicos = d.servicos;
+    if (d.contatos && d.contatos.length) npContatos = d.contatos;
+    const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
+    set('np-id-prop', d.idProp);
+    set('np-razao',   d.razao);
+    set('np-validade',d.validade);
+    set('np-followup',d.followup);
+    set('np-valor',   d.valor);
+  } catch(_){}
+}
 function npRenderServicos() {
   const wrap = document.getElementById('np-servicos-wrap');
+  _npSalvarRascunhoAtual(); // persiste a cada render
   if (!wrap) return;
   // Mesclar serviços padrão com customizados
   const todosServicos = { ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
@@ -15432,7 +15535,7 @@ function npAbrirEdicaoProposta(idx) {
     municipio:  '',
     canal:      r[CRM_COL.CANAL]    || '',
     valor:      String(r[CRM_COL.VALOR] || '0'),
-    validade:   '',
+    validade:   r[CRM_COL.VALIDADE] || '',
     followup:   r[CRM_COL.FOLLOWUP] || '',
     status:     r[CRM_COL.STATUS]   || 'Em prospecção',
     obs:        r[CRM_COL.OBS]      || '',
@@ -15459,6 +15562,10 @@ function npAbrirEdicaoProposta(idx) {
     set('np-fantasia', PROPOSTA_CONTEXTO.fantasia);
     set('np-endereco', PROPOSTA_CONTEXTO.endereco);
     set('np-valor',    PROPOSTA_CONTEXTO.valor);
+    // Datas: converter BR→ISO para input[type=date]
+    const _toIso = v => { if (!v) return ''; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,10); const m = String(v).match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+    set('np-validade', _toIso(PROPOSTA_CONTEXTO.validade));
+    set('np-followup', _toIso(PROPOSTA_CONTEXTO.followup));
     set('np-obs',      PROPOSTA_CONTEXTO.obs);
     // Nome proposta e pessoa responsável
     const nomeComp = r[5] || '';
@@ -15944,19 +16051,114 @@ function renderGraficosClientes(clientes) {
 }
 
 function cliVerDetalhe(chave) {
-  // Abrir modal ou filtrar CRM por este cliente
+  const chaveClean = (chave||'').replace(/[.\-\/\s]/g,'');
+  // 1) Buscar no CRM
   const row = DATA.crm.find(r => {
     const cnpj = (r[CRM_COL.CNPJ]||'').replace(/[.\-\/\s]/g,'');
-    const chaveClean = (chave||'').replace(/[.\-\/\s]/g,'');
     return cnpj === chaveClean || r[CRM_COL.RAZAO] === chave;
   });
-  if (!row) { toast('Cliente não encontrado no CRM', 'warning'); return; }
-  // Ir para CRM já filtrado
-  const searchEl = document.getElementById('crm-search');
-  if (searchEl) searchEl.value = row[CRM_COL.RAZAO] || chave;
-  filterCRM();
-  nav('crm');
-  toast(`Mostrando propostas de ${row[CRM_COL.RAZAO] || chave}`, 'info');
+  // 2) Buscar em CONTATOS.outros (clientes sem proposta)
+  const contato = (typeof CONTATOS !== 'undefined' && CONTATOS.outros)
+    ? CONTATOS.outros.find(c => {
+        const doc = (c.doc||'').replace(/[.\-\/\s]/g,'');
+        return doc === chaveClean || c.nome === chave;
+      })
+    : null;
+  if (!row && !contato) { toast('Cliente não encontrado', 'warning'); return; }
+  _cliAbrirModalDetalhe(chave, row, contato);
+}
+
+function _cliAbrirModalDetalhe(chave, crmRow, contato) {
+  const nome  = crmRow ? (crmRow[CRM_COL.RAZAO] || '—') : (contato?.nome || chave);
+  const cnpj  = crmRow ? (crmRow[CRM_COL.CNPJ]  || '—') : (contato?.doc  || '—');
+  const fant  = crmRow ? (crmRow[CRM_COL.FANTASIA] || '') : '';
+  const end   = crmRow ? (crmRow[CRM_COL.ENDERECO] || '') : (contato?.endereco || '');
+  const cont  = crmRow ? (crmRow[CRM_COL.CONTATO]  || '') : (contato?.nomeContato || contato?.nome || '');
+  const fone  = crmRow ? (crmRow[CRM_COL.FONE]     || '') : (contato?.telefone || '');
+  const mail  = crmRow ? (crmRow[CRM_COL.EMAIL]    || '') : (contato?.email || '');
+  const propostas = crmRow ? DATA.crm.filter(r => r[CRM_COL.RAZAO] === nome || r[CRM_COL.CNPJ] === cnpj) : [];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open'; overlay.style.zIndex = '9999';
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  overlay.innerHTML = `<div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <div class="modal-title">👤 ${esc(nome)}</div>
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Razão Social / Nome</label><input class="form-control" id="cliedit-razao" value="${esc(nome)}"></div>
+        <div class="form-group"><label class="form-label">CNPJ / CPF</label><input class="form-control" id="cliedit-cnpj" value="${esc(cnpj!=='—'?cnpj:'')}"></div>
+        <div class="form-group"><label class="form-label">Nome Fantasia</label><input class="form-control" id="cliedit-fant" value="${esc(fant)}"></div>
+        <div class="form-group"><label class="form-label">Contato Principal</label><input class="form-control" id="cliedit-contato" value="${esc(cont)}"></div>
+        <div class="form-group"><label class="form-label">Telefone</label><input class="form-control" id="cliedit-fone" value="${esc(fone)}"></div>
+        <div class="form-group"><label class="form-label">E-mail</label><input class="form-control" id="cliedit-email" value="${esc(mail)}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Endereço</label><input class="form-control" id="cliedit-end" value="${esc(end)}"></div>
+      </div>
+      ${propostas.length ? `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Propostas (${propostas.length})</div>
+        ${propostas.map(r => `<div style="padding:6px 8px;margin-bottom:4px;background:var(--s3);border-radius:6px;font-size:12px;display:flex;justify-content:space-between">
+          <span>#${r[CRM_COL.ID]||'?'} · ${esc((r[CRM_COL.SERVICO]||'').slice(0,40))}</span>
+          <span style="color:var(--teal);font-weight:700">${fmtMoney(parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.'))||0)}</span>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
+      ${propostas.length ? `<button class="btn" onclick="(function(){document.getElementById('crm-search').value='${esc(nome).replace(/'/g,"\\'")}';filterCRM();nav('crm');document.querySelector('.modal-overlay.open')?.remove();})()">Ver Propostas →</button>` : ''}
+      <button class="btn btn-primary" onclick="_cliSalvarEdicao('${esc(chave).replace(/'/g,"\\'")}')">💾 Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function _cliSalvarEdicao(chaveOrig) {
+  const v = id => document.getElementById(id)?.value || '';
+  const novo = {
+    razao: v('cliedit-razao').trim(),
+    cnpj:  v('cliedit-cnpj').trim(),
+    fant:  v('cliedit-fant').trim(),
+    contato: v('cliedit-contato').trim(),
+    fone:  v('cliedit-fone').trim(),
+    email: v('cliedit-email').trim(),
+    end:   v('cliedit-end').trim(),
+  };
+  if (!novo.razao) { toast('Razão Social / Nome obrigatório', 'warning'); return; }
+  const chaveClean = (chaveOrig||'').replace(/[.\-\/\s]/g,'');
+  // Atualizar TODAS as linhas do CRM desse cliente
+  let alterou = 0;
+  DATA.crm.forEach(r => {
+    const cClean = (r[CRM_COL.CNPJ]||'').replace(/[.\-\/\s]/g,'');
+    if (cClean === chaveClean || r[CRM_COL.RAZAO] === chaveOrig) {
+      r[CRM_COL.RAZAO]   = novo.razao;
+      if (novo.cnpj)     r[CRM_COL.CNPJ]     = novo.cnpj;
+      if (novo.fant)     r[CRM_COL.FANTASIA] = novo.fant;
+      if (novo.contato)  r[CRM_COL.CONTATO]  = novo.contato;
+      if (novo.fone)     r[CRM_COL.FONE]     = novo.fone;
+      if (novo.email)    r[CRM_COL.EMAIL]    = novo.email;
+      if (novo.end)      r[CRM_COL.ENDERECO] = novo.end;
+      alterou++;
+    }
+  });
+  // Atualizar CONTATOS.outros
+  if (typeof CONTATOS !== 'undefined' && CONTATOS.outros) {
+    CONTATOS.outros.forEach(c => {
+      const doc = (c.doc||'').replace(/[.\-\/\s]/g,'');
+      if (doc === chaveClean || c.nome === chaveOrig) {
+        c.nome     = novo.razao;
+        if (novo.cnpj)  c.doc      = novo.cnpj;
+        if (novo.fone)  c.telefone = novo.fone;
+        if (novo.email) c.email    = novo.email;
+        if (novo.end)   c.endereco = novo.end;
+      }
+    });
+    try { localStorage.setItem('contatos_data', JSON.stringify(CONTATOS)); } catch(_){}
+  }
+  saveDataLocal();
+  document.querySelector('.modal-overlay.open')?.remove();
+  renderClientesV2();
+  renderCRMTable && renderCRMTable();
+  toast(`Cliente atualizado (${alterou} registro${alterou!==1?'s':''})`, 'success');
 }
 
 // Override renderClientesTable para usar nova versão
@@ -16526,7 +16728,7 @@ function _prevExportarWordDocxLegacy() {
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
     if (nd.descricao) descritivos.push({ nome, texto: nd.descricao });
   });
-  const normasLista = [...normasSet].filter(Boolean);
+  const normasLista = _ordenarNormas([...normasSet].filter(Boolean));
 
   // Helper para parágrafo Word
   const para = (text, opts = {}) => {
@@ -16596,7 +16798,7 @@ function _prevExportarWordDocxLegacy() {
   const headerLeftLines = [
     logoDrawing,
     `<w:p><w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="1a3c5e"/></w:rPr><w:t>GEAD APLICA ENGENHARIA LTDA</w:t></w:r></w:p>`,
-    `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">CNPJ: 39.725.915/0001-08 · ${esc(cidade)}</w:t></w:r></w:p>`,
+    `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">CNPJ: 39.725.915/0001-08${(document.getElementById('cad-ie')?.value||'').trim() ? ' · IM: ' + esc(document.getElementById('cad-ie').value.trim()) : ''} · ${esc(cidade)}</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
   ].join('');
   const headerRightLines = [
@@ -16697,7 +16899,11 @@ function _prevExportarWordDocxLegacy() {
         if (sm) sm[1].split(',').forEach(s => { _gSubToSvc[s.trim()] = nome; });
         else _gSubToSvc[nome] = nome;
       });
-      if (_gServicos.length > 1) {
+      // Detecta multi-tabela usando blocos/prevItens.bloco além de _gServicos
+      const _gBlocoNames = (calcBlocos||[]).filter(b => (b.itens||[]).some(it => it.desc)).map(b => b.nome || b.servico || '').filter(Boolean);
+      const _gBlocoSet = new Set(prevItens.map(it => it.bloco).filter(Boolean));
+      const _gMulti = _gServicos.length > 1 || _gBlocoNames.length > 1 || _gBlocoSet.size > 1;
+      if (_gMulti) {
         const grupos = {};
         const ordemSvc = [];
         prevItens.forEach(it => {
@@ -18702,6 +18908,8 @@ function notifMarcarLida(chave) {
     _notifsLidas.push(chave);
     localStorage.setItem('notifs_lidas_' + new Date().toISOString().split('T')[0], JSON.stringify(_notifsLidas));
   }
+  // Re-render badges globais (sino + "Propostas CRM") para consistência visual
+  try { if (typeof updateBadges === 'function') updateBadges(); } catch(_){}
 }
 function notifClicar(page, chave) {
   notifMarcarLida(chave);
@@ -18709,6 +18917,23 @@ function notifClicar(page, chave) {
   notifToggle();
   // Atualizar badge imediatamente
   setTimeout(notifAtualizarBadge, 100);
+}
+// Concluir = remover a causa-raiz da notificação (ex: limpar follow-up, marcar despesa paga).
+// Aceita chave + tipo/dados básicos serializados no DOM.
+function notifConcluir(chave, tipo, ref) {
+  if (tipo === 'followup' && ref) {
+    // Limpar follow-up do CRM
+    const idx = DATA.crm.findIndex(r => String(r[CRM_COL.ID]) === String(ref));
+    if (idx >= 0) { DATA.crm[idx][CRM_COL.FOLLOWUP] = ''; saveDataLocal(); toast('Follow-up concluído ✅', 'success'); }
+  } else if (tipo === 'despesa' && ref !== undefined) {
+    const i = parseInt(ref, 10);
+    if (!isNaN(i) && DATA.despesas && DATA.despesas[i]) {
+      DATA.despesas[i][5] = 'Pago'; saveDataLocal(); toast('Despesa marcada como paga ✅', 'success');
+    }
+  }
+  notifMarcarLida(chave);
+  try { notifAtualizar(); } catch(_){}
+  try { renderAllPages(); } catch(_){}
 }
 function notifAtualizarBadge() {
   const badge = document.getElementById('notif-badge');
@@ -18741,12 +18966,13 @@ function notifAtualizar() {
     const diff = Math.floor((d - hoje) / 86400000);
     const cliente = r[CRM_COL.RAZAO] || r[CRM_COL.FANTASIA] || '—';
     const canal = r[CRM_COL.CANAL] || 'WhatsApp';
+    const propRef = r[CRM_COL.ID];
     if (diff < 0)
-      notifs.push({ tipo: 'coral', icone: '🔴', msg: `Follow-up ATRASADO: <b>${cliente}</b>`, sub: `${Math.abs(diff)}d atrás · ${canal}`, page: 'crm' });
+      notifs.push({ tipo: 'coral', icone: '🔴', msg: `Follow-up ATRASADO: <b>${cliente}</b>`, sub: `${Math.abs(diff)}d atrás · ${canal}`, page: 'crm', concluirTipo: 'followup', concluirRef: propRef });
     else if (diff === 0)
-      notifs.push({ tipo: 'gold', icone: '🟡', msg: `Follow-up HOJE: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm' });
+      notifs.push({ tipo: 'gold', icone: '🟡', msg: `Follow-up HOJE: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm', concluirTipo: 'followup', concluirRef: propRef });
     else if (diff <= 2)
-      notifs.push({ tipo: 'steel', icone: '🔵', msg: `Follow-up em ${diff}d: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm' });
+      notifs.push({ tipo: 'steel', icone: '🔵', msg: `Follow-up em ${diff}d: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm', concluirTipo: 'followup', concluirRef: propRef });
   });
 
   // Projetos urgentes
@@ -18928,6 +19154,7 @@ function notifAtualizar() {
       <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
         ${n.email ? `<button onclick="event.stopPropagation();notifEnviarFollowUp('${(n.emailTo||'').replace(/'/g,'\\\'')}','${(n.emailCliente||'').replace(/'/g,'\\\'')}','${(n.emailContato||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--teal);color:var(--teal)">📧 Email</button>` : ''}
         ${n.agenda ? `<button onclick="event.stopPropagation();notifAgendarEvento('${(n.agendaDesc||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--steel);color:var(--steel)">📅 Agendar</button>` : ''}
+        ${n.concluirTipo ? `<button onclick="event.stopPropagation();notifConcluir('${n._chave.replace(/'/g,"\\'")}','${n.concluirTipo}','${String(n.concluirRef||'').replace(/'/g,"\\'")}');this.closest('[data-notif-key]').remove();" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--green);color:var(--green);font-weight:700" title="Concluir e remover da lista">✓ Concluir</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -19087,6 +19314,11 @@ function npGetFollowupCanal() {
 }
 
 function notifEnviarFollowUp(email, cliente, contato) {
+  // Se não temos e-mail, tenta resolver a partir do contato principal cadastrado
+  if (!email && contato) {
+    const cRow = (DATA.contatos || []).find(c => (c[CT.NOME]||'').trim() === (contato||'').trim());
+    if (cRow && cRow[CT.EMAIL]) email = cRow[CT.EMAIL];
+  }
   if (!email) { toast('E-mail do cliente não cadastrado', 'warning'); return; }
   // Saudação conforme horário
   const h = new Date().getHours();
@@ -19098,11 +19330,14 @@ function notifEnviarFollowUp(email, cliente, contato) {
   const body = encodeURIComponent(
     `${saud}${primeiroNome ? ', ' + primeiroNome : ''}, tudo bem?\n\n` +
     `Espero que esteja bem. Gostaria de dar continuidade à nossa proposta técnica enviada recentemente.\n\n` +
-    `Caso tenha alguma dúvida ou precise de ajustes, estou à disposição.\n\n` +
+    `Caso tenha alguma dúvida ou precise de ajustes, estou à disposição para agendar uma conversa.\n\n` +
     `Aguardo seu retorno.\n\n` +
     `Atenciosamente,`
   );
-  window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
+  // CC no e-mail cadastrado (From da empresa) para ficar no histórico
+  const ccEmp = (document.getElementById('cad-email')?.value || '').trim();
+  const cc = ccEmp ? `&cc=${encodeURIComponent(ccEmp)}` : '';
+  window.open(`mailto:${email}?subject=${subject}${cc}&body=${body}`, '_blank');
   toast('E-mail de follow-up aberto ✅', 'success');
   notifToggle();
 }
@@ -19910,6 +20145,10 @@ setTimeout(npUnifiedInit, 2000);
 function npGoStep(step) {
   npUnifiedInit(); // Garantir que conteúdo foi movido
   _npCurrentStep = step;
+  // Ao voltar para Step 1 sem proposta salva, restaurar rascunho (serviços/contatos)
+  if (step === 1) {
+    try { _npRestaurarRascunhoAtual(); if (typeof npRenderServicos === 'function') setTimeout(npRenderServicos, 30); } catch(_){}
+  }
   // Toggle step content
   for (let i = 1; i <= 3; i++) {
     const el = document.getElementById('np-step-' + i);
@@ -19928,8 +20167,11 @@ function npGoStep(step) {
   if (step === 1 || step === 2 || step === 3) {
     const idField = document.getElementById('np-id-prop');
     const razaoField = document.getElementById('np-razao');
-    if ((!idField?.value || !razaoField?.value) && window._lastSavedPropId) {
-      const pid = window._lastSavedPropId;
+    // Preferir o ID do contexto de edição; só cair para _lastSavedPropId se não houver
+    const _pidCtx = (PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : '';
+    const _pidRestore = _pidCtx || window._lastSavedPropId;
+    if ((!idField?.value || !razaoField?.value) && _pidRestore) {
+      const pid = _pidRestore;
       const crmRow = DATA.crm.find(r => String(r[CRM_COL.ID]) === String(pid));
       if (crmRow) {
         const restore = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
@@ -19956,8 +20198,12 @@ function npGoStep(step) {
   }
 
   if (step === 2) {
-    // Pegar ID — do campo, do último salvo, ou do contexto
-    const idProp = document.getElementById('np-id-prop')?.value || window._lastSavedPropId || (PROPOSTA_CONTEXTO||{}).idProp || '';
+    // Garantir que seção de custos/comissão esteja presente ao abrir o Step 2
+    try { if (typeof _npInjectCustosOcultos === 'function') _npInjectCustosOcultos(); } catch(_){}
+    // Pegar ID — prioridade: campo → contexto (se editando) → último salvo → contexto
+    // (evita puxar dados da última proposta salva quando user está revisando outra)
+    const _ctxEdit = (PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : '';
+    const idProp = document.getElementById('np-id-prop')?.value || _ctxEdit || window._lastSavedPropId || (PROPOSTA_CONTEXTO||{}).idProp || '';
     
     // Pegar dados do Step 1 — do campo OU do CRM OU do snapshot
     let razao = document.getElementById('np-razao')?.value || '';
@@ -20116,8 +20362,9 @@ function npGoStep(step) {
       else prevModo.value = 'por-item';
     }
 
-    // Pegar ID: campo > último salvo > contexto
-    let idProp = document.getElementById('np-id-prop')?.value || window._lastSavedPropId || '';
+    // Pegar ID: campo > contexto (se editando) > último salvo
+    const _ctxEdit3 = (PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : '';
+    let idProp = document.getElementById('np-id-prop')?.value || _ctxEdit3 || window._lastSavedPropId || '';
     
     // Restaurar ID no campo se vazio
     if (idProp && !document.getElementById('np-id-prop')?.value) {
@@ -23036,9 +23283,13 @@ function execExportarDocs() {
 let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[]');
 
 // Injetar seção de itens ocultos no FINAL da Calculadora (Step 2)
-setTimeout(() => {
+// Envolvido em função reusável — chamada em DOMContentLoaded E em npGoStep(2)
+// para garantir que nunca "some" caso o conteúdo do step 2 seja re-renderizado.
+function _npInjectCustosOcultos() {
   const calcPage = document.getElementById('np-step-2');
   if (!calcPage) return;
+  // Se já existe, não duplicar
+  if (document.getElementById('np-itens-ocultos-wrap')) { npRenderItensOcultos(); return; }
 
   const ocultosDiv = document.createElement('div');
   ocultosDiv.className = 'card';
@@ -23076,7 +23327,11 @@ setTimeout(() => {
   `;
   calcPage.appendChild(ocultosDiv);
   npRenderItensOcultos();
-}, 2000);
+}
+// Inject inicial + retries para cobrir qualquer race condition
+setTimeout(_npInjectCustosOcultos, 500);
+setTimeout(_npInjectCustosOcultos, 2000);
+setTimeout(_npInjectCustosOcultos, 4000);
 
 function _saveItensOcultos() { localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS)); }
 
