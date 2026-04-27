@@ -22580,9 +22580,17 @@ function npUsarPropostaExistente() {
     const nomes = Object.keys(merged).filter(k => !hidden.includes(k)).sort();
     selSvc.innerHTML = '<option value="">Todos os serviços principais</option>' + nomes.map(n => `<option>${n}</option>`).join('');
   }
-  npAtualizarFiltroSubservico();
-  npFiltrarPropostasExistentes();
-  openModal('modal-usar-proposta');
+  try { npAtualizarFiltroSubservico(); } catch(e){ console.warn('npAtualizarFiltroSubservico:', e); }
+  try { npFiltrarPropostasExistentes(); } catch(e){ console.warn('npFiltrarPropostasExistentes:', e); }
+  const _modal = document.getElementById('modal-usar-proposta');
+  if (!_modal) { toast('Modal de duplicação não encontrado no HTML', 'error'); console.error('modal-usar-proposta não existe'); return; }
+  try { openModal('modal-usar-proposta'); } catch(e){ console.error('openModal falhou:', e); }
+  // Fallback caso openModal não exista ou falhe
+  if (_modal && !_modal.classList.contains('open')) {
+    _modal.style.display = 'flex';
+    _modal.classList.add('open');
+  }
+  console.log('[npUsarPropostaExistente] modal aberto. Propostas no CRM:', (DATA?.crm||[]).length);
 }
 
 function npAtualizarFiltroSubservico() {
@@ -22708,28 +22716,37 @@ function npFiltrarPropostasExistentes() {
 }
 
 function npDuplicarProposta(idx) {
-  const r = DATA.crm[idx];
-  if (!r) { toast('Proposta não encontrada para duplicar', 'warning'); return; }
+  console.log('[npDuplicarProposta] chamada com idx =', idx);
+  const r = (typeof DATA !== 'undefined' && DATA.crm) ? DATA.crm[idx] : null;
+  if (!r) { toast('Proposta não encontrada para duplicar (idx=' + idx + ')', 'warning'); return; }
+
+  toast('⏳ Duplicando proposta…', 'info');
 
   const el = id => document.getElementById(id);
-  closeModal('modal-usar-proposta');
+  try { closeModal('modal-usar-proposta'); } catch(_){}
 
   // Resetar TUDO — usuário pode estar editando outra proposta no momento
   try { PROPOSTA_CONTEXTO = {}; localStorage.removeItem('proposta_ctx'); } catch(_){}
   window._lastSavedPropId = null;
   window._calcBlocosJaCarregados = false;
+  window._calcBlocosOwner = null;
+  // Forçar Step 1 ANTES de qualquer nav (senão unified nav vai pra step anterior)
+  try { window._npCurrentStep = 1; } catch(_){}
   if (typeof npServicos !== 'undefined') npServicos = [{ servico: '', subcats: [] }];
   if (typeof npContatos !== 'undefined') npContatos = [];
   if (typeof calcBlocos !== 'undefined') calcBlocos = [];
   if (typeof prevItens !== 'undefined') prevItens = [];
   if (typeof prevIdxCRM !== 'undefined') prevIdxCRM = null;
   if (typeof NP_ITENS_OCULTOS !== 'undefined') NP_ITENS_OCULTOS.length = 0;
-  if (typeof clearForm === 'function') { try { clearForm(); } catch(_){} }
+  if (typeof clearForm === 'function') { try { clearForm(); } catch(e){ console.warn('clearForm falhou:', e); } }
 
-  nav('nova-proposta-page');
+  // Navegar (mesmo se já estiver na página)
+  try { nav('nova-proposta-page'); } catch(e){ console.warn('nav falhou:', e); }
+  // Garantir que vai pro Step 1
+  setTimeout(() => { try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){} }, 100);
 
   setTimeout(() => {
-    if (typeof npGoStep === 'function') npGoStep(1);
+    try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){}
     // Gerar novo ID (forçando — descarta qualquer ID herdado)
     const idEl = el('np-id-prop');
     if (idEl) idEl.value = '';
@@ -22823,13 +22840,18 @@ function npDuplicarProposta(idx) {
     if (el('np-obs')) el('np-obs').value = obsClean;
 
     // Atualizar nome composto
-    if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto();
+    try { if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto(); } catch(_){}
 
-    // Ir para Step 1
-    if (typeof npGoStep === 'function') npGoStep(1);
+    // Ir para Step 1 (terceira garantia)
+    try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){}
 
-    toast('✅ Proposta #' + (r[CRM_COL.ID]||'') + ' duplicada com todos os dados! Ajuste o que precisar e salve.', 'success');
-  }, 400);
+    // Re-render visual de contatos e serviços (garantir UI sincronizada com os arrays)
+    try { if (typeof npRenderContatos === 'function') npRenderContatos(); } catch(_){}
+    try { if (typeof npRenderServicos === 'function') npRenderServicos(); } catch(_){}
+
+    toast('✅ Proposta #' + (r[CRM_COL.ID]||'') + ' duplicada! Novo ID: ' + (document.getElementById('np-id-prop')?.value||'?') + '. Ajuste e salve.', 'success');
+    console.log('[npDuplicarProposta] concluído. Razão copiada:', r[CRM_COL.RAZAO]);
+  }, 600);
 }
 
 // ══════════════════════════════════════════════════════
