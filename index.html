@@ -19746,7 +19746,7 @@ function cliContatoRender(tipo, dados) {
       <td><span class="badge badge-dim">${c.esp||'—'}</span></td>
       <td class="text-teal">${c.valor||'—'}</td>
       <td class="text-dim">0</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('projetistas',${i})">✏️</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('projetistas',${i})" title="Ver / Editar dados">👁 Ver</button> <button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('projetistas',${i})" title="Editar">✏️</button></td>
     </tr>`).join('');
   } else if (tipo === 'representantes') {
     const tbody = document.getElementById('contatos-representantes-body');
@@ -19772,7 +19772,7 @@ function cliContatoRender(tipo, dados) {
       <td class="text-dim">${c.indicacoes||0}</td>
       <td class="text-teal font-mono">${fmtMoney(parseFloat(c.totalRecebido)||0)}</td>
       <td><span class="badge badge-green">Ativo</span></td>
-      <td><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('representantes',${i})">✏️</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('representantes',${i})" title="Ver / Editar dados">👁 Ver</button> <button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('representantes',${i})" title="Editar">✏️</button></td>
     </tr>`).join('');
   } else if (tipo === 'outros') {
     const tbody = document.getElementById('contatos-outros-body');
@@ -19788,7 +19788,7 @@ function cliContatoRender(tipo, dados) {
       <td class="text-dim" style="font-size:11px">${c.email||'—'}</td>
       <td class="text-teal">${c.custo ? fmtMoney(parseFloat(c.custo)) : '—'}</td>
       <td class="text-dim" style="font-size:11px">${c.obs||'—'}</td>
-      <td><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('outros',${i})">✏️</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('outros',${i})" title="Ver / Editar dados">👁 Ver</button> <button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('outros',${i})" title="Editar">✏️</button></td>
     </tr>`).join('');
   }
 }
