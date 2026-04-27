@@ -5949,6 +5949,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-editar')">Cancelar</button>
       <button class="btn btn-teal" onclick="abrirCalculadoraDaProposta()">🧮 Calcular</button>
+      <button class="btn" onclick="editAbrirCompleto()" style="background:rgba(240,165,0,0.15);color:var(--gold);border:1px solid var(--gold);font-weight:700" title="Editar TODOS os campos da proposta (serviços múltiplos, contatos, calculadora, pagamento)">✏️ Editar Proposta Completa</button>
       <button class="btn btn-primary" onclick="salvarEdicao()">💾 Salvar Alterações</button>
     </div>
   </div>
@@ -8284,6 +8285,19 @@ function editSetRetorno(s, btn) {
   btn.className = 'btn btn-sm btn-teal';
 }
 
+// Abrir o editor COMPLETO (Nova Proposta com 3 steps) — todos os campos editáveis
+function editAbrirCompleto() {
+  if (editIdx === null) { toast('Selecione uma proposta primeiro', 'warning'); return; }
+  closeModal('modal-editar');
+  if (typeof npAbrirEdicaoProposta === 'function') {
+    npAbrirEdicaoProposta(editIdx);
+    setTimeout(() => { try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){} }, 200);
+    toast('✏️ Modo edição completa — altere o que precisar e salve', 'info');
+  } else {
+    toast('Função de edição completa não encontrada', 'error');
+  }
+}
+
 async function salvarEdicao() {
   if (editIdx === null) return;
   const r = DATA.crm[editIdx];
@@ -9210,6 +9224,19 @@ function prevAtualizar() {
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  // — Revisão (busca a última do DATA_revisoes para esta proposta) —
+  let _revNum = '', _revData = '';
+  try {
+    const _propIdAtual = r ? String(r[CRM_COL.ID]||'') : (document.getElementById('np-id-prop')?.value || document.getElementById('prev-id')?.value || '');
+    if (_propIdAtual && typeof DATA_revisoes !== 'undefined' && Array.isArray(DATA_revisoes)) {
+      const _revs = DATA_revisoes.filter(rv => String(rv.proposta||'') === String(_propIdAtual));
+      if (_revs.length) {
+        const _ult = _revs[_revs.length - 1];
+        _revNum  = _ult.num  || '';
+        _revData = _ult.data || '';
+      }
+    }
+  } catch(_){}
 
   // — Cálculo de totais —
   let subtotalItens = 0;
@@ -9546,13 +9573,17 @@ function prevAtualizar() {
               CNPJ: 39.725.915/0001-08 · ${cidade}<br>
               ${tel} · ${emailEmp}
             </div>
-            ${(document.getElementById('cad-ie')?.value||'').trim() ? `<div style="font-size:10px;color:#1a3c5e;font-weight:700;margin-top:4px">Inscrição Municipal: ${(document.getElementById('cad-ie').value.trim())}</div>` : ''}
+            ${(document.getElementById('cad-ie')?.value||'').trim() ? `<div style="font-size:9px;color:#9ca3af;line-height:1.6;margin-top:2px">Inscrição Municipal: ${(document.getElementById('cad-ie').value.trim())}</div>` : ''}
           </div>
         </div>
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA</div>
           <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}</div>
-          <div style="font-size:10px;color:#6b7280">Data: ${dataHoje} · Validade: ${dataVal}</div>
+          <div style="font-size:10px;color:#6b7280;line-height:1.6">
+            <div>Emissão: ${dataHoje}</div>
+            ${_revNum ? `<div><b>Revisão ${_revNum}</b>: ${_revData||dataHoje}</div>` : ''}
+            <div>Validade: ${dataVal}</div>
+          </div>
         </div>
       </div>
 
@@ -16711,6 +16742,15 @@ function _prevExportarWordDocxLegacy() {
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  // Revisão (busca a última do DATA_revisoes para esta proposta)
+  let _revNum = '', _revData = '';
+  try {
+    const _propIdAtual = r ? String(r[CRM_COL.ID]||'') : (document.getElementById('np-id-prop')?.value || document.getElementById('prev-id')?.value || '');
+    if (_propIdAtual && typeof DATA_revisoes !== 'undefined' && Array.isArray(DATA_revisoes)) {
+      const _revs = DATA_revisoes.filter(rv => String(rv.proposta||'') === String(_propIdAtual));
+      if (_revs.length) { const _ult = _revs[_revs.length - 1]; _revNum = _ult.num||''; _revData = _ult.data||''; }
+    }
+  } catch(_){}
 
   const showNormas = document.getElementById('prev-show-normas')?.checked ?? true;
   const showDesc   = document.getElementById('prev-show-descricao')?.checked ?? true;
@@ -16844,12 +16884,15 @@ function _prevExportarWordDocxLegacy() {
     `<w:p><w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="1a3c5e"/></w:rPr><w:t>GEAD APLICA ENGENHARIA LTDA</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">CNPJ: 39.725.915/0001-08 · ${esc(cidade)}</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
-    _imVal ? `<w:p><w:r><w:rPr><w:b/><w:sz w:val="18"/><w:color w:val="1a3c5e"/></w:rPr><w:t xml:space="preserve">Inscrição Municipal: ${esc(_imVal)}</w:t></w:r></w:p>` : '',
+    _imVal ? `<w:p><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="9ca3af"/></w:rPr><w:t xml:space="preserve">Inscrição Municipal: ${esc(_imVal)}</w:t></w:r></w:p>` : '',
   ].join('');
+  const _revLineDocx = _revNum ? `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Revisão ${esc(_revNum)}: ${esc(_revData||dataHoje)}</w:t></w:r></w:p>` : '';
   const headerRightLines = [
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Emissão: ${esc(dataHoje)}</w:t></w:r></w:p>`,
+    _revLineDocx,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
   ].join('');
   bodyParts.push(`<w:tbl>
     <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tblBorders></w:tblPr>
