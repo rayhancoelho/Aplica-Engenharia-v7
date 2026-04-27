@@ -6238,8 +6238,12 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           <input type="text" class="form-control form-auto" id="rev-cliente" readonly placeholder="Automático">
         </div>
         <div class="form-group">
-          <label class="form-label">Nº da Revisão</label>
-          <input type="text" class="form-control" id="rev-num" placeholder="Auto: REV-001">
+          <label class="form-label">Nº da Revisão <span style="font-size:10px;color:var(--text3);font-weight:400">(manual — você controla)</span></label>
+          <input type="text" class="form-control" id="rev-num" placeholder="Ex: 01, 02, REV-001 — deixe vazio p/ auto">
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.4">
+            💡 Digite o número que quiser aparecer na proposta (ex: <b>01</b>, <b>02</b>).<br>
+            Repita o mesmo número se for ajuste pequeno do cliente que <b>não</b> deve subir a revisão.
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Status</label>
@@ -9224,7 +9228,11 @@ function prevAtualizar() {
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  // Emissão Inicial = data quando a proposta foi criada no CRM (DATA_ABER), com fallback para hoje
+  const dataEmissaoInicial = (r && r[CRM_COL.DATA_ABER]) ? r[CRM_COL.DATA_ABER] : dataHoje;
   // — Revisão (busca a última do DATA_revisoes para esta proposta) —
+  // Número da revisão = o que o usuário digitou em "Nº da Revisão" no modal de Nova Revisão
+  // (pode repetir ou pular para casos onde cliente pede alteração sem querer subir o número)
   let _revNum = '', _revData = '';
   try {
     const _propIdAtual = r ? String(r[CRM_COL.ID]||'') : (document.getElementById('np-id-prop')?.value || document.getElementById('prev-id')?.value || '');
@@ -9232,7 +9240,9 @@ function prevAtualizar() {
       const _revs = DATA_revisoes.filter(rv => String(rv.proposta||'') === String(_propIdAtual));
       if (_revs.length) {
         const _ult = _revs[_revs.length - 1];
-        _revNum  = _ult.num  || '';
+        // Extrai só os dígitos do número que o usuário digitou: "REV-001" → "01", "02" → "02", "5" → "05"
+        const _digits = String(_ult.num||'').match(/\d+/);
+        _revNum  = _digits ? String(parseInt(_digits[0],10)).padStart(2,'0') : '';
         _revData = _ult.data || '';
       }
     }
@@ -9573,14 +9583,14 @@ function prevAtualizar() {
               CNPJ: 39.725.915/0001-08 · ${cidade}<br>
               ${tel} · ${emailEmp}
             </div>
-            ${(document.getElementById('cad-ie')?.value||'').trim() ? `<div style="font-size:9px;color:#9ca3af;line-height:1.6;margin-top:2px">Inscrição Municipal: ${(document.getElementById('cad-ie').value.trim())}</div>` : ''}
+            ${(document.getElementById('cad-ie')?.value||'').trim() ? `<div style="font-size:11px;color:#0d1117;font-weight:700;margin-top:8px">Inscrição Municipal: ${(document.getElementById('cad-ie').value.trim())}</div>` : ''}
           </div>
         </div>
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA</div>
           <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}</div>
-          <div style="font-size:10px;color:#6b7280;line-height:1.6">
-            <div>Emissão: ${dataHoje}</div>
+          <div style="font-size:10px;color:#6b7280;line-height:1.7;margin-top:4px">
+            <div>Emissão Inicial: ${dataEmissaoInicial}</div>
             ${_revNum ? `<div><b>Revisão ${_revNum}</b>: ${_revData||dataHoje}</div>` : ''}
             <div>Validade: ${dataVal}</div>
           </div>
@@ -16742,13 +16752,19 @@ function _prevExportarWordDocxLegacy() {
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
-  // Revisão (busca a última do DATA_revisoes para esta proposta)
+  const dataEmissaoInicial = (r && r[CRM_COL.DATA_ABER]) ? r[CRM_COL.DATA_ABER] : dataHoje;
+  // Revisão (busca a última do DATA_revisoes para esta proposta) — número manual digitado pelo usuário
   let _revNum = '', _revData = '';
   try {
     const _propIdAtual = r ? String(r[CRM_COL.ID]||'') : (document.getElementById('np-id-prop')?.value || document.getElementById('prev-id')?.value || '');
     if (_propIdAtual && typeof DATA_revisoes !== 'undefined' && Array.isArray(DATA_revisoes)) {
       const _revs = DATA_revisoes.filter(rv => String(rv.proposta||'') === String(_propIdAtual));
-      if (_revs.length) { const _ult = _revs[_revs.length - 1]; _revNum = _ult.num||''; _revData = _ult.data||''; }
+      if (_revs.length) {
+        const _ult = _revs[_revs.length - 1];
+        const _digits = String(_ult.num||'').match(/\d+/);
+        _revNum = _digits ? String(parseInt(_digits[0],10)).padStart(2,'0') : '';
+        _revData = _ult.data || '';
+      }
     }
   } catch(_){}
 
@@ -16884,13 +16900,13 @@ function _prevExportarWordDocxLegacy() {
     `<w:p><w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="1a3c5e"/></w:rPr><w:t>GEAD APLICA ENGENHARIA LTDA</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">CNPJ: 39.725.915/0001-08 · ${esc(cidade)}</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
-    _imVal ? `<w:p><w:r><w:rPr><w:sz w:val="14"/><w:color w:val="9ca3af"/></w:rPr><w:t xml:space="preserve">Inscrição Municipal: ${esc(_imVal)}</w:t></w:r></w:p>` : '',
+    _imVal ? `<w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="0d1117"/></w:rPr><w:t xml:space="preserve">Inscrição Municipal: ${esc(_imVal)}</w:t></w:r></w:p>` : '',
   ].join('');
   const _revLineDocx = _revNum ? `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Revisão ${esc(_revNum)}: ${esc(_revData||dataHoje)}</w:t></w:r></w:p>` : '';
   const headerRightLines = [
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Emissão: ${esc(dataHoje)}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Emissão Inicial: ${esc(dataEmissaoInicial)}</w:t></w:r></w:p>`,
     _revLineDocx,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
   ].join('');
