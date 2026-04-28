@@ -15394,6 +15394,17 @@ function npAbrirEdicaoProposta(idx) {
   const r = DATA.crm[idx];
   if (!r) { toast('Proposta não encontrada', 'warning'); return; }
 
+  // Resetar estado da calculadora ANTES de qualquer auto-save disparar.
+  // Sem isso, calcBlocos / npContatos da proposta anterior vazam para a nova
+  // (e o auto-save em calcRecalcularBlocos sobrescreve calc_blocos_<novoId>
+  // no localStorage com os blocos antigos).
+  calcBlocos = [];
+  npContatos = [];
+  npServicos = [];
+  window._calcBlocosJaCarregados = false;
+  if (typeof prevIdxCRM !== 'undefined') prevIdxCRM = null;
+  if (typeof prevItens !== 'undefined') prevItens = [];
+
   // Reconstruir serviços a partir do campo SERVICO e OBS
   const servicoRaw = r[CRM_COL.SERVICO] || '';
   // Formato salvo: "ATERRAMENTO ELÉTRICO (Laudo, Medição) | SPDA (Projeto)"
@@ -23463,3 +23474,7 @@ setTimeout(() => {
     topRight.insertBefore(btn, topRight.firstChild);
   }
 }, 2000);
+
+</script>
+</body>
+</html>
