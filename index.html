@@ -14479,46 +14479,45 @@ salvarProposta = async function() {
   const valid  = d.validade  ? new Date(d.validade  + 'T00:00:00').toLocaleDateString('pt-BR') : '';
   const follow = d.followup  ? new Date(d.followup  + 'T00:00:00').toLocaleDateString('pt-BR') : '';
 
-  const novaRow = [
-    idProp,        // A - ID
-    d.cnpj,        // B - CNPJ
-    d.razao,       // C - Razão Social
-    subcatsStr || servicoPrincipal, // D - Serviço (completo com subserviços)
-    d.modelo || 'Valor por Serviço', // E - Modelo
-    // F - Nome Composto (ID _ NOME _ EMPRESA _ CIDADE _ PESSOA)
-    (() => {
-      const nomePadrao = (d.nome_proposta || '').toUpperCase();
-      const razaoUp = (d.razao || d.fantasia || '').toUpperCase();
-      const municipio = (document.getElementById('np-municipio')?.value || '').toUpperCase();
-      const pessoa = (d.pessoa_responsavel || '').toUpperCase();
-      const partes = [String(idProp).padStart(3,'0'), nomePadrao, razaoUp, municipio, pessoa].filter(Boolean);
-      return partes.join(' _ ');
-    })(),
-    d.pessoa_responsavel || '', // G - Pessoa Responsável
-    d.valor,       // H - Valor
-    hoje,          // I - Data Abertura
-    hoje,          // J - Data Proposta
-    valid,         // K - Validade
-    follow,        // L - Follow-up
-    d.status,      // M - Status
-    '','','','','','','','','','','', // N-W
-    d.canal,       // X... Y
-    '','','',      // Z-AB
-    '',            // AC - Retorno
-    '',            // AD
-    contato,       // AE - Contato
-    email,         // AF - Email
-    fone,          // AG - Fone
-    '','','',      // AH-AJ
-    obsCompleta + contatosJSON, // AK - Obs
-    '',            // AL - Revisão
-    d.fantasia || d.razao, // AM - Nome Fantasia
-    d.endereco,    // AN - Endereço
-    '',            // AO - CEP
-    email,         // AP - Email2
-    '',            // AQ
-    contatoCompleto,       // AR - Contato2
-  ];
+  // Em modo edição, preservar a linha original e atualizar somente os campos do formulário
+  // (evita sobrescrever Data Abertura original, Retorno, Revisão, etc. com vazios)
+  const _existIdx = idProp ? DATA.crm.findIndex(r => String(r[CRM_COL.ID]).trim() === String(idProp).trim()) : -1;
+  const _origRow  = _existIdx >= 0 ? DATA.crm[_existIdx] : null;
+  const novaRow = _origRow ? [..._origRow] : [];
+  // Garantir tamanho mínimo (44 colunas A..AR)
+  while (novaRow.length < 44) novaRow.push('');
+
+  novaRow[CRM_COL.ID]       = idProp;
+  novaRow[CRM_COL.CNPJ]     = d.cnpj;
+  novaRow[CRM_COL.RAZAO]    = d.razao;
+  novaRow[CRM_COL.SERVICO]  = subcatsStr || servicoPrincipal;
+  novaRow[4]                = d.modelo || novaRow[4] || 'Valor por Serviço';
+  // F - Nome Composto
+  novaRow[5] = (() => {
+    const nomePadrao = (d.nome_proposta || '').toUpperCase();
+    const razaoUp    = (d.razao || d.fantasia || '').toUpperCase();
+    const municipio  = (document.getElementById('np-municipio')?.value || '').toUpperCase();
+    const pessoa     = (d.pessoa_responsavel || '').toUpperCase();
+    const partes = [String(idProp).padStart(3,'0'), nomePadrao, razaoUp, municipio, pessoa].filter(Boolean);
+    return partes.join(' _ ');
+  })();
+  novaRow[6]                = d.pessoa_responsavel || novaRow[6] || '';
+  novaRow[CRM_COL.VALOR]    = d.valor;
+  // Data Abertura: preservar o valor original em edições; só preencher se for nova
+  if (!_origRow || !novaRow[CRM_COL.DATA_ABER]) novaRow[CRM_COL.DATA_ABER] = hoje;
+  novaRow[CRM_COL.DATA_PROP]= hoje;
+  novaRow[CRM_COL.VALIDADE] = valid;
+  novaRow[CRM_COL.FOLLOWUP] = follow;
+  novaRow[CRM_COL.STATUS]   = d.status;
+  if (d.canal) novaRow[CRM_COL.CANAL] = d.canal;
+  novaRow[CRM_COL.CONTATO]  = contato;
+  novaRow[CRM_COL.EMAIL]    = email;
+  novaRow[CRM_COL.FONE]     = fone;
+  novaRow[CRM_COL.OBS]      = obsCompleta + contatosJSON;
+  novaRow[CRM_COL.FANTASIA] = d.fantasia || d.razao;
+  novaRow[CRM_COL.ENDERECO] = d.endereco;
+  novaRow[CRM_COL.EMAIL2]   = email;
+  novaRow[CRM_COL.CONTATO2] = contatoCompleto;
 
   await _saveProposta(novaRow, 'np');
 
@@ -16726,6 +16725,12 @@ function _prevExportarWordDocxLegacy() {
       // Global: só # e Descrição, sem preços — agrupar se multi-serviço
       const _gSvcRaw = r ? (r[CRM_COL.SERVICO]||'') : '';
       const _gServicos = _gSvcRaw.split(' | ').map(p => p.split('(')[0].trim()).filter(Boolean);
+      // Mesma detecção que o PDF: serviços do CRM, calcBlocos OU campo `bloco` dos prevItens
+      const _gBlocoNomes = (calcBlocos && calcBlocos.length)
+        ? calcBlocos.filter(b => b.itens?.some(it => it.desc)).map(b => b.nome || b.servico || '').filter(Boolean)
+        : [];
+      const _gBlocosUnicos = new Set(prevItens.map(it => it.bloco).filter(Boolean));
+      const _gMulti = _gServicos.length > 1 || _gBlocoNomes.length > 1 || _gBlocosUnicos.size > 1;
       const _gSubToSvc = {};
       _gSvcRaw.split(' | ').forEach(parte => {
         const nome = parte.split('(')[0].trim();
@@ -16733,7 +16738,7 @@ function _prevExportarWordDocxLegacy() {
         if (sm) sm[1].split(',').forEach(s => { _gSubToSvc[s.trim()] = nome; });
         else _gSubToSvc[nome] = nome;
       });
-      if (_gServicos.length > 1) {
+      if (_gMulti) {
         const grupos = {};
         const ordemSvc = [];
         prevItens.forEach(it => {
@@ -22194,6 +22199,12 @@ if (_origOpenModal) {
 // 2. USAR PROPOSTA EXISTENTE / DUPLICAR
 // ══════════════════════════════════════════════════════
 function npUsarPropostaExistente() {
+  // Se já está editando uma proposta, duplicar a ATUAL direto (sem abrir o modal de seleção)
+  if (PROPOSTA_CONTEXTO?.modoEdicao && Number.isInteger(PROPOSTA_CONTEXTO.idxCRM) && DATA.crm[PROPOSTA_CONTEXTO.idxCRM]) {
+    npDuplicarProposta(PROPOSTA_CONTEXTO.idxCRM);
+    return;
+  }
+  // Senão, abrir modal pra escolher qual proposta duplicar
   // Popular filtros de Especial 1 e Especial 2 a partir dos cadastros
   const selTipoSub = document.getElementById('up-filtro-tipo-sub');
   if (selTipoSub) {
