@@ -22199,12 +22199,17 @@ if (_origOpenModal) {
 // 2. USAR PROPOSTA EXISTENTE / DUPLICAR
 // ══════════════════════════════════════════════════════
 function npUsarPropostaExistente() {
-  // Se já está editando uma proposta, duplicar a ATUAL direto (sem abrir o modal de seleção)
-  if (PROPOSTA_CONTEXTO?.modoEdicao && Number.isInteger(PROPOSTA_CONTEXTO.idxCRM) && DATA.crm[PROPOSTA_CONTEXTO.idxCRM]) {
-    npDuplicarProposta(PROPOSTA_CONTEXTO.idxCRM);
+  console.log('[Duplicar] npUsarPropostaExistente chamada — abrindo modal');
+  if (typeof toast === 'function') toast('Abrindo lista de propostas...', 'info');
+
+  // Garantir que o modal existe no DOM
+  const modal = document.getElementById('modal-usar-proposta');
+  if (!modal) {
+    console.error('[Duplicar] modal-usar-proposta não encontrado no DOM');
+    if (typeof toast === 'function') toast('Modal não encontrado — recarregue a página (Ctrl+F5)', 'error');
     return;
   }
-  // Senão, abrir modal pra escolher qual proposta duplicar
+
   // Popular filtros de Especial 1 e Especial 2 a partir dos cadastros
   const selTipoSub = document.getElementById('up-filtro-tipo-sub');
   if (selTipoSub) {
@@ -22252,9 +22257,21 @@ function npUsarPropostaExistente() {
     const nomes = Object.keys(merged).filter(k => !hidden.includes(k)).sort();
     selSvc.innerHTML = '<option value="">Todos os serviços principais</option>' + nomes.map(n => `<option>${n}</option>`).join('');
   }
-  npAtualizarFiltroSubservico();
-  npFiltrarPropostasExistentes();
-  openModal('modal-usar-proposta');
+  try { npAtualizarFiltroSubservico(); } catch(e){ console.warn('[Duplicar] npAtualizarFiltroSubservico falhou:', e); }
+  try { npFiltrarPropostasExistentes(); } catch(e){ console.warn('[Duplicar] npFiltrarPropostasExistentes falhou:', e); }
+  // Abrir modal — fallback inline caso openModal falhe
+  try {
+    openModal('modal-usar-proposta');
+  } catch(e) {
+    console.error('[Duplicar] openModal falhou:', e);
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+  }
+  // Fallback: garantir que o modal está visível mesmo se .open não for reconhecido
+  if (modal && getComputedStyle(modal).display === 'none') {
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+  }
 }
 
 function npAtualizarFiltroSubservico() {
@@ -22380,8 +22397,12 @@ function npFiltrarPropostasExistentes() {
 }
 
 function npDuplicarProposta(idx) {
+  console.log('[Duplicar] npDuplicarProposta idx=', idx);
   const r = DATA.crm[idx];
-  if (!r) return;
+  if (!r) { console.warn('[Duplicar] DATA.crm[' + idx + '] não existe'); toast('Proposta não encontrada', 'warning'); return; }
+
+  // Snapshot da linha — proteção contra qualquer mutação posterior
+  const rSnap = [...r];
 
   const el = id => document.getElementById(id);
   closeModal('modal-usar-proposta');
@@ -22395,40 +22416,44 @@ function npDuplicarProposta(idx) {
   prevIdxCRM = null;
   prevItens = [];
   calcBlocos = [];
-  if (typeof npContatos !== 'undefined') npContatos = [];
-  if (typeof npServicos !== 'undefined') npServicos = [];
-
-  // Limpar campos do formulário antes de repopular
-  ['np-id-prop','np-cnpj','np-razao','np-fantasia','np-endereco','np-cep','np-municipio',
-   'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel',
-   'np-local-obra','np-campo-especial'].forEach(id => {
-    const e = document.getElementById(id); if (e) e.value = '';
-  });
+  npContatos = [];
+  npServicos = [];
 
   // Restaurar título da página (remover banner "✏️ Editando Proposta #X")
   const titulo = document.querySelector('#page-nova-proposta-page .card-title');
   if (titulo) titulo.textContent = 'Nova Proposta';
 
+  // Navegar primeiro (sem await — apenas troca de classes CSS)
   nav('nova-proposta-page');
 
-  setTimeout(() => {
+  // Função interna que faz a população — chamada com pequeno atraso para o npInit
+  // do nav() já ter rodado e renderizado as listas vazias.
+  const _popular = () => {
+    console.log('[Duplicar] populando formulário com proposta #', rSnap[CRM_COL.ID]);
+    // Limpar campos primeiro
+    ['np-id-prop','np-cnpj','np-razao','np-fantasia','np-endereco','np-cep','np-municipio',
+     'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel',
+     'np-local-obra','np-campo-especial'].forEach(id => {
+      const e = document.getElementById(id); if (e) e.value = '';
+    });
+
     // Gerar novo ID
     const idEl = el('np-id-prop');
     if (idEl) idEl.value = '';
     if (typeof npSetProximoId === 'function') npSetProximoId();
 
-    // Copiar TODOS os dados do cliente
-    if (el('np-cnpj')) el('np-cnpj').value = r[CRM_COL.CNPJ] || '';
-    if (el('np-razao')) el('np-razao').value = r[CRM_COL.RAZAO] || '';
-    if (el('np-fantasia')) el('np-fantasia').value = r[CRM_COL.FANTASIA] || '';
-    if (el('np-endereco')) el('np-endereco').value = r[CRM_COL.ENDERECO] || '';
-    if (el('np-cep')) el('np-cep').value = r[CRM_COL.CEP] || '';
+    // Copiar TODOS os dados do cliente — usando o snapshot rSnap
+    if (el('np-cnpj')) el('np-cnpj').value = rSnap[CRM_COL.CNPJ] || '';
+    if (el('np-razao')) el('np-razao').value = rSnap[CRM_COL.RAZAO] || '';
+    if (el('np-fantasia')) el('np-fantasia').value = rSnap[CRM_COL.FANTASIA] || '';
+    if (el('np-endereco')) el('np-endereco').value = rSnap[CRM_COL.ENDERECO] || '';
+    if (el('np-cep')) el('np-cep').value = rSnap[CRM_COL.CEP] || '';
     // Tentar extrair município do endereço
-    const endParts = (r[CRM_COL.ENDERECO]||'').split(' - ');
+    const endParts = (rSnap[CRM_COL.ENDERECO]||'').split(' - ');
     if (el('np-municipio') && endParts.length > 1) el('np-municipio').value = endParts[endParts.length-1].trim();
 
     // Copiar serviços e subserviços
-    const servicoRaw = r[CRM_COL.SERVICO] || '';
+    const servicoRaw = rSnap[CRM_COL.SERVICO] || '';
     npServicos = [];
     servicoRaw.split(' | ').forEach(parte => {
       const nome = parte.split('(')[0].trim();
@@ -22440,62 +22465,58 @@ function npDuplicarProposta(idx) {
     if (typeof npRenderServicos === 'function') npRenderServicos();
 
     // Copiar valor
-    const valor = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
+    const valor = parseFloat((rSnap[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
     if (el('np-valor') && valor > 0) el('np-valor').value = valor;
 
     // Copiar modelo
-    if (el('np-modelo')) el('np-modelo').value = r[4] || 'Valor por Serviço';
+    if (el('np-modelo')) el('np-modelo').value = rSnap[4] || 'Valor por Serviço';
 
     // Copiar nome da proposta
     if (el('np-nome-proposta')) {
-      // Extrair nome padrão (sem ID, empresa, etc)
-      const nomeComp = r[5] || '';
+      const nomeComp = rSnap[5] || '';
       const partes = nomeComp.split(' _ ');
       const nomePadrao = partes.length >= 2 ? partes[1] : servicoRaw.split('(')[0].split('|')[0].trim();
       el('np-nome-proposta').value = nomePadrao;
     }
 
     // Copiar pessoa responsável
-    if (el('np-pessoa-responsavel')) el('np-pessoa-responsavel').value = r[6] || '';
+    if (el('np-pessoa-responsavel')) el('np-pessoa-responsavel').value = rSnap[6] || '';
 
     // Copiar contatos — priorizar dados da aba CONTATOS
-    if (typeof npContatos !== 'undefined') {
-      const _dupPropId = String(r[CRM_COL.ID] || '');
-      const _dupSalvos = (DATA.contatos || []).filter(c => c[CT.TIPO] === 'proposta' && String(c[CT.REF]) === _dupPropId);
-      if (_dupSalvos.length) {
-        npContatos = _dupSalvos.map(c => ({
-          tipo: 'WhatsApp', nome: c[CT.NOME]||'', cargo: c[CT.CARGO]||'', area: c[CT.AREA]||'Geral',
-          telefone: c[CT.TEL]||'', whatsapp: c[CT.TEL]||'', email: c[CT.EMAIL]||'', valor: c[CT.TEL]||''
-        }));
-      } else {
-        // Fallback: reconstruir do CRM (propostas antigas)
-        npContatos = [];
-        const contNome = r[CRM_COL.CONTATO] || '';
-        const contEmail = r[CRM_COL.EMAIL] || '';
-        const contFone = r[CRM_COL.FONE] || '';
-        if (contNome || contEmail || contFone) {
-          npContatos.push({ nome: contNome, email: contEmail, telefone: contFone, cargo: '', area: 'Geral', whatsapp: contFone });
-        }
-        const cont2 = r[CRM_COL.CONTATO2] || '';
-        const email2 = r[CRM_COL.EMAIL2] || '';
-        if (cont2) npContatos.push({ nome: cont2, email: email2, telefone: '', cargo: '', area: '', whatsapp: '' });
+    const _dupPropId = String(rSnap[CRM_COL.ID] || '');
+    const _dupSalvos = (DATA.contatos || []).filter(c => c[CT.TIPO] === 'proposta' && String(c[CT.REF]) === _dupPropId);
+    if (_dupSalvos.length) {
+      npContatos = _dupSalvos.map(c => ({
+        tipo: 'WhatsApp', nome: c[CT.NOME]||'', cargo: c[CT.CARGO]||'', area: c[CT.AREA]||'Geral',
+        telefone: c[CT.TEL]||'', whatsapp: c[CT.TEL]||'', email: c[CT.EMAIL]||'', valor: c[CT.TEL]||''
+      }));
+    } else {
+      // Fallback: reconstruir do CRM (propostas antigas)
+      npContatos = [];
+      const contNome = rSnap[CRM_COL.CONTATO] || '';
+      const contEmail = rSnap[CRM_COL.EMAIL] || '';
+      const contFone = rSnap[CRM_COL.FONE] || '';
+      if (contNome || contEmail || contFone) {
+        npContatos.push({ nome: contNome, email: contEmail, telefone: contFone, cargo: '', area: 'Geral', whatsapp: contFone });
       }
-      if (typeof npRenderContatos === 'function') npRenderContatos();
+      const cont2 = rSnap[CRM_COL.CONTATO2] || '';
+      const email2 = rSnap[CRM_COL.EMAIL2] || '';
+      if (cont2) npContatos.push({ nome: cont2, email: email2, telefone: '', cargo: '', area: '', whatsapp: '' });
     }
+    if (typeof npRenderContatos === 'function') npRenderContatos();
 
     // Copiar canal
     if (el('np-canal')) {
-      const canal = r[CRM_COL.CANAL] || '';
+      const canal = rSnap[CRM_COL.CANAL] || '';
       [...el('np-canal').options].forEach(o => { if (o.value === canal || o.text === canal) o.selected = true; });
     }
 
     // Copiar observação — e extrair Local da Obra / Campo Especial se presentes
-    const obsRaw = r[CRM_COL.OBS] || '';
+    const obsRaw = rSnap[CRM_COL.OBS] || '';
     const mLocal = obsRaw.match(/Local da Obra:\s*([^\n]+)/i);
     const mEsp   = obsRaw.match(/Campo Especial:\s*([^\n]+)/i);
     if (el('np-local-obra') && mLocal)    el('np-local-obra').value = mLocal[1].trim();
     if (el('np-campo-especial') && mEsp)  el('np-campo-especial').value = mEsp[1].trim();
-    // Remover linhas 'Local da Obra' / 'Campo Especial' / 'Serviços' da OBS livre
     const obsClean = obsRaw
       .replace(/^\s*Local da Obra:.*$/gim, '')
       .replace(/^\s*Campo Especial:.*$/gim, '')
@@ -22504,14 +22525,14 @@ function npDuplicarProposta(idx) {
       .trim();
     if (el('np-obs')) el('np-obs').value = obsClean;
 
-    // Atualizar nome composto
     if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto();
-
-    // Ir para Step 1
     if (typeof npGoStep === 'function') npGoStep(1);
 
-    toast('✅ Proposta #' + (r[CRM_COL.ID]||'') + ' duplicada com todos os dados! Ajuste o que precisar e salve.', 'success');
-  }, 400);
+    toast('✅ Proposta #' + (rSnap[CRM_COL.ID]||'') + ' duplicada — ajuste o que precisar e salve.', 'success');
+  };
+
+  // Esperar npInit do nav() rodar (50ms) + buffer; se nada agendado, ainda rodamos
+  setTimeout(_popular, 200);
 }
 
 // ══════════════════════════════════════════════════════
