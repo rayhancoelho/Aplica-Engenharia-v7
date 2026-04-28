@@ -3184,35 +3184,6 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
         <div class="np-step-content" id="np-step-2">
         <!-- conteúdo da calculadora será injetado por npInjectCalc() no init -->
         <div id="np-calc-container"></div>
-        <!-- SEÇÃO ESTÁTICA: Custos Ocultos / Comissões (sempre presente) -->
-        <div class="card" id="np-custos-ocultos-card" style="margin-top:16px;border:2px solid var(--coral);background:linear-gradient(135deg, rgba(248,81,73,0.06), rgba(240,165,0,0.04))">
-          <div class="card-body">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <div style="margin:0;font-size:14px;font-weight:800;color:var(--coral)">🔒 CUSTOS OCULTOS DA PROPOSTA</div>
-            </div>
-            <div style="font-size:11px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:rgba(248,81,73,0.08);border-radius:6px;border-left:4px solid var(--coral)">
-              ⚠️ <strong>Controle interno</strong> — não aparece no PDF. Ao marcar como <b style="color:var(--coral)">Ganha</b>, tudo é lançado em <strong style="color:var(--coral)">Despesas + Financeiro</strong> automaticamente.
-            </div>
-            <!-- SEÇÃO 1: CUSTOS ADICIONAIS -->
-            <div style="margin-bottom:14px">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <div style="font-size:12px;font-weight:700;color:var(--steel)">📦 Custos Adicionais</div>
-                <button class="btn btn-sm" onclick="npAddItemOculto()" style="font-size:10px;background:rgba(68,147,248,0.15);color:var(--steel);border:1px solid rgba(68,147,248,0.4);font-weight:700;padding:4px 10px">+ Custo</button>
-              </div>
-              <div id="np-itens-ocultos-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
-            </div>
-            <!-- SEÇÃO 2: COMISSÕES -->
-            <div style="border-top:2px solid var(--gold);padding-top:12px">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <div style="font-size:12px;font-weight:700;color:var(--gold)">💰 Comissões</div>
-                <button class="btn btn-sm" onclick="npAddComissaoOculta()" style="font-size:10px;background:rgba(240,165,0,0.15);color:var(--gold);border:1px solid rgba(240,165,0,0.4);font-weight:700;padding:4px 10px">+ Comissão</button>
-              </div>
-              <div id="np-comissoes-ocultas-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
-            </div>
-            <!-- RESUMO -->
-            <div id="np-ocultos-resumo"></div>
-          </div>
-        </div>
         </div><!-- /np-step-2 -->
 
         <!-- ═══ STEP 3: Gerar Proposta / PDF ═══ -->
@@ -4796,13 +4767,6 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                     <label class="form-label">Pedágio + Alim. + Hosp. (R$)</label>
                     <input type="number" class="form-control" id="calc-extras" value="0" oninput="calcRecalcular()">
                   </div>
-                  <div class="form-group" style="grid-column:1/-1">
-                    <label class="form-label">🗺️ Link das Rotas (Google Maps / Waze) <span style="color:var(--text3);font-size:10px">— uso interno, não aparece na proposta</span></label>
-                    <div style="display:flex;gap:6px">
-                      <input type="url" class="form-control" id="calc-rota-link" placeholder="https://maps.app.goo.gl/... ou https://waze.com/..." oninput="localStorage.setItem('calc_rota_'+(document.getElementById('calc-id-proposta')?.value||'atual'), this.value)">
-                      <button type="button" class="btn btn-ghost" onclick="{const u=document.getElementById('calc-rota-link').value.trim();if(u)window.open(u,'_blank');else toast('Informe o link da rota','warning');}" style="white-space:nowrap">Abrir</button>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -5949,7 +5913,6 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-editar')">Cancelar</button>
       <button class="btn btn-teal" onclick="abrirCalculadoraDaProposta()">🧮 Calcular</button>
-      <button class="btn" onclick="editAbrirCompleto()" style="background:rgba(240,165,0,0.15);color:var(--gold);border:1px solid var(--gold);font-weight:700" title="Editar TODOS os campos da proposta (serviços múltiplos, contatos, calculadora, pagamento)">✏️ Editar Proposta Completa</button>
       <button class="btn btn-primary" onclick="salvarEdicao()">💾 Salvar Alterações</button>
     </div>
   </div>
@@ -6238,12 +6201,8 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           <input type="text" class="form-control form-auto" id="rev-cliente" readonly placeholder="Automático">
         </div>
         <div class="form-group">
-          <label class="form-label">Nº da Revisão <span style="font-size:10px;color:var(--text3);font-weight:400">(manual — você controla)</span></label>
-          <input type="text" class="form-control" id="rev-num" placeholder="Ex: 01, 02, REV-001 — deixe vazio p/ auto">
-          <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.4">
-            💡 Digite o número que quiser aparecer na proposta (ex: <b>01</b>, <b>02</b>).<br>
-            Repita o mesmo número se for ajuste pequeno do cliente que <b>não</b> deve subir a revisão.
-          </div>
+          <label class="form-label">Nº da Revisão</label>
+          <input type="text" class="form-control" id="rev-num" placeholder="Auto: REV-001">
         </div>
         <div class="form-group">
           <label class="form-label">Status</label>
@@ -6286,15 +6245,6 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);cursor:pointer">
               <input type="checkbox" id="rev-alt-outro" style="accent-color:var(--teal)"> Outro
             </label>
-          </div>
-        </div>
-        <div class="form-group" style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gold);cursor:pointer;font-weight:600">
-            <input type="checkbox" id="rev-subir" checked style="accent-color:var(--gold);width:16px;height:16px">
-            ⬆️ Subir esta revisão no CRM (incrementa Nº da revisão e atualiza valor na proposta)
-          </label>
-          <div style="font-size:10px;color:var(--text3);margin-top:4px;padding-left:24px">
-            Desmarque para salvar apenas no histórico sem alterar a proposta original (solicitação de revisão pelo cliente).
           </div>
         </div>
       </div>
@@ -7653,8 +7603,6 @@ async function _saveProposta(row, prefix) {
   saveDataLocal();
   window._lastSavedPropId = idProp;
   window._lastSavedRazao = row[2] || '';
-  // Proposta salva — limpar rascunho "atual" para não puxar dados antigos na próxima nova
-  try { localStorage.removeItem('np_draft_atual'); } catch(_){}
 
   // Persistir calcBlocos e prevItens
   if (idProp && typeof calcBlocos !== 'undefined' && calcBlocos.length && calcBlocos.some(b => b.itens?.some(it => it.desc))) {
@@ -8289,19 +8237,6 @@ function editSetRetorno(s, btn) {
   btn.className = 'btn btn-sm btn-teal';
 }
 
-// Abrir o editor COMPLETO (Nova Proposta com 3 steps) — todos os campos editáveis
-function editAbrirCompleto() {
-  if (editIdx === null) { toast('Selecione uma proposta primeiro', 'warning'); return; }
-  closeModal('modal-editar');
-  if (typeof npAbrirEdicaoProposta === 'function') {
-    npAbrirEdicaoProposta(editIdx);
-    setTimeout(() => { try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){} }, 200);
-    toast('✏️ Modo edição completa — altere o que precisar e salve', 'info');
-  } else {
-    toast('Função de edição completa não encontrada', 'error');
-  }
-}
-
 async function salvarEdicao() {
   if (editIdx === null) return;
   const r = DATA.crm[editIdx];
@@ -8668,9 +8603,6 @@ function calcVincularProposta(silencioso) {
     if (el3) {
       [...el3.options].forEach(o => { o.selected = o.value === servico; });
     }
-    // Carregar link de rotas salvo para esta proposta
-    const elRota = document.getElementById('calc-rota-link');
-    if (elRota) elRota.value = localStorage.getItem('calc_rota_' + id) || '';
     if (!silencioso) toast('Proposta #' + id + ' vinculada ✅', 'success');
     // NÃO auto-carregar subcategorias — user controla no Step 1
     // calcCarregarSubcategorias só deve ser chamado pelo botão "⟳ Do Serviço"
@@ -9226,27 +9158,17 @@ function prevAtualizar() {
   const endCli  = r ? (r[CRM_COL.ENDERECO]||'—') : '—';
   const localObra     = document.getElementById('np-local-obra')?.value || '';
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
-  const dataHoje = new Date().toLocaleDateString('pt-BR');
-  const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
-  // Emissão Inicial = data quando a proposta foi criada no CRM (DATA_ABER), com fallback para hoje
-  const dataEmissaoInicial = (r && r[CRM_COL.DATA_ABER]) ? r[CRM_COL.DATA_ABER] : dataHoje;
-  // — Revisão (busca a última do DATA_revisoes para esta proposta) —
-  // Número da revisão = o que o usuário digitou em "Nº da Revisão" no modal de Nova Revisão
-  // (pode repetir ou pular para casos onde cliente pede alteração sem querer subir o número)
-  let _revNum = '', _revData = '';
-  try {
-    const _propIdAtual = r ? String(r[CRM_COL.ID]||'') : (document.getElementById('np-id-prop')?.value || document.getElementById('prev-id')?.value || '');
-    if (_propIdAtual && typeof DATA_revisoes !== 'undefined' && Array.isArray(DATA_revisoes)) {
-      const _revs = DATA_revisoes.filter(rv => String(rv.proposta||'') === String(_propIdAtual));
-      if (_revs.length) {
-        const _ult = _revs[_revs.length - 1];
-        // Extrai só os dígitos do número que o usuário digitou: "REV-001" → "01", "02" → "02", "5" → "05"
-        const _digits = String(_ult.num||'').match(/\d+/);
-        _revNum  = _digits ? String(parseInt(_digits[0],10)).padStart(2,'0') : '';
-        _revData = _ult.data || '';
-      }
-    }
-  } catch(_){}
+  // Sempre formatar em pt-BR — nunca exibir ISO ("2026-04-23T07:00:00.000Z") na proposta
+  const _toPtBR = (v) => {
+    if (!v) return '';
+    if (v instanceof Date) return v.toLocaleDateString('pt-BR');
+    const s = String(v);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toLocaleDateString('pt-BR');
+  };
+  const dataHoje = _toPtBR(r?.[CRM_COL.DATA_ABER]) || new Date().toLocaleDateString('pt-BR');
+  const dataVal  = _toPtBR(r?.[CRM_COL.VALIDADE])  || new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
 
   // — Cálculo de totais —
   let subtotalItens = 0;
@@ -9514,7 +9436,7 @@ function prevAtualizar() {
     }
   });
 
-  const normasLista = _ordenarNormas([...normasSet].filter(Boolean));
+  const normasLista = [...normasSet].filter(Boolean);
 
   const secaoNormas = showNormas && normasLista.length ? `
     <div class="prev-section" style="margin-bottom:16px">
@@ -9583,17 +9505,12 @@ function prevAtualizar() {
               CNPJ: 39.725.915/0001-08 · ${cidade}<br>
               ${tel} · ${emailEmp}
             </div>
-            ${(document.getElementById('cad-ie')?.value||'').trim() ? `<div style="font-size:11px;color:#0d1117;font-weight:700;margin-top:8px">Inscrição Municipal: ${(document.getElementById('cad-ie').value.trim())}</div>` : ''}
           </div>
         </div>
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA</div>
           <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}</div>
-          <div style="font-size:10px;color:#6b7280;line-height:1.7;margin-top:4px">
-            <div>Emissão Inicial: ${dataEmissaoInicial}</div>
-            ${_revNum ? `<div><b>Revisão ${_revNum}</b>: ${_revData||dataHoje}</div>` : ''}
-            <div>Validade: ${dataVal}</div>
-          </div>
+          <div style="font-size:10px;color:#6b7280">Data: ${dataHoje} · Validade: ${dataVal}</div>
         </div>
       </div>
 
@@ -9627,7 +9544,7 @@ function prevAtualizar() {
         ${secaoNormas ? `<div style="margin-bottom:16px">
           <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Normas e Documentos de Referência</div>
           <div style="font-size:10px;color:#374151;line-height:2;columns:2;gap:20px">
-            ${_ordenarNormas([...normasSet].filter(Boolean)).map(n => `<div>▸ ${n}</div>`).join('')}
+            ${[...normasSet].filter(Boolean).map(n => `<div>▸ ${n}</div>`).join('')}
           </div>
         </div>` : ''}
 
@@ -10019,7 +9936,6 @@ function prevSalvarRevisao() {
 ═══════════════════════════════════════════ */
 // Cache local de revisões (também salva no Sheets aba HISTORICO_PROPOSTAS)
 let DATA_revisoes = [];
-try { DATA_revisoes = JSON.parse(localStorage.getItem('revisoes_data') || '[]'); } catch(_){ DATA_revisoes = []; }
 
 function renderRevisoes(filtro = '') {
   const container = document.getElementById('revisoes-list');
@@ -10050,10 +9966,6 @@ function renderRevisoes(filtro = '') {
         <span class="badge ${statusBadge[rev.status]||'badge-dim'}">${rev.status||'—'}</span>
       </div>
       <div class="revisao-desc">${rev.motivo || 'Sem descrição'}</div>
-      ${(rev.campos_alterados && rev.campos_alterados.length) ? `<div style="margin:6px 0;display:flex;gap:4px;flex-wrap:wrap">
-        ${rev.campos_alterados.map(c => `<span class="badge badge-steel" style="font-size:10px">${c}</span>`).join('')}
-      </div>` : ''}
-      ${rev.subir === false ? `<div style="font-size:11px;color:var(--text3);margin-bottom:6px">📁 <em>Apenas histórico — não subida no CRM</em></div>` : ''}
       <div class="revisao-valores">
         <div class="rv-item">
           <span class="rv-label">Valor Anterior</span>
@@ -10099,19 +10011,6 @@ async function salvarRevisao() {
 
   if (!idProp) { toast('Informe o ID da proposta', 'warning'); return; }
 
-  const subir = document.getElementById('rev-subir')?.checked !== false; // default true
-  const altServicos = document.getElementById('rev-alt-servicos')?.checked || false;
-  const altValor    = document.getElementById('rev-alt-valor')?.checked || false;
-  const altPagto    = document.getElementById('rev-alt-pagamento')?.checked || false;
-  const altPrazo    = document.getElementById('rev-alt-prazo')?.checked || false;
-  const altEscopo   = document.getElementById('rev-alt-escopo')?.checked || false;
-  const altOutro    = document.getElementById('rev-alt-outro')?.checked || false;
-  const camposAlterados = [
-    altServicos && 'Serviços', altValor && 'Valor', altPagto && 'Pagamento',
-    altPrazo && 'Prazo', altEscopo && 'Escopo', altOutro && 'Outro'
-  ].filter(Boolean);
-  const delta = valAnt > 0 ? ((valNovo - valAnt) / valAnt * 100) : 0;
-
   const rev = {
     proposta: idProp,
     cliente,
@@ -10120,16 +10019,10 @@ async function salvarRevisao() {
     val_ant:  valAnt,
     val_novo: valNovo,
     motivo,
-    subir,
-    campos_alterados: camposAlterados,
-    delta_pct: Number(delta.toFixed(2)),
-    delta_abs: Number((valNovo - valAnt).toFixed(2)),
     data:     new Date().toLocaleDateString('pt-BR'),
-    ts:       Date.now(),
   };
 
   DATA_revisoes.push(rev);
-  try { localStorage.setItem('revisoes_data', JSON.stringify(DATA_revisoes)); } catch(_){}
 
   // Salvar no Sheets aba HISTORICO_PROPOSTAS
   if (CONFIG.APPS_SCRIPT_URL) {
@@ -10144,8 +10037,8 @@ async function salvarRevisao() {
     toast('Revisão salva', 'success');
   }
 
-  // Atualizar valor no CRM SOMENTE se o user escolheu "subir" a revisão
-  if (subir && valNovo > 0) {
+  // Atualizar valor no CRM se o novo valor foi informado
+  if (valNovo > 0) {
     const idx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === parseInt(idProp));
     if (idx >= 0) {
       DATA.crm[idx][CRM_COL.VALOR] = valNovo.toString();
@@ -10159,16 +10052,14 @@ async function salvarRevisao() {
       renderDashboardCRM(); renderCRMTable(); renderPipeline();
       toast(`💰 Valor da proposta #${idProp} atualizado para ${fmtMoney(valNovo)}`, 'success');
     }
-  } else if (!subir) {
-    toast('Revisão salva apenas no histórico (não subida no CRM)', 'info');
   }
 
   closeModal('modal-nova-revisao');
   renderRevisoes();
 
-  // Atualizar nº revisão no CRM SOMENTE se "subir"
+  // Atualizar nº revisão no CRM (coluna REVISAO = 37)
   const crmIdx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === parseInt(idProp));
-  if (subir && crmIdx >= 0) {
+  if (crmIdx >= 0) {
     DATA.crm[crmIdx][CRM_COL.REVISAO] = rev.num;
     // Atualizar nome composto com nº revisão se existir
     if (DATA.crm[crmIdx][5]) {
@@ -13529,26 +13420,6 @@ function normaSalvar(item, normas, descricao) {
   localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
 }
 
-// Ordena normas: ABNT primeiro, depois outras por nome, NR por último (alfa-numérico crescente).
-function _ordenarNormas(lista) {
-  const rank = n => {
-    const s = String(n||'').trim().toUpperCase();
-    if (/^NR[\s-]?\d/.test(s)) return 3;      // NR por último
-    if (s.startsWith('ABNT'))   return 1;     // ABNT primeiro
-    return 2;                                 // Demais no meio
-  };
-  const nrNum = n => {
-    const m = String(n||'').match(/NR[\s-]?(\d+)/i);
-    return m ? parseInt(m[1],10) : 0;
-  };
-  return lista.slice().sort((a,b) => {
-    const ra = rank(a), rb = rank(b);
-    if (ra !== rb) return ra - rb;
-    if (ra === 3) return nrNum(a) - nrNum(b); // NR por número
-    return a.localeCompare(b, 'pt-BR', { numeric: true });
-  });
-}
-
 // ═══ GESTÃO DE SERVIÇOS E NORMAS (Configurações) ═══
 let SERVICOS_CUSTOM = JSON.parse(localStorage.getItem('servicos_custom') || '{}');
 let SERVICOS_HIDDEN = JSON.parse(localStorage.getItem('servicos_hidden') || '[]');
@@ -14273,44 +14144,8 @@ function npRemoveContato(i) {
 }
 
 // ── SERVIÇOS MÚLTIPLOS + SUBCATEGORIAS ───────────────────
-function _npSalvarRascunhoAtual() {
-  try {
-    const chave = 'np_draft_atual';
-    const draft = {
-      idProp:   document.getElementById('np-id-prop')?.value || '',
-      servicos: npServicos,
-      contatos: npContatos,
-      razao:    document.getElementById('np-razao')?.value || '',
-      validade: document.getElementById('np-validade')?.value || '',
-      followup: document.getElementById('np-followup')?.value || '',
-      valor:    document.getElementById('np-valor')?.value || '',
-      ts: Date.now(),
-    };
-    localStorage.setItem(chave, JSON.stringify(draft));
-  } catch(_){}
-}
-function _npRestaurarRascunhoAtual() {
-  try {
-    const raw = localStorage.getItem('np_draft_atual');
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    // Não sobrescrever se já há proposta em edição com dados carregados
-    const temPropCtx = PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.idProp;
-    const temServicos = npServicos.length && npServicos.some(s => s.servico);
-    if (temPropCtx || temServicos) return;
-    if (d.servicos && d.servicos.length) npServicos = d.servicos;
-    if (d.contatos && d.contatos.length) npContatos = d.contatos;
-    const set = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
-    set('np-id-prop', d.idProp);
-    set('np-razao',   d.razao);
-    set('np-validade',d.validade);
-    set('np-followup',d.followup);
-    set('np-valor',   d.valor);
-  } catch(_){}
-}
 function npRenderServicos() {
   const wrap = document.getElementById('np-servicos-wrap');
-  _npSalvarRascunhoAtual(); // persiste a cada render
   if (!wrap) return;
   // Mesclar serviços padrão com customizados
   const todosServicos = { ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
@@ -15266,16 +15101,6 @@ function calcRecalcularBlocos() {
       id: b.id||0, nome: b.nome||'', servico: b.servico||'',
       itens: (b.itens||[]).map(it => ({ desc: it.desc||'', horas: it.horas||0, rev: it.rev||0, qtd: it.qtd||1 }))
     }))));
-    // Também salvar configuração da calculadora (vh, art, extras, km...) por proposta
-    try {
-      const _cfg = {};
-      ['calc-vh','calc-art','calc-desc','calc-aliq','calc-km','calc-rkm','calc-vis','calc-extras'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) _cfg[id] = el.value;
-      });
-      localStorage.setItem('calc_cfg_' + _autoSaveId, JSON.stringify(_cfg));
-    } catch(_){}
-    window._calcBlocosOwner = _autoSaveId;
   }
 }
 
@@ -15615,8 +15440,8 @@ function npAbrirEdicaoProposta(idx) {
     endereco:   r[CRM_COL.ENDERECO] || '',
     municipio:  '',
     canal:      r[CRM_COL.CANAL]    || '',
-    valor:      String(r[CRM_COL.VALOR] || '0'),
-    validade:   r[CRM_COL.VALIDADE] || '',
+    valor:      (parseFloat(String(r[CRM_COL.VALOR] || '0').replace(',', '.')) || 0).toString(),
+    validade:   '',
     followup:   r[CRM_COL.FOLLOWUP] || '',
     status:     r[CRM_COL.STATUS]   || 'Em prospecção',
     obs:        r[CRM_COL.OBS]      || '',
@@ -15643,10 +15468,6 @@ function npAbrirEdicaoProposta(idx) {
     set('np-fantasia', PROPOSTA_CONTEXTO.fantasia);
     set('np-endereco', PROPOSTA_CONTEXTO.endereco);
     set('np-valor',    PROPOSTA_CONTEXTO.valor);
-    // Datas: converter BR→ISO para input[type=date]
-    const _toIso = v => { if (!v) return ''; if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,10); const m = String(v).match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
-    set('np-validade', _toIso(PROPOSTA_CONTEXTO.validade));
-    set('np-followup', _toIso(PROPOSTA_CONTEXTO.followup));
     set('np-obs',      PROPOSTA_CONTEXTO.obs);
     // Nome proposta e pessoa responsável
     const nomeComp = r[5] || '';
@@ -16051,7 +15872,6 @@ function renderClientesV2(filtro) {
       tbody.innerHTML = clientes.slice(0, 200).map((c, i) => {
         const conv = c.total > 0 ? ((c.ganhas / c.total) * 100).toFixed(0) + '%' : '—';
         const convColor = c.ganhas/Math.max(c.total,1) >= 0.5 ? 'var(--green)' : c.ganhas > 0 ? 'var(--gold)' : 'var(--text3)';
-        const _chave = (c.cnpj || c.razao || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
         return `<tr>
           <td class="text-dim" style="font-size:11px">${i+1}</td>
           <td class="fw-bold">${c.razao}</td>
@@ -16061,15 +15881,29 @@ function renderClientesV2(filtro) {
           <td style="text-align:center;color:${convColor};font-weight:600">${conv}</td>
           <td style="text-align:right;color:var(--teal);font-weight:700;font-family:monospace">${c.receita > 0 ? fmtMoney(c.receita) : '—'}</td>
           <td class="text-dim" style="font-size:11px">${c.ultima || '—'}</td>
-          <td><button class="btn btn-ghost btn-sm" data-cli-chave="${_chave}" onclick="cliVerDetalhe(this.dataset.cliChave)">Ver</button></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="cliVerDetalhe('${c.cnpj||c.razao.replace(/'/g,"\\'")}')">Ver</button></td>
         </tr>`;
       }).join('');
     }
   }
 
-  // Gráficos
-  renderGraficosClientes(clientes);
+  // Gráficos — isolar para que erro não impeça a tabela de renderizar
+  try { renderGraficosClientes(clientes); } catch (e) { console.warn('renderGraficosClientes falhou:', e); }
 }
+
+// Wrapper resiliente — garante que a tabela seja sempre atualizada mesmo se algo falhar
+const _renderClientesV2Inner = renderClientesV2;
+renderClientesV2 = function(filtro) {
+  try {
+    return _renderClientesV2Inner(filtro);
+  } catch (e) {
+    console.error('renderClientesV2 falhou:', e);
+    const tbody = document.getElementById('clientes-table-body');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="9" class="text-dim" style="text-align:center;padding:28px">Erro ao carregar lista — verifique o console (F12).</td></tr>`;
+    }
+  }
+};
 
 function filterClientesV2(q) { renderClientesV2(q); }
 
@@ -16133,114 +15967,19 @@ function renderGraficosClientes(clientes) {
 }
 
 function cliVerDetalhe(chave) {
-  const chaveClean = (chave||'').replace(/[.\-\/\s]/g,'');
-  // 1) Buscar no CRM
+  // Abrir modal ou filtrar CRM por este cliente
   const row = DATA.crm.find(r => {
     const cnpj = (r[CRM_COL.CNPJ]||'').replace(/[.\-\/\s]/g,'');
+    const chaveClean = (chave||'').replace(/[.\-\/\s]/g,'');
     return cnpj === chaveClean || r[CRM_COL.RAZAO] === chave;
   });
-  // 2) Buscar em CONTATOS.outros (clientes sem proposta)
-  const contato = (typeof CONTATOS !== 'undefined' && CONTATOS.outros)
-    ? CONTATOS.outros.find(c => {
-        const doc = (c.doc||'').replace(/[.\-\/\s]/g,'');
-        return doc === chaveClean || c.nome === chave;
-      })
-    : null;
-  if (!row && !contato) { toast('Cliente não encontrado', 'warning'); return; }
-  _cliAbrirModalDetalhe(chave, row, contato);
-}
-
-function _cliAbrirModalDetalhe(chave, crmRow, contato) {
-  const nome  = crmRow ? (crmRow[CRM_COL.RAZAO] || '—') : (contato?.nome || chave);
-  const cnpj  = crmRow ? (crmRow[CRM_COL.CNPJ]  || '—') : (contato?.doc  || '—');
-  const fant  = crmRow ? (crmRow[CRM_COL.FANTASIA] || '') : '';
-  const end   = crmRow ? (crmRow[CRM_COL.ENDERECO] || '') : (contato?.endereco || '');
-  const cont  = crmRow ? (crmRow[CRM_COL.CONTATO]  || '') : (contato?.nomeContato || contato?.nome || '');
-  const fone  = crmRow ? (crmRow[CRM_COL.FONE]     || '') : (contato?.telefone || '');
-  const mail  = crmRow ? (crmRow[CRM_COL.EMAIL]    || '') : (contato?.email || '');
-  const propostas = crmRow ? DATA.crm.filter(r => r[CRM_COL.RAZAO] === nome || r[CRM_COL.CNPJ] === cnpj) : [];
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay open'; overlay.style.zIndex = '9999';
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  overlay.innerHTML = `<div class="modal" style="max-width:720px">
-    <div class="modal-header">
-      <div class="modal-title">👤 ${esc(nome)}</div>
-      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-grid">
-        <div class="form-group"><label class="form-label">Razão Social / Nome</label><input class="form-control" id="cliedit-razao" value="${esc(nome)}"></div>
-        <div class="form-group"><label class="form-label">CNPJ / CPF</label><input class="form-control" id="cliedit-cnpj" value="${esc(cnpj!=='—'?cnpj:'')}"></div>
-        <div class="form-group"><label class="form-label">Nome Fantasia</label><input class="form-control" id="cliedit-fant" value="${esc(fant)}"></div>
-        <div class="form-group"><label class="form-label">Contato Principal</label><input class="form-control" id="cliedit-contato" value="${esc(cont)}"></div>
-        <div class="form-group"><label class="form-label">Telefone</label><input class="form-control" id="cliedit-fone" value="${esc(fone)}"></div>
-        <div class="form-group"><label class="form-label">E-mail</label><input class="form-control" id="cliedit-email" value="${esc(mail)}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Endereço</label><input class="form-control" id="cliedit-end" value="${esc(end)}"></div>
-      </div>
-      ${propostas.length ? `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
-        <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;margin-bottom:6px">Propostas (${propostas.length})</div>
-        ${propostas.map(r => `<div style="padding:6px 8px;margin-bottom:4px;background:var(--s3);border-radius:6px;font-size:12px;display:flex;justify-content:space-between">
-          <span>#${r[CRM_COL.ID]||'?'} · ${esc((r[CRM_COL.SERVICO]||'').slice(0,40))}</span>
-          <span style="color:var(--teal);font-weight:700">${fmtMoney(parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.'))||0)}</span>
-        </div>`).join('')}
-      </div>` : ''}
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
-      ${propostas.length ? `<button class="btn" onclick="(function(){document.getElementById('crm-search').value='${esc(nome).replace(/'/g,"\\'")}';filterCRM();nav('crm');document.querySelector('.modal-overlay.open')?.remove();})()">Ver Propostas →</button>` : ''}
-      <button class="btn btn-primary" onclick="_cliSalvarEdicao('${esc(chave).replace(/'/g,"\\'")}')">💾 Salvar</button>
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
-}
-
-function _cliSalvarEdicao(chaveOrig) {
-  const v = id => document.getElementById(id)?.value || '';
-  const novo = {
-    razao: v('cliedit-razao').trim(),
-    cnpj:  v('cliedit-cnpj').trim(),
-    fant:  v('cliedit-fant').trim(),
-    contato: v('cliedit-contato').trim(),
-    fone:  v('cliedit-fone').trim(),
-    email: v('cliedit-email').trim(),
-    end:   v('cliedit-end').trim(),
-  };
-  if (!novo.razao) { toast('Razão Social / Nome obrigatório', 'warning'); return; }
-  const chaveClean = (chaveOrig||'').replace(/[.\-\/\s]/g,'');
-  // Atualizar TODAS as linhas do CRM desse cliente
-  let alterou = 0;
-  DATA.crm.forEach(r => {
-    const cClean = (r[CRM_COL.CNPJ]||'').replace(/[.\-\/\s]/g,'');
-    if (cClean === chaveClean || r[CRM_COL.RAZAO] === chaveOrig) {
-      r[CRM_COL.RAZAO]   = novo.razao;
-      if (novo.cnpj)     r[CRM_COL.CNPJ]     = novo.cnpj;
-      if (novo.fant)     r[CRM_COL.FANTASIA] = novo.fant;
-      if (novo.contato)  r[CRM_COL.CONTATO]  = novo.contato;
-      if (novo.fone)     r[CRM_COL.FONE]     = novo.fone;
-      if (novo.email)    r[CRM_COL.EMAIL]    = novo.email;
-      if (novo.end)      r[CRM_COL.ENDERECO] = novo.end;
-      alterou++;
-    }
-  });
-  // Atualizar CONTATOS.outros
-  if (typeof CONTATOS !== 'undefined' && CONTATOS.outros) {
-    CONTATOS.outros.forEach(c => {
-      const doc = (c.doc||'').replace(/[.\-\/\s]/g,'');
-      if (doc === chaveClean || c.nome === chaveOrig) {
-        c.nome     = novo.razao;
-        if (novo.cnpj)  c.doc      = novo.cnpj;
-        if (novo.fone)  c.telefone = novo.fone;
-        if (novo.email) c.email    = novo.email;
-        if (novo.end)   c.endereco = novo.end;
-      }
-    });
-    try { localStorage.setItem('contatos_data', JSON.stringify(CONTATOS)); } catch(_){}
-  }
-  saveDataLocal();
-  document.querySelector('.modal-overlay.open')?.remove();
-  renderClientesV2();
-  renderCRMTable && renderCRMTable();
-  toast(`Cliente atualizado (${alterou} registro${alterou!==1?'s':''})`, 'success');
+  if (!row) { toast('Cliente não encontrado no CRM', 'warning'); return; }
+  // Ir para CRM já filtrado
+  const searchEl = document.getElementById('crm-search');
+  if (searchEl) searchEl.value = row[CRM_COL.RAZAO] || chave;
+  filterCRM();
+  nav('crm');
+  toast(`Mostrando propostas de ${row[CRM_COL.RAZAO] || chave}`, 'info');
 }
 
 // Override renderClientesTable para usar nova versão
@@ -16356,8 +16095,17 @@ function _tmplGetCampos() {
 
   const numProp = pick(r?.[CRM_COL.ID], val('np-id-prop'), val('prev-id'), '0001');
   const valDias = parseInt(val('prev-val-dias') || '30') || 30;
-  const dataHoje = new Date().toLocaleDateString('pt-BR');
-  const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  // Helper: aceita Date, ISO string ("2026-04-23T07:00:00.000Z") ou já em DD/MM/AAAA — sempre devolve pt-BR
+  const _fmtDataPtBR = (v) => {
+    if (!v) return '';
+    if (v instanceof Date) return v.toLocaleDateString('pt-BR');
+    const s = String(v);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toLocaleDateString('pt-BR');
+  };
+  const dataHoje = _fmtDataPtBR(r?.[CRM_COL.DATA_ABER]) || new Date().toLocaleDateString('pt-BR');
+  const dataVal  = _fmtDataPtBR(r?.[CRM_COL.VALIDADE])  || new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
   const fmt = v => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
 
   let subtotal = 0;
@@ -16383,7 +16131,11 @@ function _tmplGetCampos() {
   const campos = {
     PROPID: String(numProp).padStart(4,'0'),
     EMISSAO: dataHoje,
+    EMISSAO_INICIAL: dataHoje,
+    DATA_EMISSAO: dataHoje,
     VENCE_EM: dataVal,
+    VALIDADE: dataVal,
+    DATA_VALIDADE: dataVal,
     VALIDADE_DIAS: String(valDias),
     RAZAO:    pick(r?.[CRM_COL.RAZAO],    val('np-razao'),    val('prev-cliente')),
     FANTASIA: pick(r?.[CRM_COL.FANTASIA], val('np-fantasia'), r?.[CRM_COL.RAZAO], val('np-razao')),
@@ -16752,21 +16504,6 @@ function _prevExportarWordDocxLegacy() {
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
   const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
-  const dataEmissaoInicial = (r && r[CRM_COL.DATA_ABER]) ? r[CRM_COL.DATA_ABER] : dataHoje;
-  // Revisão (busca a última do DATA_revisoes para esta proposta) — número manual digitado pelo usuário
-  let _revNum = '', _revData = '';
-  try {
-    const _propIdAtual = r ? String(r[CRM_COL.ID]||'') : (document.getElementById('np-id-prop')?.value || document.getElementById('prev-id')?.value || '');
-    if (_propIdAtual && typeof DATA_revisoes !== 'undefined' && Array.isArray(DATA_revisoes)) {
-      const _revs = DATA_revisoes.filter(rv => String(rv.proposta||'') === String(_propIdAtual));
-      if (_revs.length) {
-        const _ult = _revs[_revs.length - 1];
-        const _digits = String(_ult.num||'').match(/\d+/);
-        _revNum = _digits ? String(parseInt(_digits[0],10)).padStart(2,'0') : '';
-        _revData = _ult.data || '';
-      }
-    }
-  } catch(_){}
 
   const showNormas = document.getElementById('prev-show-normas')?.checked ?? true;
   const showDesc   = document.getElementById('prev-show-descricao')?.checked ?? true;
@@ -16825,7 +16562,7 @@ function _prevExportarWordDocxLegacy() {
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
     if (nd.descricao) descritivos.push({ nome, texto: nd.descricao });
   });
-  const normasLista = _ordenarNormas([...normasSet].filter(Boolean));
+  const normasLista = [...normasSet].filter(Boolean);
 
   // Helper para parágrafo Word
   const para = (text, opts = {}) => {
@@ -16859,12 +16596,10 @@ function _prevExportarWordDocxLegacy() {
   const tblBorder = `<w:top w:val="single" w:sz="4" w:color="CCCCCC"/><w:left w:val="single" w:sz="4" w:color="CCCCCC"/><w:bottom w:val="single" w:sz="4" w:color="CCCCCC"/><w:right w:val="single" w:sz="4" w:color="CCCCCC"/>`;
 
   const cell = (text, opts = {}) => {
-    const { w = 2268, bold, color = '374151', bg = 'FFFFFF', size = 18, colSpan = 1 } = opts;
-    const span = colSpan > 1 ? `<w:gridSpan w:val="${colSpan}"/>` : '';
+    const { w = 2268, bold, color = '374151', bg = 'FFFFFF', size = 18 } = opts;
     return `<w:tc>
       <w:tcPr>
         <w:tcW w:w="${w}" w:type="dxa"/>
-        ${span}
         <w:tcBorders>${tblBorder}</w:tcBorders>
         <w:shd w:val="clear" w:fill="${bg}"/>
         <w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar>
@@ -16894,21 +16629,16 @@ function _prevExportarWordDocxLegacy() {
 
   // ── 1. CABEÇALHO: LOGO + empresa (esq) + Nº proposta (dir) ──
   const logoDrawing = logoBytes ? `<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="1905000" cy="476250"/><wp:docPr id="2" name="Logo"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="2" name="Logo"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdLogo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1905000" cy="476250"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>` : '';
-  const _imVal = (document.getElementById('cad-ie')?.value||'').trim();
   const headerLeftLines = [
     logoDrawing,
     `<w:p><w:r><w:rPr><w:b/><w:sz w:val="22"/><w:color w:val="1a3c5e"/></w:rPr><w:t>GEAD APLICA ENGENHARIA LTDA</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">CNPJ: 39.725.915/0001-08 · ${esc(cidade)}</w:t></w:r></w:p>`,
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
-    _imVal ? `<w:p><w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="0d1117"/></w:rPr><w:t xml:space="preserve">Inscrição Municipal: ${esc(_imVal)}</w:t></w:r></w:p>` : '',
   ].join('');
-  const _revLineDocx = _revNum ? `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Revisão ${esc(_revNum)}: ${esc(_revData||dataHoje)}</w:t></w:r></w:p>` : '';
   const headerRightLines = [
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Emissão Inicial: ${esc(dataEmissaoInicial)}</w:t></w:r></w:p>`,
-    _revLineDocx,
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
   ].join('');
   bodyParts.push(`<w:tbl>
     <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tblBorders></w:tblPr>
@@ -16992,7 +16722,6 @@ function _prevExportarWordDocxLegacy() {
         : row(cell('#',{bold:true,bg:'1a3c5e',color:'FFFFFF',w:itensCols[0]}), cell('Descrição',{bold:true,bg:'1a3c5e',color:'FFFFFF',w:itensCols[1]}), cell('Total (R$)',{bold:true,bg:'1a3c5e',color:'FFFFFF',w:itensCols[2]}));
 
     let itensRows = '';
-    let _globalMultiTbls = null; // quando preenchido, são múltiplas <w:tbl> (uma por serviço)
     if (modPreco === 'global') {
       // Global: só # e Descrição, sem preços — agrupar se multi-serviço
       const _gSvcRaw = r ? (r[CRM_COL.SERVICO]||'') : '';
@@ -17004,12 +16733,7 @@ function _prevExportarWordDocxLegacy() {
         if (sm) sm[1].split(',').forEach(s => { _gSubToSvc[s.trim()] = nome; });
         else _gSubToSvc[nome] = nome;
       });
-      // Detecta multi-tabela usando blocos/prevItens.bloco além de _gServicos
-      const _gBlocoNames = (calcBlocos||[]).filter(b => (b.itens||[]).some(it => it.desc)).map(b => b.nome || b.servico || '').filter(Boolean);
-      const _gBlocoSet = new Set(prevItens.map(it => it.bloco).filter(Boolean));
-      const _gMulti = _gServicos.length > 1 || _gBlocoNames.length > 1 || _gBlocoSet.size > 1;
-      if (_gMulti) {
-        // Multi-serviço no modo global: gerar UMA TABELA por serviço (espelhando o PDF)
+      if (_gServicos.length > 1) {
         const grupos = {};
         const ordemSvc = [];
         prevItens.forEach(it => {
@@ -17017,21 +16741,14 @@ function _prevExportarWordDocxLegacy() {
           if (!grupos[svc]) { grupos[svc] = []; ordemSvc.push(svc); }
           grupos[svc].push(it);
         });
-        _globalMultiTbls = [];
         let idx = 0;
         ordemSvc.forEach(svcNome => {
-          // Cabeçalho do serviço (ocupa as duas colunas)
-          let svcRows = row(cell(svcNome,{bold:true,bg:'e8f0f7',w:itensCols[0]+itensCols[1],colSpan:2}));
+          itensRows += row(cell('',{bold:true,bg:'e8f0f7',w:itensCols[0]}), cell(svcNome,{bold:true,bg:'e8f0f7',w:itensCols[1]}));
           grupos[svcNome].forEach(it => {
             idx++;
             const bg = idx%2===0?'FFFFFF':'f5f7fa';
-            svcRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell(it.desc||'Item',{bg,w:itensCols[1]}));
+            itensRows += row(cell(String(idx),{bg,w:itensCols[0]}), cell(it.desc||'Item',{bg,w:itensCols[1]}));
           });
-          _globalMultiTbls.push(`<w:tbl>
-            <w:tblPr><w:tblW w:w="${totalW}" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
-            <w:tblGrid>${gridCols}</w:tblGrid>
-            ${headerRow}${svcRows}
-          </w:tbl>`);
         });
       } else {
         itensRows = prevItens.map((it,i) => {
@@ -17071,6 +16788,11 @@ function _prevExportarWordDocxLegacy() {
       // Modo por-item: verificar se tem múltiplos serviços para agrupar
       const _dSvcRaw = r ? (r[CRM_COL.SERVICO]||'') : '';
       const _dServicos = _dSvcRaw.split(' | ').map(p => p.split('(')[0].trim()).filter(Boolean);
+      // Mesma detecção que o PDF: serviços do CRM, calcBlocos OU campo `bloco` dos prevItens
+      const _dBlocoNomes = (calcBlocos && calcBlocos.length)
+        ? calcBlocos.filter(b => b.itens?.some(it => it.desc)).map(b => b.nome || b.servico || '').filter(Boolean)
+        : [];
+      const _dBlocosUnicos = new Set(prevItens.map(it => it.bloco).filter(Boolean));
       const _dSubToSvc = {};
       _dSvcRaw.split(' | ').forEach(parte => {
         const nome = parte.split('(')[0].trim();
@@ -17078,7 +16800,7 @@ function _prevExportarWordDocxLegacy() {
         if (sm) sm[1].split(',').forEach(s => { _dSubToSvc[s.trim()] = nome; });
         else _dSubToSvc[nome] = nome;
       });
-      const _dMulti = _dServicos.length > 1;
+      const _dMulti = _dServicos.length > 1 || _dBlocoNomes.length > 1 || _dBlocosUnicos.size > 1;
       
       if (_dMulti && modPreco === 'por-item') {
         // Agrupar por serviço principal
@@ -17121,21 +16843,10 @@ function _prevExportarWordDocxLegacy() {
       }
     }
 
-    // Adicionar ART como item comum no final da tabela (ou como tabela própria no modo global multi)
-    let _artTblExtra = '';
+    // Adicionar ART como item comum no final da tabela
     if (artVal > 0) {
       if (modPreco === 'global') {
-        const _artRow = row(cell(String(prevItens.length+1),{bold:true,bg:'f0f4f8',w:itensCols[0]}), cell('ART — Anotação de Responsabilidade Técnica',{bold:true,bg:'f0f4f8',w:itensCols[1]}));
-        if (_globalMultiTbls) {
-          // ART vira tabela própria no final
-          _artTblExtra = `<w:tbl>
-            <w:tblPr><w:tblW w:w="${totalW}" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
-            <w:tblGrid>${gridCols}</w:tblGrid>
-            ${headerRow}${row(cell('ART',{bold:true,bg:'e8f0f7',w:itensCols[0]+itensCols[1],colSpan:2}))}${_artRow}
-          </w:tbl>`;
-        } else {
-          itensRows += _artRow;
-        }
+        itensRows += row(cell(String(prevItens.length+1),{bold:true,bg:'f0f4f8',w:itensCols[0]}), cell('ART — Anotação de Responsabilidade Técnica',{bold:true,bg:'f0f4f8',w:itensCols[1]}));
       } else if (showUnit && modPreco === 'por-item') {
         itensRows += row(cell(String(prevItens.length+1),{bold:true,bg:'f0f4f8',w:itensCols[0]}), cell('ART — Anotação de Responsabilidade Técnica',{bold:true,bg:'f0f4f8',w:itensCols[1]}), cell(fmt(artVal),{bg:'f0f4f8',w:itensCols[2]}), cell(fmt(artVal),{bold:true,bg:'f0f4f8',w:itensCols[3]}));
       } else {
@@ -17143,24 +16854,12 @@ function _prevExportarWordDocxLegacy() {
       }
     }
 
-    if (_globalMultiTbls) {
-      // Multi-tabela: empurrar uma <w:tbl> por serviço, com espaçamento entre elas
-      _globalMultiTbls.forEach(tblXml => {
-        bodyParts.push(tblXml);
-        bodyParts.push(para('', {spacing:80}));
-      });
-      if (_artTblExtra) {
-        bodyParts.push(_artTblExtra);
-        bodyParts.push(para('', {spacing:80}));
-      }
-    } else {
-      bodyParts.push(`<w:tbl>
-        <w:tblPr><w:tblW w:w="${totalW}" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
-        <w:tblGrid>${gridCols}</w:tblGrid>
-        ${headerRow}${itensRows}
-      </w:tbl>`);
-      bodyParts.push(para('', {spacing:100}));
-    }
+    bodyParts.push(`<w:tbl>
+      <w:tblPr><w:tblW w:w="${totalW}" w:type="dxa"/><w:tblBorders>${tblBorder}</w:tblBorders></w:tblPr>
+      <w:tblGrid>${gridCols}</w:tblGrid>
+      ${headerRow}${itensRows}
+    </w:tbl>`);
+    bodyParts.push(para('', {spacing:100}));
   }
 
   // ── 5. RESUMO FINANCEIRO + CONDIÇÕES DE PAGAMENTO + PRAZO (lado a lado) ──
@@ -19044,8 +18743,6 @@ function notifMarcarLida(chave) {
     _notifsLidas.push(chave);
     localStorage.setItem('notifs_lidas_' + new Date().toISOString().split('T')[0], JSON.stringify(_notifsLidas));
   }
-  // Re-render badges globais (sino + "Propostas CRM") para consistência visual
-  try { if (typeof updateBadges === 'function') updateBadges(); } catch(_){}
 }
 function notifClicar(page, chave) {
   notifMarcarLida(chave);
@@ -19053,34 +18750,6 @@ function notifClicar(page, chave) {
   notifToggle();
   // Atualizar badge imediatamente
   setTimeout(notifAtualizarBadge, 100);
-}
-// Concluir = remover a causa-raiz da notificação (ex: limpar follow-up, marcar despesa paga).
-// Aceita chave + tipo/dados básicos serializados no DOM.
-function notifConcluir(chave, tipo, ref) {
-  if (tipo === 'followup' && ref) {
-    // Limpar follow-up do CRM
-    const idx = DATA.crm.findIndex(r => String(r[CRM_COL.ID]) === String(ref));
-    if (idx >= 0) { DATA.crm[idx][CRM_COL.FOLLOWUP] = ''; saveDataLocal(); toast('Follow-up concluído ✅', 'success'); }
-  } else if (tipo === 'despesa' && ref !== undefined) {
-    const i = parseInt(ref, 10);
-    if (!isNaN(i) && DATA.despesas && DATA.despesas[i]) {
-      DATA.despesas[i][5] = 'Pago'; saveDataLocal(); toast('Despesa marcada como paga ✅', 'success');
-    }
-  } else if (tipo === 'receita' && ref !== undefined) {
-    const i = parseInt(ref, 10);
-    if (!isNaN(i) && DATA.financeiro && DATA.financeiro[i]) {
-      DATA.financeiro[i][5] = 'Pago'; saveDataLocal(); toast('NF marcada como recebida ✅', 'success');
-    }
-  }
-  notifMarcarLida(chave);
-  // Atualizar TODAS as abas e badges imediatamente
-  try { notifAtualizar(); } catch(_){}
-  try { notifRenderAgenda(); } catch(_){}
-  try { notifRenderPagtos(); } catch(_){}
-  try { notifAtualizarBadge(); } catch(_){}
-  try { if (typeof updateBadges === 'function') updateBadges(); } catch(_){}
-  try { if (typeof renderCRMTable === 'function') renderCRMTable(); } catch(_){}
-  try { if (typeof renderDashboardCRM === 'function') renderDashboardCRM(); } catch(_){}
 }
 function notifAtualizarBadge() {
   const badge = document.getElementById('notif-badge');
@@ -19113,13 +18782,12 @@ function notifAtualizar() {
     const diff = Math.floor((d - hoje) / 86400000);
     const cliente = r[CRM_COL.RAZAO] || r[CRM_COL.FANTASIA] || '—';
     const canal = r[CRM_COL.CANAL] || 'WhatsApp';
-    const propRef = r[CRM_COL.ID];
     if (diff < 0)
-      notifs.push({ tipo: 'coral', icone: '🔴', msg: `Follow-up ATRASADO: <b>${cliente}</b>`, sub: `${Math.abs(diff)}d atrás · ${canal}`, page: 'crm', concluirTipo: 'followup', concluirRef: propRef });
+      notifs.push({ tipo: 'coral', icone: '🔴', msg: `Follow-up ATRASADO: <b>${cliente}</b>`, sub: `${Math.abs(diff)}d atrás · ${canal}`, page: 'crm' });
     else if (diff === 0)
-      notifs.push({ tipo: 'gold', icone: '🟡', msg: `Follow-up HOJE: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm', concluirTipo: 'followup', concluirRef: propRef });
+      notifs.push({ tipo: 'gold', icone: '🟡', msg: `Follow-up HOJE: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm' });
     else if (diff <= 2)
-      notifs.push({ tipo: 'steel', icone: '🔵', msg: `Follow-up em ${diff}d: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm', concluirTipo: 'followup', concluirRef: propRef });
+      notifs.push({ tipo: 'steel', icone: '🔵', msg: `Follow-up em ${diff}d: <b>${cliente}</b>`, sub: `Canal: ${canal}`, page: 'crm' });
   });
 
   // Projetos urgentes
@@ -19292,7 +18960,7 @@ function notifAtualizar() {
       margin-bottom:4px;border-left:3px solid var(--${n.tipo});
       background:var(--s3);transition:background 0.1s;position:relative" onmouseover="this.style.background='var(--s2)'"
       onmouseout="this.style.background='var(--s3)'">
-      <button onclick="event.stopPropagation();notifMarcarLida('${n._chave.replace(/'/g,"\\'")}');this.closest('[data-notif-key]').remove();notifAtualizarBadge();try{notifRenderAgenda();notifRenderPagtos();}catch(_){}"
+      <button onclick="event.stopPropagation();notifMarcarLida('${n._chave.replace(/'/g,"\\'")}');this.closest('[data-notif-key]').remove();notifAtualizarBadge()" 
         style="position:absolute;top:6px;right:8px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0" title="Marcar como lida">✕</button>
       <div onclick="notifClicar('${n.page}','${n._chave.replace(/'/g,"\\'")}')" style="cursor:pointer;padding-right:20px">
         <div style="font-size:12px;color:var(--text)">${n.icone} ${n.msg}</div>
@@ -19301,7 +18969,6 @@ function notifAtualizar() {
       <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
         ${n.email ? `<button onclick="event.stopPropagation();notifEnviarFollowUp('${(n.emailTo||'').replace(/'/g,'\\\'')}','${(n.emailCliente||'').replace(/'/g,'\\\'')}','${(n.emailContato||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--teal);color:var(--teal)">📧 Email</button>` : ''}
         ${n.agenda ? `<button onclick="event.stopPropagation();notifAgendarEvento('${(n.agendaDesc||'').replace(/'/g,'\\\'')}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--steel);color:var(--steel)">📅 Agendar</button>` : ''}
-        ${n.concluirTipo ? `<button onclick="event.stopPropagation();notifConcluir('${n._chave.replace(/'/g,"\\'")}','${n.concluirTipo}','${String(n.concluirRef||'').replace(/'/g,"\\'")}');this.closest('[data-notif-key]').remove();" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;border:1px solid var(--green);color:var(--green);font-weight:700" title="Concluir e remover da lista">✓ Concluir</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -19371,11 +19038,10 @@ function notifRenderAgenda() {
         </div>
         <span style="font-size:10px;color:var(--text3)">#${it.id||''}</span>
       </div>
-      <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+      <div style="display:flex;gap:4px;margin-top:6px">
         ${it.email ? `<button onclick="notifEnviarFollowUp('${it.email.replace(/'/g,"\\'")}','${it.cliente.replace(/'/g,"\\'")}','${(it.contato||'').replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--teal);border:1px solid var(--teal)">📧 E-mail</button>` : ''}
         <button onclick="window.open('https://wa.me/55${(it.canal||'').replace(/\D/g,'')}','_blank')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--green);border:1px solid var(--green)">💬 WhatsApp</button>
-        <button onclick="notifAgendarCalendar('${it.data}','Follow-up: ${it.cliente.replace(/'/g,"\\'")}','${(it.email||'').replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--steel);border:1px solid var(--steel)">📅 Calendar</button>
-        <button onclick="notifConcluir('agenda-${it.id||''}','followup','${it.id||''}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--green);border:1px solid var(--green);font-weight:700" title="Concluir follow-up e remover">✓ Concluir</button>
+        <button onclick="notifAgendarCalendar('${it.data}','Follow-up: ${it.cliente.replace(/'/g,"\\'")}','${it.email.replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--steel);border:1px solid var(--steel)">📅 Calendar</button>
       </div>
     </div>`).join('');
 }
@@ -19390,9 +19056,6 @@ function notifRenderPagtos() {
   (DATA.despesas || []).forEach((r, idx) => {
     const dt = parseDate(r[0]);
     if (!dt) return;
-    // Já paga? não exibir
-    const stDesp = (r[5]||'').toLowerCase();
-    if (stDesp === 'pago') return;
     const diff = Math.floor((dt - hoje) / 86400000);
     if (diff < -7 || diff > 30) return;
     const valor = parseFloat((r[3]||'0').toString().replace(',','.')) || 0;
@@ -19400,7 +19063,7 @@ function notifRenderPagtos() {
     if (tipo !== 'fixa' && diff > 0) return; // só fixas no futuro, todas se já venceram
     const cor = diff < 0 ? 'coral' : diff === 0 ? 'gold' : diff <= 3 ? 'gold' : 'steel';
     items.push({ data: r[0], diff, cor, desc: r[1]||'—', valor, cat: r[2]||'', cliente: r[8]||'',
-      label: diff < 0 ? `ATRASADO ${Math.abs(diff)}d` : diff === 0 ? 'PAGAR HOJE' : `em ${diff}d`, idx, tipo: 'despesa' });
+      label: diff < 0 ? `ATRASADO ${Math.abs(diff)}d` : diff === 0 ? 'PAGAR HOJE' : `em ${diff}d`, idx });
   });
 
   // NFs a receber
@@ -19414,7 +19077,7 @@ function notifRenderPagtos() {
     const valor = parseFloat((r[3]||'0').toString().replace(',','.')) || 0;
     const cor = diff < 0 ? 'coral' : diff <= 5 ? 'gold' : 'teal';
     items.push({ data: r[6]||'', diff, cor, desc: `NF ${r[2]||''} — ${r[1]||''}`, valor, cat: 'Receita', cliente: r[1]||'',
-      label: diff < 0 ? `VENCIDA ${Math.abs(diff)}d` : diff === 0 ? 'VENCE HOJE' : `receber em ${diff}d`, tipo: 'receita', idx });
+      label: diff < 0 ? `VENCIDA ${Math.abs(diff)}d` : diff === 0 ? 'VENCE HOJE' : `receber em ${diff}d`, tipo: 'receita' });
   });
 
   items.sort((a, b) => a.diff - b.diff);
@@ -19438,22 +19101,14 @@ function notifRenderPagtos() {
         <div style="font-size:14px;font-weight:700;color:var(--teal)">${fmtMoney(totalReceber)}</div>
       </div>
     </div>` +
-    items.map(it => {
-      const _isRec = it.tipo === 'receita';
-      const _chave = (_isRec ? 'pag-rec-' : 'pag-desp-') + (it.idx ?? '') + '-' + (it.data||'');
-      const _btnLbl = _isRec ? '✓ Recebido' : '✓ Pago';
-      const _btnTitle = _isRec ? 'Marcar NF como recebida' : 'Marcar despesa como paga';
-      return `
-    <div style="padding:6px 10px;margin-bottom:3px;border-radius:6px;background:var(--s3);border-left:3px solid var(--${it.cor});display:flex;justify-content:space-between;align-items:center;gap:8px">
+    items.map(it => `
+    <div style="padding:6px 10px;margin-bottom:3px;border-radius:6px;background:var(--s3);border-left:3px solid var(--${it.cor});display:flex;justify-content:space-between;align-items:center">
       <div style="min-width:0;flex:1">
-        <div style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_isRec ? '📥' : '📤'} ${it.desc}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it.tipo === 'receita' ? '📥' : '📤'} ${it.desc}</div>
         <div style="font-size:10px;color:var(--text3)">${it.data} · <span style="color:var(--${it.cor});font-weight:700">${it.label}</span>${it.cliente ? ' · '+it.cliente : ''}</div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-        <div style="font-family:monospace;font-weight:700;font-size:12px;color:var(--${_isRec ? 'teal' : 'coral'});white-space:nowrap">${fmtMoney(it.valor)}</div>
-        <button onclick="notifConcluir('${_chave}','${_isRec ? 'receita' : 'despesa'}','${it.idx ?? ''}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--green);border:1px solid var(--green);font-weight:700;white-space:nowrap" title="${_btnTitle}">${_btnLbl}</button>
-      </div>
-    </div>`;}).join('');
+      <div style="font-family:monospace;font-weight:700;font-size:12px;color:var(--${it.tipo === 'receita' ? 'teal' : 'coral'});white-space:nowrap;margin-left:8px">${fmtMoney(it.valor)}</div>
+    </div>`).join('');
 }
 
 // Agendar no Google Calendar via URL
@@ -19473,11 +19128,6 @@ function npGetFollowupCanal() {
 }
 
 function notifEnviarFollowUp(email, cliente, contato) {
-  // Se não temos e-mail, tenta resolver a partir do contato principal cadastrado
-  if (!email && contato) {
-    const cRow = (DATA.contatos || []).find(c => (c[CT.NOME]||'').trim() === (contato||'').trim());
-    if (cRow && cRow[CT.EMAIL]) email = cRow[CT.EMAIL];
-  }
   if (!email) { toast('E-mail do cliente não cadastrado', 'warning'); return; }
   // Saudação conforme horário
   const h = new Date().getHours();
@@ -19489,14 +19139,11 @@ function notifEnviarFollowUp(email, cliente, contato) {
   const body = encodeURIComponent(
     `${saud}${primeiroNome ? ', ' + primeiroNome : ''}, tudo bem?\n\n` +
     `Espero que esteja bem. Gostaria de dar continuidade à nossa proposta técnica enviada recentemente.\n\n` +
-    `Caso tenha alguma dúvida ou precise de ajustes, estou à disposição para agendar uma conversa.\n\n` +
+    `Caso tenha alguma dúvida ou precise de ajustes, estou à disposição.\n\n` +
     `Aguardo seu retorno.\n\n` +
     `Atenciosamente,`
   );
-  // CC no e-mail cadastrado (From da empresa) para ficar no histórico
-  const ccEmp = (document.getElementById('cad-email')?.value || '').trim();
-  const cc = ccEmp ? `&cc=${encodeURIComponent(ccEmp)}` : '';
-  window.open(`mailto:${email}?subject=${subject}${cc}&body=${body}`, '_blank');
+  window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_blank');
   toast('E-mail de follow-up aberto ✅', 'success');
   notifToggle();
 }
@@ -19805,7 +19452,7 @@ function cliContatoRender(tipo, dados) {
       <td><span class="badge badge-dim">${c.esp||'—'}</span></td>
       <td class="text-teal">${c.valor||'—'}</td>
       <td class="text-dim">0</td>
-      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('projetistas',${i})" title="Ver / Editar dados">👁 Ver</button> <button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('projetistas',${i})" title="Editar">✏️</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('projetistas',${i})">✏️</button></td>
     </tr>`).join('');
   } else if (tipo === 'representantes') {
     const tbody = document.getElementById('contatos-representantes-body');
@@ -19831,7 +19478,7 @@ function cliContatoRender(tipo, dados) {
       <td class="text-dim">${c.indicacoes||0}</td>
       <td class="text-teal font-mono">${fmtMoney(parseFloat(c.totalRecebido)||0)}</td>
       <td><span class="badge badge-green">Ativo</span></td>
-      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('representantes',${i})" title="Ver / Editar dados">👁 Ver</button> <button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('representantes',${i})" title="Editar">✏️</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('representantes',${i})">✏️</button></td>
     </tr>`).join('');
   } else if (tipo === 'outros') {
     const tbody = document.getElementById('contatos-outros-body');
@@ -19847,7 +19494,7 @@ function cliContatoRender(tipo, dados) {
       <td class="text-dim" style="font-size:11px">${c.email||'—'}</td>
       <td class="text-teal">${c.custo ? fmtMoney(parseFloat(c.custo)) : '—'}</td>
       <td class="text-dim" style="font-size:11px">${c.obs||'—'}</td>
-      <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('outros',${i})" title="Ver / Editar dados">👁 Ver</button> <button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('outros',${i})" title="Editar">✏️</button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="cliContatoEditar('outros',${i})">✏️</button></td>
     </tr>`).join('');
   }
 }
@@ -20103,52 +19750,40 @@ function contSalvar() {
   saveDataLocal();
   syncAllContatos().catch(e => console.error('Erro salvar contato externo:', e));
   closeModal('modal-novo-contato');
-  cliContatoFiltrar(tipo);
-  // Também atualizar tabela principal de clientes
-  if (typeof renderAllPages === 'function') renderAllPages();
+  try { cliContatoFiltrar(tipo); } catch(e){ console.warn(e); }
 
-  // Enviar para aba CLIENTES na planilha Google Sheets
+  // Sempre adicionar ao DATA.clientes local (imediato) e renderizar a lista de clientes
+  const cliRow = [
+    contato.doc || '',           // A - CNPJ/CPF
+    contato.nome || '',          // B - Razão Social / Nome
+    '',                          // C - Propostas
+    '',                          // D - Ganhas
+    '',                          // E - Conversão
+    '',                          // F - Receita Total
+    contato.fone || '',          // G - Telefone
+    contato.email || '',         // H - E-mail
+    (contato.uf || '') + (contato.cidade ? ' - ' + contato.cidade : ''),
+    contato.atividade || '',     // J - Atividade
+    new Date().toISOString().split('T')[0]
+  ];
+  if (!DATA.clientes.some(c => (c[0]||'').replace(/\D/g,'') === (cliRow[0]||'').replace(/\D/g,'') && (c[1]||'') === cliRow[1])) {
+    DATA.clientes.push(cliRow);
+  }
+  saveDataLocal();
+
+  // Render imediato e síncrono — não depende de Sheets
+  try { if (typeof renderClientesV2 === 'function') renderClientesV2(); } catch(e){ console.warn(e); }
+  try { if (typeof renderAllPages === 'function') renderAllPages(); } catch(e){ console.warn(e); }
+
+  // Sheets em background (não bloqueia UI)
   if (CONFIG.APPS_SCRIPT_URL) {
-    const row = [
-      contato.doc || '',           // A - CNPJ/CPF
-      contato.nome || '',          // B - Razão Social / Nome
-      '',                          // C - Propostas (calculado pelo CRM)
-      '',                          // D - Ganhas
-      '',                          // E - Conversão
-      '',                          // F - Receita Total
-      contato.fone || '',          // G - Telefone
-      contato.email || '',         // H - E-mail
-      (contato.uf || '') + (contato.cidade ? ' - ' + contato.cidade : ''),  // I - UF / Cidade
-      contato.atividade || '',     // J - Atividade
-      new Date().toISOString().split('T')[0]  // K - Data Cadastro
-    ];
-    sheetsAppend(CONFIG.SHEETS.CLIENTES, [row])
-      .then(() => {
-        // Adicionar ao DATA.clientes local para refletir imediatamente
-        DATA.clientes.push(row);
-        if (typeof renderClientesV2 === 'function') renderClientesV2();
-        toast('Cliente salvo na planilha ✅', 'success');
-      })
+    sheetsAppend(CONFIG.SHEETS.CLIENTES, [cliRow])
+      .then(() => toast('Cliente salvo na planilha ✅', 'success'))
       .catch(err => {
         console.error('Erro ao salvar cliente no Sheets:', err);
         toast('Cliente salvo localmente (Sheets indisponível)', 'warning');
       });
   } else {
-    // Salvar cliente localmente (sem Sheets)
-    const row = [
-      contato.doc || '',
-      contato.nome || '',
-      '', '', '', '',
-      contato.fone || '',
-      contato.email || '',
-      (contato.uf || '') + (contato.cidade ? ' - ' + contato.cidade : ''),
-      contato.atividade || '',
-      new Date().toISOString().split('T')[0]
-    ];
-    DATA.clientes.push(row);
-    saveDataLocal();
-    if (typeof renderClientesV2 === 'function') renderClientesV2();
-    if (typeof renderClientesTable === 'function') renderClientesTable();
     toast('Cliente salvo ✅', 'success');
   }
 }
@@ -20304,10 +19939,6 @@ setTimeout(npUnifiedInit, 2000);
 function npGoStep(step) {
   npUnifiedInit(); // Garantir que conteúdo foi movido
   _npCurrentStep = step;
-  // Ao voltar para Step 1 sem proposta salva, restaurar rascunho (serviços/contatos)
-  if (step === 1) {
-    try { _npRestaurarRascunhoAtual(); if (typeof npRenderServicos === 'function') setTimeout(npRenderServicos, 30); } catch(_){}
-  }
   // Toggle step content
   for (let i = 1; i <= 3; i++) {
     const el = document.getElementById('np-step-' + i);
@@ -20326,11 +19957,8 @@ function npGoStep(step) {
   if (step === 1 || step === 2 || step === 3) {
     const idField = document.getElementById('np-id-prop');
     const razaoField = document.getElementById('np-razao');
-    // Preferir o ID do contexto de edição; só cair para _lastSavedPropId se não houver
-    const _pidCtx = (PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : '';
-    const _pidRestore = _pidCtx || window._lastSavedPropId;
-    if ((!idField?.value || !razaoField?.value) && _pidRestore) {
-      const pid = _pidRestore;
+    if ((!idField?.value || !razaoField?.value) && window._lastSavedPropId) {
+      const pid = window._lastSavedPropId;
       const crmRow = DATA.crm.find(r => String(r[CRM_COL.ID]) === String(pid));
       if (crmRow) {
         const restore = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
@@ -20357,12 +19985,8 @@ function npGoStep(step) {
   }
 
   if (step === 2) {
-    // Garantir que seção de custos/comissão esteja presente ao abrir o Step 2
-    try { if (typeof _npInjectCustosOcultos === 'function') _npInjectCustosOcultos(); } catch(_){}
-    // Pegar ID — prioridade: campo → contexto (se editando) → último salvo → contexto
-    // (evita puxar dados da última proposta salva quando user está revisando outra)
-    const _ctxEdit = (PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : '';
-    const idProp = document.getElementById('np-id-prop')?.value || _ctxEdit || window._lastSavedPropId || (PROPOSTA_CONTEXTO||{}).idProp || '';
+    // Pegar ID — do campo, do último salvo, ou do contexto
+    const idProp = document.getElementById('np-id-prop')?.value || window._lastSavedPropId || (PROPOSTA_CONTEXTO||{}).idProp || '';
     
     // Pegar dados do Step 1 — do campo OU do CRM OU do snapshot
     let razao = document.getElementById('np-razao')?.value || '';
@@ -20413,39 +20037,31 @@ function npGoStep(step) {
       }
     }
     // Copiar serviços e subserviços do Step 1 para blocos da calculadora
-    // Se calcBlocos pertence a outra proposta, FORÇAR recarregar do localStorage da proposta atual.
-    const _pidAtual = idProp || document.getElementById('calc-id-proposta')?.value || '';
-    const _pidOwner = window._calcBlocosOwner ? String(window._calcBlocosOwner) : '';
-    const _trocouProposta = _pidAtual && _pidOwner && _pidOwner !== String(_pidAtual);
-    if (_trocouProposta) {
-      // Limpar calcBlocos antes de carregar os corretos
-      calcBlocos = [];
-      window._calcBlocosJaCarregados = false;
-    }
+    // NÃO sobrescrever se já foram carregados por npAbrirCalculadora
     if (window._calcBlocosJaCarregados) {
       window._calcBlocosJaCarregados = false; // Reset flag
-      window._calcBlocosOwner = _pidAtual || window._calcBlocosOwner;
       console.log('[npGoStep] Blocos já carregados — pulando recriação');
     } else if (typeof npServicos !== 'undefined' && npServicos.length && npServicos.some(sv => sv.servico)) {
-      // Popular se calculadora estiver vazia OU se trocou de proposta
+      // Popular se calculadora estiver vazia OU se os serviços mudaram
       const calcVazia = !calcBlocos || !calcBlocos.length || (calcBlocos.length === 1 && (!calcBlocos[0].itens || !calcBlocos[0].itens.length || !calcBlocos[0].itens[0].desc));
-      if (calcVazia || _trocouProposta) {
-        // PRIMEIRO: tentar carregar blocos salvos com horas preservadas — DA PROPOSTA ATUAL
+      if (calcVazia) {
+        // PRIMEIRO: tentar carregar blocos salvos com horas preservadas
         let blocosRecuperados = false;
-        if (_pidAtual) {
+        const _pid = idProp || document.getElementById('calc-id-proposta')?.value || '';
+        if (_pid) {
           try {
-            const _saved = localStorage.getItem('calc_blocos_' + _pidAtual);
+            const _saved = localStorage.getItem('calc_blocos_' + _pid);
             if (_saved) {
               const _blocos = JSON.parse(_saved);
               if (_blocos.length && _blocos.some(b => b.itens?.some(it => it.desc))) {
                 calcBlocos = _blocos;
                 blocosRecuperados = true;
-                console.log('Step2: calcBlocos recuperados do localStorage com horas para proposta #' + _pidAtual);
+                console.log('Step2: calcBlocos recuperados do localStorage com horas para proposta #' + _pid);
               }
             }
           } catch(e) {}
         }
-
+        
         // Se não recuperou, criar blocos a partir dos serviços SELECIONADOS no Step 1
         if (!blocosRecuperados) {
           // NÃO puxar subcategorias automaticamente — usar APENAS o que o user selecionou
@@ -20458,20 +20074,7 @@ function npGoStep(step) {
               : [{ desc: sv.servico, horas: 0, rev: 0, qtd: 1 }]
           }));
         }
-        if (_pidAtual) window._calcBlocosOwner = _pidAtual;
       }
-    }
-    // Restaurar campos calc-* (vh, art, extras, km, etc.) por proposta — corrige "puxar valores da última"
-    if (_pidAtual && _trocouProposta) {
-      try {
-        const _calcCfg = JSON.parse(localStorage.getItem('calc_cfg_' + _pidAtual) || 'null');
-        if (_calcCfg) {
-          ['calc-vh','calc-art','calc-desc','calc-aliq','calc-km','calc-rkm','calc-vis','calc-extras'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el && _calcCfg[id] !== undefined) el.value = _calcCfg[id];
-          });
-        }
-      } catch(_){}
     }
     // Copiar serviço no select legado (usar variável servico já definida acima)
     if (servico) {
@@ -20542,9 +20145,8 @@ function npGoStep(step) {
       else prevModo.value = 'por-item';
     }
 
-    // Pegar ID: campo > contexto (se editando) > último salvo
-    const _ctxEdit3 = (PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : '';
-    let idProp = document.getElementById('np-id-prop')?.value || _ctxEdit3 || window._lastSavedPropId || '';
+    // Pegar ID: campo > último salvo > contexto
+    let idProp = document.getElementById('np-id-prop')?.value || window._lastSavedPropId || '';
     
     // Restaurar ID no campo se vazio
     if (idProp && !document.getElementById('np-id-prop')?.value) {
@@ -22639,17 +22241,9 @@ function npUsarPropostaExistente() {
     const nomes = Object.keys(merged).filter(k => !hidden.includes(k)).sort();
     selSvc.innerHTML = '<option value="">Todos os serviços principais</option>' + nomes.map(n => `<option>${n}</option>`).join('');
   }
-  try { npAtualizarFiltroSubservico(); } catch(e){ console.warn('npAtualizarFiltroSubservico:', e); }
-  try { npFiltrarPropostasExistentes(); } catch(e){ console.warn('npFiltrarPropostasExistentes:', e); }
-  const _modal = document.getElementById('modal-usar-proposta');
-  if (!_modal) { toast('Modal de duplicação não encontrado no HTML', 'error'); console.error('modal-usar-proposta não existe'); return; }
-  try { openModal('modal-usar-proposta'); } catch(e){ console.error('openModal falhou:', e); }
-  // Fallback caso openModal não exista ou falhe
-  if (_modal && !_modal.classList.contains('open')) {
-    _modal.style.display = 'flex';
-    _modal.classList.add('open');
-  }
-  console.log('[npUsarPropostaExistente] modal aberto. Propostas no CRM:', (DATA?.crm||[]).length);
+  npAtualizarFiltroSubservico();
+  npFiltrarPropostasExistentes();
+  openModal('modal-usar-proposta');
 }
 
 function npAtualizarFiltroSubservico() {
@@ -22775,38 +22369,39 @@ function npFiltrarPropostasExistentes() {
 }
 
 function npDuplicarProposta(idx) {
-  console.log('[npDuplicarProposta] chamada com idx =', idx);
-  const r = (typeof DATA !== 'undefined' && DATA.crm) ? DATA.crm[idx] : null;
-  if (!r) { toast('Proposta não encontrada para duplicar (idx=' + idx + ')', 'warning'); return; }
-
-  toast('⏳ Duplicando proposta…', 'info');
+  const r = DATA.crm[idx];
+  if (!r) return;
 
   const el = id => document.getElementById(id);
-  try { closeModal('modal-usar-proposta'); } catch(_){}
+  closeModal('modal-usar-proposta');
 
-  // Resetar TUDO — usuário pode estar editando outra proposta no momento
-  try { PROPOSTA_CONTEXTO = {}; localStorage.removeItem('proposta_ctx'); } catch(_){}
+  // Resetar TUDO de edição — duplicar deve sempre criar uma proposta NOVA,
+  // mesmo que o usuário tenha vindo do modo "Editar Proposta".
+  PROPOSTA_CONTEXTO = {};
+  try { localStorage.removeItem('proposta_ctx'); } catch(_){}
   window._lastSavedPropId = null;
   window._calcBlocosJaCarregados = false;
-  window._calcBlocosOwner = null;
-  // Forçar Step 1 ANTES de qualquer nav (senão unified nav vai pra step anterior)
-  try { window._npCurrentStep = 1; } catch(_){}
-  if (typeof npServicos !== 'undefined') npServicos = [{ servico: '', subcats: [] }];
+  prevIdxCRM = null;
+  prevItens = [];
+  calcBlocos = [];
   if (typeof npContatos !== 'undefined') npContatos = [];
-  if (typeof calcBlocos !== 'undefined') calcBlocos = [];
-  if (typeof prevItens !== 'undefined') prevItens = [];
-  if (typeof prevIdxCRM !== 'undefined') prevIdxCRM = null;
-  if (typeof NP_ITENS_OCULTOS !== 'undefined') NP_ITENS_OCULTOS.length = 0;
-  if (typeof clearForm === 'function') { try { clearForm(); } catch(e){ console.warn('clearForm falhou:', e); } }
+  if (typeof npServicos !== 'undefined') npServicos = [];
 
-  // Navegar (mesmo se já estiver na página)
-  try { nav('nova-proposta-page'); } catch(e){ console.warn('nav falhou:', e); }
-  // Garantir que vai pro Step 1
-  setTimeout(() => { try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){} }, 100);
+  // Limpar campos do formulário antes de repopular
+  ['np-id-prop','np-cnpj','np-razao','np-fantasia','np-endereco','np-cep','np-municipio',
+   'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-pessoa-responsavel',
+   'np-local-obra','np-campo-especial'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.value = '';
+  });
+
+  // Restaurar título da página (remover banner "✏️ Editando Proposta #X")
+  const titulo = document.querySelector('#page-nova-proposta-page .card-title');
+  if (titulo) titulo.textContent = 'Nova Proposta';
+
+  nav('nova-proposta-page');
 
   setTimeout(() => {
-    try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){}
-    // Gerar novo ID (forçando — descarta qualquer ID herdado)
+    // Gerar novo ID
     const idEl = el('np-id-prop');
     if (idEl) idEl.value = '';
     if (typeof npSetProximoId === 'function') npSetProximoId();
@@ -22899,18 +22494,13 @@ function npDuplicarProposta(idx) {
     if (el('np-obs')) el('np-obs').value = obsClean;
 
     // Atualizar nome composto
-    try { if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto(); } catch(_){}
+    if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto();
 
-    // Ir para Step 1 (terceira garantia)
-    try { if (typeof npGoStep === 'function') npGoStep(1); } catch(_){}
+    // Ir para Step 1
+    if (typeof npGoStep === 'function') npGoStep(1);
 
-    // Re-render visual de contatos e serviços (garantir UI sincronizada com os arrays)
-    try { if (typeof npRenderContatos === 'function') npRenderContatos(); } catch(_){}
-    try { if (typeof npRenderServicos === 'function') npRenderServicos(); } catch(_){}
-
-    toast('✅ Proposta #' + (r[CRM_COL.ID]||'') + ' duplicada! Novo ID: ' + (document.getElementById('np-id-prop')?.value||'?') + '. Ajuste e salve.', 'success');
-    console.log('[npDuplicarProposta] concluído. Razão copiada:', r[CRM_COL.RAZAO]);
-  }, 600);
+    toast('✅ Proposta #' + (r[CRM_COL.ID]||'') + ' duplicada com todos os dados! Ajuste o que precisar e salve.', 'success');
+  }, 400);
 }
 
 // ══════════════════════════════════════════════════════
@@ -23499,13 +23089,9 @@ function execExportarDocs() {
 let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[]');
 
 // Injetar seção de itens ocultos no FINAL da Calculadora (Step 2)
-// Envolvido em função reusável — chamada em DOMContentLoaded E em npGoStep(2)
-// para garantir que nunca "some" caso o conteúdo do step 2 seja re-renderizado.
-function _npInjectCustosOcultos() {
+setTimeout(() => {
   const calcPage = document.getElementById('np-step-2');
   if (!calcPage) return;
-  // Se já existe, não duplicar
-  if (document.getElementById('np-itens-ocultos-wrap')) { npRenderItensOcultos(); return; }
 
   const ocultosDiv = document.createElement('div');
   ocultosDiv.className = 'card';
@@ -23543,11 +23129,7 @@ function _npInjectCustosOcultos() {
   `;
   calcPage.appendChild(ocultosDiv);
   npRenderItensOcultos();
-}
-// Inject inicial + retries para cobrir qualquer race condition
-setTimeout(_npInjectCustosOcultos, 500);
-setTimeout(_npInjectCustosOcultos, 2000);
-setTimeout(_npInjectCustosOcultos, 4000);
+}, 2000);
 
 function _saveItensOcultos() { localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS)); }
 
