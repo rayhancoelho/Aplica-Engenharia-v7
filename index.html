@@ -6336,20 +6336,50 @@ const CONFIG = {
   SHEET_ID:    localStorage.getItem('sheet_id')    || '102NFCEWMUY_VMxRVwUJYYmrrRedDv4GqiZFZ9YgPwoQ',
   CALENDAR_ID: localStorage.getItem('cal_id')      || 'primary',
 
-  // Abas da planilha (nomes exatos)
+  // Abas da planilha (nomes exatos — alinhados com Aplica Engenharia COMPLETA.xlsx)
+  // Sistema tenta primeiro o nome com emoji; se falhar, fallback p/ nome antigo
   SHEETS: {
-    CRM:                 'CRM',
-    FINANCEIRO:          'FINANCEIRO',
-    CLIENTES:            'CLIENTES',
-    PROJETOS:            'PROJETOS',
-    DESPESAS:            'DESPESAS',
-    MARKETING:           'MARKETING',
-    LISTAS:              'LISTAS',
-    HISTORICO_PROPOSTAS: 'HISTORICO_PROPOSTAS',
-    HISTORICO_NF:        'HISTORICO_NF',
-    TIMER:               'TIMER',
-    CADASTRO:            'CADASTRO',
-    CONTATOS:            'CONTATOS',
+    CRM:                 '📋 CRM',
+    FINANCEIRO:          '💰 FINANCEIRO',
+    CLIENTES:            '🤝 CLIENTES',
+    PROJETOS:            '📁 PROJETOS',
+    DESPESAS:            '💸 DESPESAS',
+    MARKETING:           '📣 MARKETING',
+    HISTORICO_PROPOSTAS: '📜 PROPOSTAS_HISTORICO',
+    HISTORICO_NF:        '🧾 NOTAS_FISCAIS',
+    TIMER:               '⏱️ TIMER',
+    CADASTRO:            '🏢 EMPRESA',
+    CONTATOS:            '📞 CONTATOS',
+    LEADS:               '🚀 LEADS',
+    AGENDA:              '📅 AGENDA',
+    EQUIPE:              '👥 EQUIPE',
+    PERMISSOES:          '🔐 PERMISSOES',
+    COMISSOES:           '🎯 COMISSOES',
+    DESP_REAIS:          '🛠️ DESP_REAIS_SERVICO',
+    TAREFAS:             '✅ TAREFAS',
+    PIPELINE:            '📊 PIPELINE',
+    PROP_RASCUNHO:       '📝 PROPOSTAS_RASCUNHO',
+    PROP_CALCULO:        '🧮 PROPOSTAS_CALCULO',
+    PROP_ITENS:          '📦 PROPOSTAS_ITENS',
+    PROP_FORA_ESCOPO:    '🚫 PROPOSTAS_FORA_ESCOPO',
+    CONFIG:              '⚙️ CONFIG',
+    CONFIG_LISTAS:       '📃 CONFIG_LISTAS',
+    SERVICOS:            '🔧 SERVICOS',
+    NORMAS:              '📐 NORMAS',
+    PRAZOS:              '📅 PRAZOS',
+    NOMES_PADRAO:        '🏷️ NOMES_PADRAO',
+    SETORES:             '🏗️ SETORES',
+    CANAIS:              '📡 CANAIS',
+    PAGTO_PADRAO:        '💳 PAGAMENTO_PADRAO',
+    CONTATOS_EMPRESA:    '📞 CONTATOS_EMPRESA',
+    PROJETISTAS:         '📐 CONTATOS_PROJETISTAS',
+    REPRESENTANTES:      '🤵 CONTATOS_REPRESENTANTES',
+    OUTROS:              '📇 CONTATOS_OUTROS',
+    PERFIS_ACESSO:       '👑 PERFIS_ACESSO',
+    ITENS_OCULTOS:       '🚫 ITENS_OCULTOS',
+    NOTIFICACOES:        '🔔 NOTIFICACOES',
+    ENVIOS:              '📦 ENVIOS',
+    LISTAS:              '📃 CONFIG_LISTAS',
   }
 };
 
@@ -6427,8 +6457,50 @@ let chartsInited = {};
 /* ═══════════════════════════════════════════
    INIT
 ═══════════════════════════════════════════ */
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
   loadConfigFromStorage();
+
+  // ── DETECÇÃO DE CACHE LIMPO ─────────────────────────────────────
+  // Se o localStorage está praticamente vazio (sem cad_empresa, sem aplica_data),
+  // tenta restaurar TUDO da planilha automaticamente antes de mostrar a tela.
+  const cacheVazio = !localStorage.getItem('cad_empresa') && !localStorage.getItem('aplica_data');
+  const temUrl = !!CONFIG.APPS_SCRIPT_URL;
+  if (cacheVazio && temUrl) {
+    console.log('[init] cache vazio + APPS_SCRIPT_URL configurado → tentando restaurar da planilha...');
+    setSyncStatus('loading', 'Restaurando da planilha...');
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 20000);
+      const r = await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'export_all' }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const j = await r.json();
+      if (j && typeof j === 'object' && !j.error) {
+        // Restaura cada chave do localStorage
+        Object.keys(j).forEach(k => {
+          try {
+            const v = j[k];
+            const stored = (typeof v === 'string') ? v : JSON.stringify(v);
+            // bypass do hook de auto-sync para não criar loop
+            const _orig = Storage.prototype.setItem;
+            Storage.prototype.__bypass = true;
+            localStorage.setItem(k, stored);
+            Storage.prototype.__bypass = false;
+          } catch(_){}
+        });
+        console.log('[init] ✓ restaurado da planilha:', Object.keys(j));
+        if (typeof toast === 'function') {
+          setTimeout(() => toast('✅ Dados restaurados da planilha após cache limpo', 'success'), 500);
+        }
+      }
+    } catch(e) {
+      console.warn('[init] não consegui restaurar da planilha:', e.message);
+    }
+  }
+
   loadDataLocal();
   showApp();
   syncData();
@@ -23474,6 +23546,953 @@ setTimeout(() => {
     topRight.insertBefore(btn, topRight.firstChild);
   }
 }, 2000);
+
+
+/* APPS SCRIPT EMBUTIDO */
+window._aplicaAppsScriptCode = "/**\n * APLICA ENGENHARIA \u2014 APPS SCRIPT (Web App)\n * \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n * Este arquivo deve ser COLADO em https://script.google.com/, dentro do\n * projeto vinculado \u00e0 planilha \"Aplica Engenharia COMPLETA.xlsx\".\n *\n * Como instalar:\n *   1. Abra a planilha no Google Sheets\n *   2. Extens\u00f5es \u2192 Apps Script\n *   3. Cole TODO este arquivo no Code.gs (substituindo o que estiver l\u00e1)\n *   4. Implantar \u2192 Nova implanta\u00e7\u00e3o \u2192 Tipo: Aplicativo da Web\n *      \u2022 Executar como: Eu (sua conta)\n *      \u2022 Quem tem acesso: Qualquer pessoa\n *   5. Copie a URL gerada e cole em \"\u2699\ufe0f Configura\u00e7\u00f5es \u2192 URL do Apps Script\"\n *      no sistema Aplica\n *\n * Endpoints suportados (action):\n *   \u2022 ping             \u2192 teste de conex\u00e3o\n *   \u2022 sync             \u2192 retorna TODAS as abas (snapshot)\n *   \u2022 get              \u2192 retorna uma aba espec\u00edfica (sheet, range)\n *   \u2022 append           \u2192 adiciona linhas (sheet, values)\n *   \u2022 put              \u2192 atualiza um range (sheet, range, values)\n *   \u2022 put_all          \u2192 substitui todas linhas de uma aba (sheet, values)\n *   \u2022 sync_storage     \u2192 recebe payload de localStorage e grava na aba\n *   \u2022 verify           \u2192 verifica se um valor existe (sheet, column, value)\n *   \u2022 export_all       \u2192 retorna mapa de localStorage reconstru\u00eddo\n * \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */\n\nconst ABAS = {\n  CRM:                  '\ud83d\udccb CRM',\n  CLIENTES:             '\ud83e\udd1d CLIENTES',\n  PROJETOS:             '\ud83d\udcc1 PROJETOS',\n  FINANCEIRO:           '\ud83d\udcb0 FINANCEIRO',\n  DESPESAS:             '\ud83d\udcb8 DESPESAS',\n  MARKETING:            '\ud83d\udce3 MARKETING',\n  CONTATOS:             '\ud83d\udcde CONTATOS',\n  TIMER:                '\u23f1\ufe0f TIMER',\n  HISTORICO_PROPOSTAS:  '\ud83d\udcdc PROPOSTAS_HISTORICO',\n  NOTAS_FISCAIS:        '\ud83e\uddfe NOTAS_FISCAIS',\n  EMPRESA:              '\ud83c\udfe2 EMPRESA',\n  CONFIG:               '\u2699\ufe0f CONFIG',\n  CONFIG_LISTAS:        '\ud83d\udcc3 CONFIG_LISTAS',\n};\n\nfunction doGet(e)  { return _handle(e); }\nfunction doPost(e) { return _handle(e); }\n\nfunction _handle(e) {\n  try {\n    let p = {};\n    if (e && e.postData && e.postData.contents) {\n      try { p = JSON.parse(e.postData.contents); } catch(_){}\n    } else if (e && e.parameter) {\n      p = e.parameter;\n      if (typeof p.values === 'string') { try { p.values = JSON.parse(p.values); } catch(_){} }\n      if (typeof p.value === 'string')  { try { p.value  = JSON.parse(p.value);  } catch(_){} }\n    }\n    const action = (p.action || '').toLowerCase();\n    let out;\n    switch (action) {\n      case 'ping':         out = { ok: true, t: Date.now() }; break;\n      case 'sync':         out = _actionSync(); break;\n      case 'get':          out = _actionGet(p); break;\n      case 'append':       out = _actionAppend(p); break;\n      case 'put':          out = _actionPut(p); break;\n      case 'put_all':      out = _actionPutAll(p); break;\n      case 'sync_storage': out = _actionSyncStorage(p); break;\n      case 'verify':       out = _actionVerify(p); break;\n      case 'export_all':   out = _actionExportAll(); break;\n      default:             out = { error: 'unknown action: ' + action };\n    }\n    return ContentService.createTextOutput(JSON.stringify(out))\n      .setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({ error: String(err && err.message || err) }))\n      .setMimeType(ContentService.MimeType.JSON);\n  }\n}\n\nfunction _ss() { return SpreadsheetApp.getActiveSpreadsheet(); }\n\nfunction _getSheet(name) {\n  // Tenta nome exato; se n\u00e3o encontrar, tenta sem emoji\n  let sh = _ss().getSheetByName(name);\n  if (sh) return sh;\n  // fallback: busca aba que contenha o nome (sem emoji)\n  const limpo = name.replace(/[^\\w_]/g, '').toUpperCase();\n  const all = _ss().getSheets();\n  for (const s of all) {\n    const lim = s.getName().replace(/[^\\w_]/g, '').toUpperCase();\n    if (lim === limpo) return s;\n  }\n  // n\u00e3o encontrou \u2014 cria\n  return _ss().insertSheet(name);\n}\n\nfunction _actionSync() {\n  const out = {};\n  out.crm        = _readData(ABAS.CRM);\n  out.financeiro = _readData(ABAS.FINANCEIRO);\n  out.clientes   = _readData(ABAS.CLIENTES);\n  out.projetos   = _readData(ABAS.PROJETOS);\n  out.despesas   = _readData(ABAS.DESPESAS);\n  out.marketing  = _readData(ABAS.MARKETING);\n  out.contatos   = _readData(ABAS.CONTATOS);\n  return out;\n}\n\nfunction _readData(sheetName) {\n  const sh = _getSheet(sheetName);\n  const last = sh.getLastRow();\n  if (last < 2) return [];\n  const values = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();\n  // remover linhas totalmente vazias\n  return values.filter(r => r.some(c => c !== '' && c !== null));\n}\n\nfunction _actionGet(p) {\n  const sh = _getSheet(p.sheet);\n  if (!p.range) {\n    const last = sh.getLastRow();\n    if (last < 2) return [];\n    return sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();\n  }\n  return sh.getRange(p.range).getValues();\n}\n\nfunction _actionAppend(p) {\n  const sh = _getSheet(p.sheet);\n  const values = p.values || [];\n  if (!values.length) return { appended: 0 };\n  sh.getRange(sh.getLastRow() + 1, 1, values.length, values[0].length).setValues(values);\n  return { appended: values.length };\n}\n\nfunction _actionPut(p) {\n  const sh = _getSheet(p.sheet);\n  if (!p.range || !p.values) return { error: 'range/values obrigat\u00f3rios' };\n  const vals = p.values.length && Array.isArray(p.values[0]) ? p.values : [p.values];\n  sh.getRange(p.range).setValues(vals);\n  return { ok: true };\n}\n\nfunction _actionPutAll(p) {\n  const sh = _getSheet(p.sheet);\n  const values = p.values || [];\n  // Limpa tudo a partir da linha 2\n  const last = sh.getLastRow();\n  if (last >= 2) sh.getRange(2, 1, last - 1, sh.getMaxColumns()).clearContent();\n  if (!values.length) return { ok: true, rows: 0 };\n  // pad para mesma largura\n  const w = Math.max(...values.map(r => r.length));\n  const padded = values.map(r => { const c=[...r]; while(c.length<w) c.push(''); return c; });\n  sh.getRange(2, 1, padded.length, w).setValues(padded);\n  return { ok: true, rows: padded.length };\n}\n\n/**\n * Recebe o conte\u00fado de uma chave do localStorage e grava na aba correspondente.\n * Tipos:\n *  - 'kv'         : objeto chave/valor \u2192 preenche aba EMPRESA (B2:B... = valores)\n *  - 'rows'       : array de objetos \u2192 cada linha = 1 objeto, colunas conforme p.cols\n *  - 'list'       : array de strings \u2192 1 col com a string, ordem na col 1\n *  - 'config_kv'  : 1 chave \u2192 atualiza linha em \u2699\ufe0f CONFIG (col A=key, col B=value)\n *  - 'perms'      : objeto { nome: { area: bool } } \u2192 linha por nome\n *  - 'tasks'      : objeto { projeto_id: [tarefas] } \u2192 uma tarefa por linha\n *  - 'rascunhos'  : array de rascunhos com servicos/contatos JSON\n *  - 'normas'     : objeto { servico: [normas] }\n *  - 'servicos'   : objeto { categoria: { servico: [subitens] } }\n *  - 'servicos_hidden' : array de servicos a esconder (merge na aba SERVICOS)\n *  - 'cfg_listas' : objeto { lista: [valores] } \u2192 aba CONFIG_LISTAS\n *  - 'nf'         : objeto { nfNum: { detalhes... } } \u2192 linhas com colunas detalhadas\n */\nfunction _actionSyncStorage(p) {\n  const sheet = p.sheet;\n  const type = p.type;\n  const value = p.value;\n  const sh = _getSheet(sheet);\n\n  switch (type) {\n    case 'kv': {\n      // value \u00e9 objeto { key1: val, key2: val }\n      // Aba EMPRESA tem layout: A=label, B=valor, C=descricao\n      const last = sh.getLastRow();\n      const range = sh.getRange(2, 1, Math.max(last - 1, 1), 3);\n      const data = range.getValues();\n      Object.keys(value).forEach(k => {\n        const idx = data.findIndex(r => String(r[0]).trim().toLowerCase() === k.toLowerCase());\n        if (idx >= 0) {\n          sh.getRange(idx + 2, 2).setValue(value[k]);\n        } else {\n          sh.appendRow([k, value[k], '']);\n        }\n      });\n      return { ok: true, type: 'kv' };\n    }\n\n    case 'config_kv': {\n      const key = p.key;\n      const val = value;\n      const last = sh.getLastRow();\n      const data = sh.getRange(2, 1, Math.max(last - 1, 1), 2).getValues();\n      const idx = data.findIndex(r => String(r[0]).trim().toLowerCase() === String(key).toLowerCase());\n      if (idx >= 0) sh.getRange(idx + 2, 2).setValue(val);\n      else sh.appendRow([key, val, '']);\n      return { ok: true, type: 'config_kv' };\n    }\n\n    case 'rows': {\n      // Substitui todas linhas de dados por value (array de objetos)\n      const cols = p.cols || [];\n      const arr = Array.isArray(value) ? value : [];\n      const matriz = arr.map(o => cols.map(c => (o && o[c] !== undefined) ? o[c] : ''));\n      return _replaceRows(sh, matriz);\n    }\n\n    case 'list': {\n      // value = array de strings; col 1 = ordem (opcional), col \u00faltima = string\n      const arr = Array.isArray(value) ? value : [];\n      const ncols = sh.getLastColumn() || 2;\n      const matriz = arr.map((v, i) => {\n        const r = new Array(ncols).fill('');\n        if (ncols >= 2) { r[0] = i + 1; r[1] = v; }\n        else r[0] = v;\n        return r;\n      });\n      return _replaceRows(sh, matriz);\n    }\n\n    case 'perms': {\n      // value = { nome: { area: bool } }\n      // colunas: nome | dashboard | propostas | financeiro | projetos | marketing | equipe | relatorios | notas_fiscais | config\n      const colNames = ['nome_membro','dashboard','propostas','financeiro','projetos','marketing','equipe','relatorios','notas_fiscais','config'];\n      const obj = value || {};\n      const matriz = Object.keys(obj).map(nome => {\n        const perms = obj[nome] || {};\n        return colNames.map(c => c === 'nome_membro' ? nome : (perms[c] !== false));\n      });\n      return _replaceRows(sh, matriz);\n    }\n\n    case 'tasks': {\n      // value = { projeto_id: [ {tarefa, responsavel, prazo, status, ...} ] }\n      const obj = value || {};\n      const cols = ['projeto_id','subservico','tarefa','responsavel','prazo','status','prioridade','horas_previstas','horas_realizadas','obs','data_criacao'];\n      const matriz = [];\n      Object.keys(obj).forEach(pid => {\n        (obj[pid] || []).forEach(t => {\n          matriz.push(cols.map(c => c === 'projeto_id' ? pid : (t[c] !== undefined ? t[c] : '')));\n        });\n      });\n      return _replaceRows(sh, matriz);\n    }\n\n    case 'rascunhos': {\n      // array de objetos\n      const arr = Array.isArray(value) ? value : [];\n      const cols = ['idProp','cnpj','razao','fantasia','endereco','municipio','valor','validade','followup','canal','status','contatos','servicos','obs','dataMod'];\n      const matriz = arr.map(r => cols.map(c => {\n        const v = r[c];\n        if (Array.isArray(v) || (typeof v === 'object' && v !== null)) return JSON.stringify(v);\n        return v !== undefined ? v : '';\n      }));\n      return _replaceRows(sh, matriz);\n    }\n\n    case 'normas': {\n      // value = { servico: [ {norma, descricao} ] } ou array\n      const obj = value || {};\n      const matriz = [];\n      if (Array.isArray(obj)) {\n        obj.forEach(n => matriz.push([n.servico||'', n.norma||'', n.descricao||'', true, '']));\n      } else {\n        Object.keys(obj).forEach(serv => {\n          (obj[serv] || []).forEach(n => {\n            const norm = (typeof n === 'string') ? n : (n.norma||'');\n            const desc = (typeof n === 'string') ? '' : (n.descricao||'');\n            matriz.push([serv, norm, desc, true, '']);\n          });\n        });\n      }\n      return _replaceRows(sh, matriz);\n    }\n\n    case 'servicos': {\n      // SERVICOS_CUSTOM = { categoria: { servico: [subitens] } }\n      const obj = value || {};\n      const matriz = [];\n      Object.keys(obj).forEach(cat => {\n        const servs = obj[cat] || {};\n        Object.keys(servs).forEach(s => {\n          const subs = servs[s] || [];\n          matriz.push([cat, s, JSON.stringify(subs), true, false, '']);\n        });\n      });\n      // Mant\u00e9m os ocultos (linhas existentes com oculto=true)\n      const last = sh.getLastRow();\n      const existentes = last > 1 ? sh.getRange(2, 1, last - 1, 6).getValues() : [];\n      const ocultos = existentes.filter(r => r[4] === true);\n      return _replaceRows(sh, matriz.concat(ocultos));\n    }\n\n    case 'servicos_hidden': {\n      // value = array de strings (chaves de servi\u00e7os ocultos)\n      const arr = Array.isArray(value) ? value : [];\n      // pega linhas existentes que N\u00c3O s\u00e3o ocultas, e re-anexa os ocultos atuais\n      const last = sh.getLastRow();\n      const existentes = last > 1 ? sh.getRange(2, 1, last - 1, 6).getValues() : [];\n      const naoOcultos = existentes.filter(r => r[4] !== true);\n      const ocultos = arr.map(s => ['(oculto)', s, '', false, true, '']);\n      return _replaceRows(sh, naoOcultos.concat(ocultos));\n    }\n\n    case 'cfg_listas': {\n      // value = { lista_nome: [valores] } \u2014 Aba CONFIG_LISTAS tem 1 col por lista\n      const obj = value || {};\n      const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);\n      const last = sh.getLastRow();\n      // Limpar dados (mant\u00e9m headers)\n      if (last >= 2) sh.getRange(2, 1, last - 1, sh.getLastColumn()).clearContent();\n      // Para cada lista no value, encontrar coluna e preencher\n      Object.keys(obj).forEach(listaKey => {\n        const ci = headers.findIndex(h => h.trim().toLowerCase() === listaKey.toLowerCase());\n        if (ci < 0) return;\n        const arr = obj[listaKey] || [];\n        if (!arr.length) return;\n        const col = ci + 1;\n        const valsCol = arr.map(v => [v]);\n        sh.getRange(2, col, valsCol.length, 1).setValues(valsCol);\n      });\n      return { ok: true, type: 'cfg_listas' };\n    }\n\n    case 'nf': {\n      // value = { nfKey: { ...detalhes } } \u2014 adiciona/atualiza ficha NF\n      const obj = value || {};\n      const cols = [\n        'numero','cliente','valor','data_emissao','status','arquivo','obs',\n        'emitir_nf','momento_faturamento','data_conclusao_servico','data_solicitacao_nf',\n        'data_emissao_nf','numero_nf','status_nf','forma_envio_nf','houve_alteracao_nf',\n        'qtd_alteracoes_nf','motivo_alteracao_nf','data_reemissao_nf','impacto_no_prazo',\n        'valor_faturado','imposto','valor_liquido','custos','lucro',\n        'forma_pagamento','data_vencimento','data_recebimento','status_pagamento','dias_atraso'\n      ];\n      const matriz = Object.keys(obj).map((k, i) => {\n        const d = obj[k] || {};\n        return [i + 1, k].concat(cols.slice(1).map(c => d[c] !== undefined ? d[c] : ''));\n      });\n      return _replaceRows(sh, matriz);\n    }\n  }\n  return { ok: false, error: 'tipo desconhecido: ' + type };\n}\n\nfunction _replaceRows(sh, matriz) {\n  const last = sh.getLastRow();\n  if (last >= 2) sh.getRange(2, 1, last - 1, sh.getMaxColumns()).clearContent();\n  if (!matriz.length) return { ok: true, rows: 0 };\n  const w = Math.max(...matriz.map(r => r.length));\n  const padded = matriz.map(r => { const c=[...r]; while(c.length<w) c.push(''); return c; });\n  sh.getRange(2, 1, padded.length, w).setValues(padded);\n  return { ok: true, rows: padded.length };\n}\n\nfunction _actionVerify(p) {\n  const sh = _getSheet(p.sheet);\n  if (!p.column || p.value === undefined) return { found: false, error: 'column/value obrigat\u00f3rios' };\n  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);\n  // p.column pode ser \u00edndice (n\u00famero) ou nome de cabe\u00e7alho\n  let ci = -1;\n  if (typeof p.column === 'number') ci = p.column;\n  else {\n    const target = String(p.column).trim().toLowerCase();\n    ci = headers.findIndex(h => h.trim().toLowerCase() === target);\n  }\n  if (ci < 0) return { found: false, error: 'coluna n\u00e3o encontrada: ' + p.column };\n  const last = sh.getLastRow();\n  if (last < 2) return { found: false };\n  const col = sh.getRange(2, ci + 1, last - 1, 1).getValues();\n  const target = String(p.value).trim();\n  for (const r of col) {\n    if (String(r[0]).trim() === target) return { found: true };\n  }\n  return { found: false };\n}\n\nfunction _actionExportAll() {\n  // Reconstr\u00f3i o que estaria no localStorage a partir da planilha\n  const out = {};\n\n  // EMPRESA\n  try {\n    const sh = _getSheet(ABAS.EMPRESA);\n    const last = sh.getLastRow();\n    const data = last > 1 ? sh.getRange(2, 1, last - 1, 2).getValues() : [];\n    const obj = {};\n    data.forEach(r => { if (r[0]) obj[String(r[0]).trim()] = r[1]; });\n    out['cad_empresa'] = obj;\n  } catch(_){}\n\n  // CONFIG\n  try {\n    const sh = _getSheet(ABAS.CONFIG);\n    const last = sh.getLastRow();\n    const data = last > 1 ? sh.getRange(2, 1, last - 1, 2).getValues() : [];\n    data.forEach(r => {\n      if (!r[0]) return;\n      const k = String(r[0]).trim();\n      if (['sheet_id','apps_script_url','cal_id','perfil_ativo'].includes(k)) {\n        out[k] = String(r[1] || '');\n      }\n    });\n  } catch(_){}\n\n  // CONFIG_LISTAS \u2192 cfg_cadastros\n  try {\n    const sh = _getSheet(ABAS.CONFIG_LISTAS);\n    const last = sh.getLastRow();\n    const lastCol = sh.getLastColumn();\n    if (last > 1 && lastCol > 0) {\n      const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(String);\n      const data = sh.getRange(2, 1, last - 1, lastCol).getValues();\n      const cfg = {};\n      headers.forEach((h, ci) => {\n        const arr = data.map(r => r[ci]).filter(v => v !== '' && v !== null);\n        cfg[h] = arr;\n      });\n      out['cfg_cadastros'] = cfg;\n    }\n  } catch(_){}\n\n  return out;\n}\n";
+
+/* ════════════════════════════════════════════════════════════════════════════
+   APLICA SYNC — SETUP WIZARD (modal fullscreen com 4 passos guiados)
+   ════════════════════════════════════════════════════════════════════════════ */
+(function injectWizardCSS(){
+  const css = `
+  #aplica-wizard-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(13,17,23,0.96); z-index: 99999; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    overflow-y: auto; font-family: 'DM Sans', sans-serif; }
+  #aplica-wizard-overlay.show { display: flex; }
+  #aplica-wizard-modal { background: #161b22; border: 2px solid #f0a500; border-radius: 16px;
+    max-width: 720px; width: 100%; padding: 36px 40px; color: #e6edf3;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7); max-height: 90vh; overflow-y: auto; }
+  #aplica-wizard-modal h1 { font-family: 'Syne', sans-serif; font-size: 22px; color: #f0a500; margin-bottom: 8px; }
+  #aplica-wizard-modal .wiz-sub { color: #9da5ae; font-size: 13px; margin-bottom: 24px; }
+  #aplica-wizard-modal .wiz-step { background: #1c2330; border-left: 4px solid #f0a500;
+    padding: 16px 20px; margin-bottom: 16px; border-radius: 8px; }
+  #aplica-wizard-modal .wiz-step.done { border-color: #3fb950; opacity: 0.7; }
+  #aplica-wizard-modal .wiz-step h3 { font-size: 14px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 10px; }
+  #aplica-wizard-modal .wiz-num { background: #f0a500; color: #000; width: 26px; height: 26px;
+    border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; }
+  #aplica-wizard-modal .wiz-step.done .wiz-num { background: #3fb950; color: #fff; }
+  #aplica-wizard-modal .wiz-desc { font-size: 13px; color: #c9d1d9; margin-bottom: 12px; line-height: 1.5; }
+  #aplica-wizard-modal .wiz-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  #aplica-wizard-modal .wiz-btn { background: #2c3340; border: 1px solid #30363d; color: #e6edf3;
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.15s; }
+  #aplica-wizard-modal .wiz-btn:hover { background: #3a4252; border-color: #f0a500; }
+  #aplica-wizard-modal .wiz-btn.primary { background: #f0a500; color: #000; border-color: #f0a500; }
+  #aplica-wizard-modal .wiz-btn.primary:hover { background: #e09500; }
+  #aplica-wizard-modal .wiz-btn.success { background: #3fb950; color: #fff; border-color: #3fb950; }
+  #aplica-wizard-modal .wiz-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #aplica-wizard-modal input.wiz-input { width: 100%; background: #0d1117; border: 1px solid #30363d;
+    color: #e6edf3; padding: 10px 12px; border-radius: 6px; font-family: monospace;
+    font-size: 12px; margin: 6px 0; }
+  #aplica-wizard-modal input.wiz-input:focus { border-color: #f0a500; outline: none; }
+  #aplica-wizard-modal .wiz-status { display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; margin-left: 8px; }
+  #aplica-wizard-modal .wiz-status.ok { background: #3fb950; color: #fff; }
+  #aplica-wizard-modal .wiz-status.fail { background: #f85149; color: #fff; }
+  #aplica-wizard-modal .wiz-footer { display: flex; gap: 8px; margin-top: 20px; padding-top: 20px;
+    border-top: 1px solid #30363d; justify-content: space-between; flex-wrap: wrap; }
+  `;
+  const s = document.createElement('style');
+  s.textContent = css;
+  document.head.appendChild(s);
+})();
+
+window.aplicaSetupWizard = function() {
+  let overlay = document.getElementById('aplica-wizard-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'aplica-wizard-overlay';
+    document.body.appendChild(overlay);
+  }
+  const sheetIdAtual = localStorage.getItem('sheet_id') || '';
+  const urlAtual     = localStorage.getItem('apps_script_url') || '';
+  overlay.innerHTML = `
+    <div id="aplica-wizard-modal">
+      <h1>🔧 Setup Aplica Engenharia — Conectar à Planilha</h1>
+      <div class="wiz-sub">
+        Pra os dados saírem do navegador e irem pra planilha (e não sumirem mais quando limpar cache),
+        precisamos de 4 passos. Tudo aqui — não precisa abrir documentação.
+      </div>
+
+      <div class="wiz-step" id="wiz-step-1">
+        <h3><span class="wiz-num">1</span> Subir a planilha pro Google Drive</h3>
+        <div class="wiz-desc">
+          Suba o arquivo <strong>"Aplica Engenharia COMPLETA.xlsx"</strong> (em Downloads) pro Google Drive
+          e abra como <strong>Planilhas Google</strong> (botão direito → Abrir com → Planilhas Google).
+        </div>
+        <div class="wiz-actions">
+          <button class="wiz-btn primary" onclick="window.open('https://drive.google.com/drive/my-drive','_blank')">↗ Abrir Google Drive</button>
+        </div>
+        <div class="wiz-desc" style="margin-top:8px;font-size:11px;color:#6e7681">
+          Cole o ID da URL (entre <span style="color:#f0a500">/d/</span> e <span style="color:#f0a500">/edit</span>):
+        </div>
+        <input class="wiz-input" id="wiz-sheet-id" placeholder="ex: 1AAAA1234ABCD..." value="${sheetIdAtual}">
+      </div>
+
+      <div class="wiz-step" id="wiz-step-2">
+        <h3><span class="wiz-num">2</span> Colar o Apps Script na planilha</h3>
+        <div class="wiz-desc">
+          Na planilha aberta, vá em <strong>Extensões → Apps Script</strong>. Apague tudo do Code.gs e cole o código abaixo:
+        </div>
+        <div class="wiz-actions">
+          <button class="wiz-btn primary" onclick="window.aplicaWizardCopiarGs()">📋 Copiar código (clique e cole no Apps Script)</button>
+          <span id="wiz-gs-copied"></span>
+        </div>
+        <div class="wiz-desc" style="margin-top:8px;font-size:11px;color:#6e7681">
+          Depois de colar, salve com <strong>Ctrl+S</strong>. Se pedir nome, coloque "Aplica Sync".
+        </div>
+      </div>
+
+      <div class="wiz-step" id="wiz-step-3">
+        <h3><span class="wiz-num">3</span> Implantar como Web App</h3>
+        <div class="wiz-desc">
+          No Apps Script, clique em <strong>Implantar → Nova implantação</strong>.<br>
+          Engrenagem ⚙️ → <strong>Aplicativo da Web</strong>.<br>
+          • Executar como: <strong>Eu</strong><br>
+          • Quem tem acesso: <strong>Qualquer pessoa</strong> ⚠️ (importante!)<br>
+          Implantar → autorize sua conta → copie a URL (termina em <span style="color:#f0a500">/exec</span>):
+        </div>
+        <input class="wiz-input" id="wiz-script-url" placeholder="https://script.google.com/macros/s/.../exec" value="${urlAtual}">
+      </div>
+
+      <div class="wiz-step" id="wiz-step-4">
+        <h3><span class="wiz-num">4</span> Testar e sincronizar tudo</h3>
+        <div class="wiz-desc">
+          Clica em <strong>Testar Conexão</strong>. Se der OK, clica em <strong>Salvar e Sincronizar Tudo</strong>.
+        </div>
+        <div class="wiz-actions">
+          <button class="wiz-btn primary" id="wiz-btn-testar" onclick="window.aplicaWizardTestar()">🔌 Testar Conexão</button>
+          <button class="wiz-btn success" id="wiz-btn-salvar" onclick="window.aplicaWizardSalvarESync()" disabled>💾 Salvar e Sincronizar Tudo</button>
+          <span id="wiz-test-status"></span>
+        </div>
+        <div id="wiz-log" style="font-family:monospace;font-size:11px;color:#6e7681;margin-top:8px;max-height:140px;overflow-y:auto;background:#0d1117;padding:8px;border-radius:4px"></div>
+      </div>
+
+      <div class="wiz-footer">
+        <button class="wiz-btn" onclick="window.aplicaWizardFechar()">Fechar (continuar sem sync — risco)</button>
+        <button class="wiz-btn" onclick="window.aplicaBaixarBackupJSON()">💾 Baixar backup local agora</button>
+      </div>
+    </div>
+  `;
+  overlay.classList.add('show');
+};
+
+window.aplicaWizardFechar = function() {
+  const o = document.getElementById('aplica-wizard-overlay');
+  if (o) o.classList.remove('show');
+};
+
+window.aplicaWizardLog = function(msg, ok) {
+  const log = document.getElementById('wiz-log');
+  if (!log) return;
+  const cor = ok === true ? '#3fb950' : ok === false ? '#f85149' : '#9da5ae';
+  const tag = ok === true ? '✓ ' : ok === false ? '✗ ' : '… ';
+  log.innerHTML += `<div style="color:${cor}">${tag}${msg}</div>`;
+  log.scrollTop = log.scrollHeight;
+};
+
+window.aplicaWizardCopiarGs = async function() {
+  const gsCode = window._aplicaAppsScriptCode || '';
+  if (!gsCode) {
+    alert('Código não disponível embutido. Abra c:\\\\Users\\\\Théo\\\\Downloads\\\\apps_script_aplica.gs e copie de lá.');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(gsCode);
+    const span = document.getElementById('wiz-gs-copied');
+    if (span) {
+      span.innerHTML = '<span class="wiz-status ok">✓ COPIADO PRA ÁREA DE TRANSFERÊNCIA</span>';
+      setTimeout(() => { if (span) span.innerHTML = ''; }, 5000);
+    }
+  } catch(e) {
+    alert('Não consegui copiar automaticamente. Abra Downloads/apps_script_aplica.gs e copie manualmente.');
+  }
+};
+
+window.aplicaWizardTestar = async function() {
+  const sheetId = document.getElementById('wiz-sheet-id').value.trim();
+  const url     = document.getElementById('wiz-script-url').value.trim();
+  const status  = document.getElementById('wiz-test-status');
+  const btnSalvar = document.getElementById('wiz-btn-salvar');
+
+  document.getElementById('wiz-log').innerHTML = '';
+  if (status) status.innerHTML = '<span class="wiz-status" style="background:#f0a500;color:#000">TESTANDO...</span>';
+
+  if (!url) { if (status) status.innerHTML = '<span class="wiz-status fail">URL VAZIA</span>'; window.aplicaWizardLog('URL vazia', false); return; }
+  if (!url.includes('/exec')) {
+    if (status) status.innerHTML = '<span class="wiz-status fail">URL INVÁLIDA</span>';
+    window.aplicaWizardLog('URL precisa terminar em /exec — verifique o passo 3', false);
+    return;
+  }
+
+  window.aplicaWizardLog('URL: ' + url);
+  window.aplicaWizardLog('Sheet ID: ' + (sheetId || '(vazio)'));
+  window.aplicaWizardLog('Enviando ping...');
+
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 25000);
+    const r = await fetch(url, { method: 'POST', body: JSON.stringify({ action: 'ping' }), signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const txt = await r.text();
+    let j; try { j = JSON.parse(txt); } catch(_) { j = txt; }
+    window.aplicaWizardLog('Resposta: ' + JSON.stringify(j).slice(0, 250), true);
+    if (j && j.error) {
+      if (status) status.innerHTML = '<span class="wiz-status fail">ERRO</span>';
+      window.aplicaWizardLog('Apps Script retornou erro: ' + j.error, false);
+      return;
+    }
+    if (status) status.innerHTML = '<span class="wiz-status ok">CONECTADO ✓</span>';
+    window.aplicaWizardLog('Conexão OK!', true);
+    if (btnSalvar) btnSalvar.disabled = false;
+  } catch(e) {
+    if (status) status.innerHTML = '<span class="wiz-status fail">FALHOU</span>';
+    const msg = e.name === 'AbortError' ? 'timeout (>25s)' : e.message;
+    window.aplicaWizardLog('Falha: ' + msg, false);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+      window.aplicaWizardLog('→ "Quem tem acesso" provavelmente NÃO foi setado pra "Qualquer pessoa". Volte ao passo 3.', false);
+    }
+    if (msg.includes('HTTP 401') || msg.includes('HTTP 403')) {
+      window.aplicaWizardLog('→ Apps Script não foi autorizado. Refaça o passo 3.', false);
+    }
+  }
+};
+
+window.aplicaWizardSalvarESync = async function() {
+  const sheetId = document.getElementById('wiz-sheet-id').value.trim();
+  const url     = document.getElementById('wiz-script-url').value.trim();
+  Storage.prototype.__bypass = true;
+  localStorage.setItem('sheet_id', sheetId);
+  localStorage.setItem('apps_script_url', url);
+  Storage.prototype.__bypass = false;
+  if (typeof CONFIG !== 'undefined') { CONFIG.SHEET_ID = sheetId; CONFIG.APPS_SCRIPT_URL = url; }
+  const e1 = document.getElementById('cfg-sheet-id'); if (e1) e1.value = sheetId;
+  const e2 = document.getElementById('cfg-apps-script-url'); if (e2) e2.value = url;
+  window.aplicaWizardLog('Configurações salvas. Iniciando sync de tudo...', true);
+  if (typeof window.aplicaSyncTudo === 'function') {
+    const r = await window.aplicaSyncTudo();
+    if (r && r.ok) {
+      window.aplicaWizardLog(`✓ ${r.ok_count} chaves enviadas para a planilha!`, true);
+      setTimeout(() => {
+        window.aplicaWizardFechar();
+        if (typeof window.aplicaEsconderBanner === 'function') window.aplicaEsconderBanner();
+        if (typeof toast === 'function') toast('🎉 Setup concluído! Dados na planilha.', 'success');
+      }, 2000);
+    } else {
+      window.aplicaWizardLog('Algumas chaves falharam (' + (r ? r.falha_count : '?') + '). Veja o console (F12) pra detalhes.', false);
+    }
+  }
+};
+
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const url = localStorage.getItem('apps_script_url');
+    if (!url) window.aplicaSetupWizard();
+  }, 2500);
+});
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   APLICA SYNC — ALERTA VISUAL AGRESSIVO
+   Banner vermelho fixo no topo + animação pulsante quando há problema
+   ════════════════════════════════════════════════════════════════════════════ */
+(function injectAlertaCSS(){
+  const css = `
+  #aplica-banner-alerta {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 9999;
+    background: linear-gradient(90deg, #f85149 0%, #c93b3b 100%);
+    color: #fff;
+    padding: 12px 20px;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 4px 16px rgba(248,81,73,0.4);
+    animation: aplicaBannerPulse 2s ease-in-out infinite;
+    border-bottom: 2px solid #fff;
+  }
+  @keyframes aplicaBannerPulse {
+    0%, 100% { box-shadow: 0 4px 16px rgba(248,81,73,0.4); }
+    50%      { box-shadow: 0 4px 28px rgba(248,81,73,0.8); }
+  }
+  #aplica-banner-alerta.show { display: flex; }
+  body.aplica-com-banner { padding-top: 48px; }
+  #aplica-banner-alerta .banner-icone {
+    font-size: 22px;
+    animation: aplicaShake 0.6s ease-in-out infinite;
+  }
+  @keyframes aplicaShake {
+    0%, 100% { transform: rotate(-8deg); }
+    50%      { transform: rotate(8deg); }
+  }
+  #aplica-banner-alerta .banner-msg {
+    flex: 1;
+    line-height: 1.4;
+  }
+  #aplica-banner-alerta .banner-detalhe {
+    font-weight: 400;
+    font-size: 12px;
+    opacity: 0.9;
+    display: block;
+    margin-top: 2px;
+  }
+  #aplica-banner-alerta button {
+    background: #fff;
+    color: #c93b3b;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    transition: transform 0.1s;
+  }
+  #aplica-banner-alerta button:hover { transform: scale(1.05); }
+  #aplica-banner-alerta button.btn-fechar {
+    background: transparent;
+    color: #fff;
+    padding: 6px 12px;
+    border: 1px solid rgba(255,255,255,0.5);
+  }
+  /* Toast persistente (não some) */
+  .aplica-toast-persistente {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #1c2330;
+    border: 2px solid #f85149;
+    color: #fff;
+    padding: 14px 18px;
+    border-radius: 8px;
+    z-index: 9998;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    max-width: 420px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+  }
+  .aplica-toast-persistente .toast-titulo { font-weight: 700; color: #f85149; margin-bottom: 4px; }
+  .aplica-toast-persistente button { float: right; background: transparent; border: 1px solid #f85149; color: #f85149; cursor: pointer; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+  /* Indicador de status no botão de salvar (qualquer botão com class btn-primary) */
+  .aplica-status-save {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    vertical-align: middle;
+  }
+  .aplica-status-save.ok       { background: #3fb950; color: #fff; }
+  .aplica-status-save.local    { background: #f85149; color: #fff; animation: aplicaShake 0.6s infinite; }
+  .aplica-status-save.pending  { background: #f0a500; color: #000; }
+  `;
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
+
+// Cria o banner no DOM (escondido inicialmente)
+function _aplicaCriarBanner() {
+  if (document.getElementById('aplica-banner-alerta')) return;
+  const banner = document.createElement('div');
+  banner.id = 'aplica-banner-alerta';
+  banner.innerHTML = `
+    <span class="banner-icone">⚠️</span>
+    <div class="banner-msg" id="aplica-banner-msg">
+      DADOS NÃO ESTÃO INDO PARA A PLANILHA
+      <span class="banner-detalhe" id="aplica-banner-detalhe">Configure o Apps Script URL ou seus dados ficarão só no navegador.</span>
+    </div>
+    <button id="aplica-banner-acao" onclick="nav('config')">Configurar agora</button>
+    <button class="btn-fechar" onclick="document.getElementById('aplica-banner-alerta').classList.remove('show'); document.body.classList.remove('aplica-com-banner');">Dispensar</button>
+  `;
+  document.body.appendChild(banner);
+}
+
+// Mostra o banner com mensagem custom
+window.aplicaMostrarBanner = function(msg, detalhe, acaoLabel, acaoFn) {
+  _aplicaCriarBanner();
+  const b  = document.getElementById('aplica-banner-alerta');
+  const m  = document.getElementById('aplica-banner-msg');
+  const d  = document.getElementById('aplica-banner-detalhe');
+  const ac = document.getElementById('aplica-banner-acao');
+  if (msg && m) m.firstChild.nodeValue = msg;
+  if (detalhe && d) d.textContent = detalhe;
+  if (acaoLabel && ac) {
+    ac.textContent = acaoLabel;
+    if (acaoFn) ac.onclick = acaoFn;
+  }
+  b.classList.add('show');
+  document.body.classList.add('aplica-com-banner');
+};
+
+window.aplicaEsconderBanner = function() {
+  const b = document.getElementById('aplica-banner-alerta');
+  if (b) b.classList.remove('show');
+  document.body.classList.remove('aplica-com-banner');
+};
+
+// Toast persistente — NÃO some sozinho
+window.aplicaToastPersistente = function(titulo, mensagem) {
+  const div = document.createElement('div');
+  div.className = 'aplica-toast-persistente';
+  div.innerHTML = `
+    <button onclick="this.parentElement.remove()">×</button>
+    <div class="toast-titulo">${titulo}</div>
+    <div>${mensagem}</div>
+  `;
+  document.body.appendChild(div);
+  return div;
+};
+
+// Verificar status periodicamente e atualizar banner
+let _aplicaUltimaFalha = 0;
+let _aplicaContadorFalhas = 0;
+function _aplicaVerificarStatus() {
+  const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+  if (!url) {
+    window.aplicaMostrarBanner(
+      'DADOS NÃO ESTÃO INDO PARA A PLANILHA',
+      'O Apps Script URL não está configurado. Tudo o que você salvar ficará SÓ no navegador e SUMIRÁ se limpar o cache.',
+      'Configurar agora',
+      () => { if (typeof nav === 'function') nav('config'); window.aplicaEsconderBanner(); }
+    );
+    return;
+  }
+  if (_aplicaContadorFalhas > 0) {
+    window.aplicaMostrarBanner(
+      `⚠️ ${_aplicaContadorFalhas} ERRO(S) DE SINCRONIZAÇÃO`,
+      'Algumas alterações NÃO foram para a planilha. Clique para tentar de novo.',
+      '🔄 Re-sincronizar tudo',
+      async () => {
+        if (typeof window.aplicaSyncTudo === 'function') {
+          const r = await window.aplicaSyncTudo();
+          if (r && r.ok) {
+            _aplicaContadorFalhas = 0;
+            window.aplicaEsconderBanner();
+          }
+        }
+      }
+    );
+    return;
+  }
+  // Tudo OK
+  window.aplicaEsconderBanner();
+}
+
+// Hook pra contar falhas
+window._aplicaRegistrarFalha = function(key, reason) {
+  _aplicaContadorFalhas++;
+  _aplicaUltimaFalha = Date.now();
+  console.error(`[APLICA SYNC] ✗ FALHA: ${key} — ${reason}`);
+  window.aplicaToastPersistente(
+    '❌ Falha ao sincronizar com a planilha',
+    `<strong>${key}</strong>: ${reason}<br>O dado ficou SÓ no navegador. Clique no botão "🔄 Sync Tudo" no topo pra tentar de novo.`
+  );
+  _aplicaVerificarStatus();
+};
+window._aplicaRegistrarSucesso = function() {
+  if (_aplicaContadorFalhas > 0) {
+    _aplicaContadorFalhas = Math.max(0, _aplicaContadorFalhas - 1);
+    if (_aplicaContadorFalhas === 0) window.aplicaEsconderBanner();
+  }
+};
+
+// Verificar a cada 5s + após cada operação
+window.addEventListener('load', () => {
+  setTimeout(_aplicaVerificarStatus, 1500);
+  setInterval(_aplicaVerificarStatus, 5000);
+});
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   APLICA SYNC v2 — sincronização robusta de TUDO com a planilha
+   ───────────────────────────────────────────────────────────────────────────
+   Resolve os 4 pontos:
+   1. TODOS os dados (incl. preferências) ficam alocados na planilha
+   2. Detecta problemas de conexão (timeout, retry, fallback offline)
+   3. Verifica se os dados foram alocados corretamente antes de prosseguir
+   4. A planilha é utilizável sozinha — sem o sistema, dá pra usar tudo
+   ════════════════════════════════════════════════════════════════════════════ */
+(function(){
+  const APLICA_SYNC_VERSION = '2.0';
+  const TIMEOUT_MS  = 15000;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1500;
+
+  // Lista de todas as chaves de localStorage e a aba/transformer correspondente
+  // type: 'kv' = chave/valor (1 linha por chave) | 'rows' = array de linhas | 'json' = 1 célula JSON
+  const STORAGE_MAP = {
+    'cad_empresa':        { sheet: '🏢 EMPRESA',                type: 'kv'   },
+    'cad_contatos_extra': { sheet: '📞 CONTATOS_EMPRESA',       type: 'rows', cols: ['nome','setor','tel','email','obs'] },
+    'cad_pagto_padrao':   { sheet: '💳 PAGAMENTO_PADRAO',       type: 'rows', cols: ['ordem','tipo','percentual','descricao','obs'] },
+    'data_leads':         { sheet: '🚀 LEADS',                  type: 'rows', cols: ['data','empresa','temp','contato','fone','email','servico','canal','cidade','uf','valor','followup','gerouProp','obs'] },
+    'equipe_data':        { sheet: '👥 EQUIPE',                 type: 'rows', cols: ['id','nome','funcao','vinculo','empresa','contato','email','participacao','valorHora','area','ativo','projetos','obs'] },
+    'user_permissions':   { sheet: '🔐 PERMISSOES',             type: 'perms' },
+    'comissoes_data':     { sheet: '🎯 COMISSOES',              type: 'rows', cols: ['id','data','tipo','responsavel','propostaRef','valor','obs'] },
+    'nf_detalhes':        { sheet: '🧾 NOTAS_FISCAIS',          type: 'nf'   },
+    'agenda_eventos':     { sheet: '📅 AGENDA',                 type: 'rows', cols: ['id','title','data','hora','duracao','local','tipo','cliente','desc','calendar_event_id','status'] },
+    'timer_log':          { sheet: '⏱️ TIMER',                  type: 'rows', cols: ['id','projeto','tarefa','subservico','responsavel','inicio','fim','duracao_min','obs'] },
+    'np_rascunhos':       { sheet: '📝 PROPOSTAS_RASCUNHO',     type: 'rascunhos' },
+    'proj_tasks':         { sheet: '✅ TAREFAS',                type: 'tasks' },
+    'desp_reais_servico': { sheet: '🛠️ DESP_REAIS_SERVICO',    type: 'rows', cols: ['projeto_id','categoria','descricao','valor','data','obs'] },
+    'normas_custom':      { sheet: '📐 NORMAS',                 type: 'normas' },
+    'servicos_custom':    { sheet: '🔧 SERVICOS',               type: 'servicos' },
+    'servicos_hidden':    { sheet: '🔧 SERVICOS',               type: 'servicos_hidden' },
+    'prazo_padroes':      { sheet: '📅 PRAZOS',                 type: 'list',  col: 'texto' },
+    'nomes_padrao_proposta': { sheet: '🏷️ NOMES_PADRAO',         type: 'list', col: 'nome' },
+    'dt_setores_custom':  { sheet: '🏗️ SETORES',                type: 'list', col: 'setor' },
+    'canais_prospecao':   { sheet: '📡 CANAIS',                 type: 'rows', cols: ['canal','custom','obs'] },
+    'np_itens_ocultos':   { sheet: '🚫 ITENS_OCULTOS',          type: 'list', col: 'chave_item' },
+    'aplica_envios':      { sheet: '📦 ENVIOS',                 type: 'rows', cols: ['data','tipo','destinatario','email','assunto','status','obs'] },
+    'cfg_cadastros':      { sheet: '📃 CONFIG_LISTAS',          type: 'cfg_listas' },
+    'contatos_projetistas':    { sheet: '📐 CONTATOS_PROJETISTAS',   type: 'rows', cols: ['nome','doc','fone','email','uf','cidade','atividade','esp','valor','cat','custo','obs'] },
+    'contatos_representantes': { sheet: '🤵 CONTATOS_REPRESENTANTES', type: 'rows', cols: ['nome','doc','fone','email','uf','cidade','atividade','esp','valor','cat','custo','obs'] },
+    'contatos_outros':         { sheet: '📇 CONTATOS_OUTROS',        type: 'rows', cols: ['nome','doc','fone','email','uf','cidade','atividade','esp','valor','cat','custo','obs'] },
+    'perfil_ativo':       { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'perfil_ativo' },
+    'sheet_id':           { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'sheet_id' },
+    'apps_script_url':    { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'apps_script_url' },
+    'cal_id':             { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'cal_id' },
+  };
+
+  // ── Camada de chamada HTTP com timeout + retry ─────────────────────
+  async function _appsCallSafe(payload, attempt = 1) {
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) {
+      throw new Error('APPS_SCRIPT_URL não configurada — vá em Configurações');
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+        // sem headers para evitar preflight CORS
+      });
+      clearTimeout(t);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const txt = await r.text();
+      try {
+        const j = JSON.parse(txt);
+        if (j && j.error) throw new Error(j.error);
+        return j;
+      } catch(_) { return txt; }
+    } catch (e) {
+      clearTimeout(t);
+      const msg = e.name === 'AbortError' ? 'timeout (>15s)' : e.message;
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[sync] tentativa ${attempt} falhou: ${msg} — retry em ${RETRY_DELAY}ms`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY * attempt));
+        return _appsCallSafe(payload, attempt + 1);
+      }
+      throw new Error(`Falhou após ${MAX_RETRIES} tentativas: ${msg}`);
+    }
+  }
+
+  // ── Verifica se a planilha está acessível ───────────────────────────
+  async function planilhaOnline() {
+    try {
+      await _appsCallSafe({ action: 'ping' });
+      return true;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  // ── Push: localStorage → planilha (com verificação) ─────────────────
+  async function pushLocalStorageKey(key) {
+    const map = STORAGE_MAP[key];
+    if (!map) return { ok: false, reason: 'sem mapeamento' };
+
+    let raw = localStorage.getItem(key);
+    if (raw === null || raw === undefined) return { ok: true, reason: 'vazio' };
+
+    let payload;
+    try {
+      // Para chaves que armazenam string (não-JSON), embrulhar
+      if (key === 'perfil_ativo' || key === 'sheet_id' || key === 'apps_script_url' || key === 'cal_id') {
+        payload = { sheet: map.sheet, type: map.type, key: map.key, value: raw };
+      } else {
+        payload = { sheet: map.sheet, type: map.type, value: JSON.parse(raw), cols: map.cols, col: map.col };
+      }
+    } catch(e) {
+      return { ok: false, reason: 'JSON inválido em ' + key };
+    }
+
+    try {
+      const resp = await _appsCallSafe({ action: 'sync_storage', ...payload });
+      console.log(`[sync] ✓ ${key} → ${map.sheet}`, resp);
+      return { ok: true, sheet: map.sheet, resp };
+    } catch(e) {
+      console.error(`[sync] ✗ ${key} → ${map.sheet}:`, e.message);
+      return { ok: false, reason: e.message, sheet: map.sheet };
+    }
+  }
+
+  // ── Sincroniza TUDO (todas as chaves mapeadas) ─────────────────────
+  window.aplicaSyncTudo = async function() {
+    if (typeof toast === 'function') toast('🔄 Sincronizando TUDO com a planilha...', 'info');
+    if (typeof setSyncStatus === 'function') setSyncStatus('loading', 'Sync total...');
+
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) {
+      if (typeof toast === 'function') toast('⚠️ Configure a URL do Apps Script primeiro', 'warning');
+      if (typeof setSyncStatus === 'function') setSyncStatus('error', 'Sem URL');
+      return { ok: false, reason: 'sem APPS_SCRIPT_URL' };
+    }
+
+    const online = await planilhaOnline();
+    if (!online) {
+      if (typeof toast === 'function') toast('⚠️ Planilha offline. Dados ficam locais até reconexão.', 'warning');
+      if (typeof setSyncStatus === 'function') setSyncStatus('error', 'Offline');
+      return { ok: false, reason: 'planilha offline' };
+    }
+
+    const resultados = {};
+    let okCount = 0, falhaCount = 0;
+    for (const key of Object.keys(STORAGE_MAP)) {
+      const r = await pushLocalStorageKey(key);
+      resultados[key] = r;
+      if (r.ok) okCount++; else falhaCount++;
+    }
+
+    // CRM, financeiro, clientes, projetos, despesas, marketing — sincronizar via DATA
+    try {
+      if (typeof DATA !== 'undefined' && DATA.crm && DATA.crm.length) {
+        await _appsCallSafe({ action: 'put_all', sheet: '📋 CRM', values: DATA.crm });
+      }
+    } catch(e) { console.warn('[sync] CRM falhou:', e.message); }
+
+    if (typeof setSyncStatus === 'function') {
+      if (falhaCount === 0) setSyncStatus('ok', `Tudo OK (${okCount})`);
+      else setSyncStatus('error', `${falhaCount} falhas / ${okCount} ok`);
+    }
+    if (typeof toast === 'function') {
+      toast(falhaCount === 0
+        ? `✅ Sync completo — ${okCount} chaves enviadas`
+        : `⚠️ ${falhaCount} falhas (ver console)`,
+        falhaCount === 0 ? 'success' : 'warning');
+    }
+    return { ok: falhaCount === 0, ok_count: okCount, falha_count: falhaCount, resultados };
+  };
+
+  // ── Verifica se um dado específico chegou na planilha ──────────────
+  // Usado depois de salvar uma proposta/cliente/etc para confirmar
+  window.aplicaVerificarSync = async function(sheet, refColumn, refValue) {
+    try {
+      const j = await _appsCallSafe({ action: 'verify', sheet, column: refColumn, value: String(refValue) });
+      return !!(j && j.found);
+    } catch(e) {
+      console.warn('[verify] erro:', e.message);
+      return false;
+    }
+  };
+
+  // ── Hook para auto-sincronizar quando localStorage muda ────────────
+  // Aplica automaticamente para chaves mapeadas (debounced 1.5s)
+  const _origSetItem = Storage.prototype.setItem;
+  const _debouncePush = {};
+  Storage.prototype.setItem = function(key, value) {
+    _origSetItem.apply(this, arguments);
+    if (this !== window.localStorage) return;
+    if (Storage.prototype.__bypass) return;  // pula durante restore inicial
+    if (!STORAGE_MAP[key]) return;
+    // debounce por chave
+    if (_debouncePush[key]) clearTimeout(_debouncePush[key]);
+    _debouncePush[key] = setTimeout(() => {
+      const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+      if (!url) {
+        // FAIL LOUD: banner vermelho fica fixo no topo até configurar
+        if (typeof window._aplicaRegistrarFalha === 'function') {
+          window._aplicaRegistrarFalha(key, 'APPS_SCRIPT_URL não configurado');
+        }
+        const dot = document.getElementById('sync-dot');
+        if (dot) {
+          dot.className = 'sync-dot error';
+          dot.title = '⚠️ Sem URL do Apps Script — dados ficam só no navegador.';
+        }
+        return;
+      }
+      pushLocalStorageKey(key).then(r => {
+        const dot = document.getElementById('sync-dot');
+        if (dot) {
+          dot.className = 'sync-dot ' + (r.ok ? 'ok' : 'error');
+          dot.title = r.ok ? `✓ ${key} sincronizado` : `✗ ${key}: ${r.reason}`;
+        }
+        if (!r.ok) {
+          if (typeof window._aplicaRegistrarFalha === 'function') {
+            window._aplicaRegistrarFalha(key, r.reason);
+          }
+        } else {
+          if (typeof window._aplicaRegistrarSucesso === 'function') {
+            window._aplicaRegistrarSucesso();
+          }
+        }
+      });
+    }, 1500);
+  };
+
+  // ── Pull: planilha → localStorage (recovery após sistema falhar) ───
+  window.aplicaImportarDaPlanilha = async function() {
+    if (!confirm('Vai SOBRESCREVER os dados locais com o que está na planilha. Continuar?')) return;
+    try {
+      const j = await _appsCallSafe({ action: 'export_all' });
+      if (!j || typeof j !== 'object') { toast('Resposta inválida', 'error'); return; }
+      Object.keys(j).forEach(k => {
+        if (k in STORAGE_MAP) {
+          try { localStorage.setItem(k, JSON.stringify(j[k])); } catch(_){}
+        }
+      });
+      toast('✅ Dados importados da planilha. Recarregando...', 'success');
+      setTimeout(() => location.reload(), 1500);
+    } catch(e) {
+      toast('Erro ao importar: ' + e.message, 'error');
+    }
+  };
+
+  // ── Backup local (download de tudo como JSON) — fallback definitivo ─
+  window.aplicaBaixarBackupJSON = function() {
+    const all = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      all[k] = localStorage.getItem(k);
+    }
+    const blob = new Blob([JSON.stringify(all, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aplica-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (typeof toast === 'function') toast('✅ Backup local baixado', 'success');
+  };
+
+  // ── Restaurar de backup JSON ────────────────────────────────────────
+  window.aplicaRestaurarBackupJSON = function() {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.json,application/json';
+    inp.onchange = async (ev) => {
+      const f = ev.target.files[0];
+      if (!f) return;
+      const txt = await f.text();
+      try {
+        const obj = JSON.parse(txt);
+        if (!confirm('Vai SOBRESCREVER os dados locais. Continuar?')) return;
+        Object.keys(obj).forEach(k => localStorage.setItem(k, obj[k]));
+        toast('✅ Backup restaurado. Recarregando...', 'success');
+        setTimeout(() => location.reload(), 1500);
+      } catch(e) {
+        toast('Backup inválido: ' + e.message, 'error');
+      }
+    };
+    inp.click();
+  };
+
+  // ── Wrapper para validar antes de prosseguir com cadastros críticos ─
+  // Uso: await aplicaConfirmarSalvo('🤝 CLIENTES', 'CNPJ', cnpjValor)
+  window.aplicaConfirmarSalvo = async function(sheet, refCol, refVal, opts={}) {
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) return { ok: true, modo: 'offline' };  // sem URL = ok local
+
+    const revisar = (localStorage.getItem('cfg_revisar_dados') !== 'false'); // padrão TRUE
+    if (!revisar) return { ok: true, modo: 'pulado' };
+
+    // Aguarda 800ms para o setItem hook empurrar
+    await new Promise(r => setTimeout(r, 900));
+
+    const ok = await window.aplicaVerificarSync(sheet, refCol, refVal);
+    if (!ok) {
+      if (typeof toast === 'function') {
+        toast(`⚠️ Dado não encontrado na planilha (${sheet} | ${refCol}=${refVal}). Tentando re-enviar...`, 'warning');
+      }
+      // Re-tentar push das chaves relacionadas
+      for (const k of Object.keys(STORAGE_MAP)) {
+        if (STORAGE_MAP[k].sheet === sheet) await pushLocalStorageKey(k);
+      }
+      const ok2 = await window.aplicaVerificarSync(sheet, refCol, refVal);
+      return { ok: ok2, modo: 'reenviado', verificacao_inicial: false };
+    }
+    return { ok: true, modo: 'verificado' };
+  };
+
+  // ── Indicador visual + botão no topbar ──────────────────────────────
+  setTimeout(() => {
+    const topRight = document.querySelector('.topbar-right');
+    if (!topRight) return;
+
+    // Botão "Sync Tudo"
+    if (!document.getElementById('btn-sync-tudo')) {
+      const b1 = document.createElement('button');
+      b1.id = 'btn-sync-tudo';
+      b1.className = 'btn btn-ghost btn-sm';
+      b1.innerHTML = '🔄 Sync Tudo';
+      b1.title = 'Sincronizar TODAS as preferências e dados com a planilha';
+      b1.onclick = () => window.aplicaSyncTudo();
+      topRight.insertBefore(b1, topRight.firstChild);
+    }
+
+    // Botão "Backup local"
+    if (!document.getElementById('btn-backup-local')) {
+      const b2 = document.createElement('button');
+      b2.id = 'btn-backup-local';
+      b2.className = 'btn btn-ghost btn-sm';
+      b2.innerHTML = '💾 Backup';
+      b2.title = 'Baixar todos os dados locais como JSON (fallback se planilha falhar)';
+      b2.onclick = () => window.aplicaBaixarBackupJSON();
+      topRight.insertBefore(b2, topRight.firstChild);
+    }
+
+    // Botão "Recarregar da Planilha" — pull manual quando o cliente editou direto na planilha
+    if (!document.getElementById('btn-pull-planilha')) {
+      const b3 = document.createElement('button');
+      b3.id = 'btn-pull-planilha';
+      b3.className = 'btn btn-ghost btn-sm';
+      b3.innerHTML = '🔃 Recarregar da Planilha';
+      b3.title = 'Puxar mudanças feitas DIRETAMENTE na planilha do Google Sheets';
+      b3.onclick = () => window.aplicaPullDaPlanilha();
+      topRight.insertBefore(b3, topRight.firstChild);
+    }
+  }, 2500);
+
+  // ── PULL: planilha → sistema (sem reload, com feedback claro) ─────────
+  // Usado quando o usuário editou algo direto na planilha e quer ver no sistema
+  window.aplicaPullDaPlanilha = async function() {
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) {
+      if (typeof toast === 'function') toast('⚠️ Configure a URL do Apps Script primeiro', 'warning');
+      return;
+    }
+
+    if (!confirm(
+      'Vai PUXAR os dados da planilha e SOBRESCREVER o que está no sistema agora.\n\n' +
+      '• Se você fez alguma alteração no sistema que ainda não sincronizou, será PERDIDA.\n' +
+      '• Sugestão: clique em "🔄 Sync Tudo" antes para garantir que seu trabalho foi salvo.\n\n' +
+      'Continuar?'
+    )) return;
+
+    if (typeof setSyncStatus === 'function') setSyncStatus('loading', 'Puxando da planilha...');
+    if (typeof toast === 'function') toast('⏳ Puxando dados da planilha...', 'info');
+
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 20000);
+      const r = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'export_all' }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      const j = await r.json();
+      if (!j || j.error) throw new Error(j && j.error || 'resposta inválida');
+
+      // Restaura cada chave (bypass do hook pra não criar loop)
+      let count = 0;
+      Object.keys(j).forEach(k => {
+        try {
+          const v = j[k];
+          const stored = (typeof v === 'string') ? v : JSON.stringify(v);
+          Storage.prototype.__bypass = true;
+          localStorage.setItem(k, stored);
+          Storage.prototype.__bypass = false;
+          count++;
+        } catch(_){}
+      });
+
+      // Também sincroniza o DATA principal (CRM, financeiro, etc.) via syncData
+      if (typeof syncData === 'function') {
+        await syncData();
+      }
+
+      if (typeof setSyncStatus === 'function') setSyncStatus('ok', 'Recarregado da planilha');
+      if (typeof toast === 'function') toast(`✅ ${count} chaves recarregadas. Recarregando tela...`, 'success');
+
+      // Reload depois de 1.5s pra dar tempo do toast aparecer
+      setTimeout(() => location.reload(), 1500);
+    } catch (e) {
+      if (typeof setSyncStatus === 'function') setSyncStatus('error', 'Erro no pull');
+      if (typeof toast === 'function') toast('❌ Erro ao puxar: ' + e.message, 'error');
+      console.error('[pull] erro:', e);
+    }
+  };
+
+  // ── DIAGNÓSTICO — chamar do console: aplicaDiagnostico() ────────────
+  window.aplicaDiagnostico = async function() {
+    console.group('🔍 APLICA SYNC — DIAGNÓSTICO');
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    const sid = (typeof CONFIG !== 'undefined') ? CONFIG.SHEET_ID : null;
+
+    console.log('1. APPS_SCRIPT_URL:', url || '❌ NÃO CONFIGURADO');
+    console.log('2. SHEET_ID:', sid || '❌ NÃO CONFIGURADO');
+
+    if (!url) {
+      console.error('❌ Sem URL → NADA será sincronizado. Vá em ⚙️ Configurações.');
+      console.groupEnd();
+      return { ok: false, reason: 'sem_url' };
+    }
+
+    console.log('3. Testando ping...');
+    try {
+      const r = await _appsCallSafe({ action: 'ping' });
+      console.log('   ✓ ping OK:', r);
+    } catch (e) {
+      console.error('   ✗ ping FALHOU:', e.message);
+      console.error('   → Verifique: Apps Script implantado? "Quem tem acesso = Qualquer pessoa"?');
+      console.groupEnd();
+      return { ok: false, reason: 'ping_falhou', detalhe: e.message };
+    }
+
+    console.log('4. Testando push de cfg_cadastros...');
+    const r = await pushLocalStorageKey('cfg_cadastros');
+    console.log('   resultado:', r);
+
+    console.log('5. Verificando aba 📃 CONFIG_LISTAS...');
+    try {
+      const j = await _appsCallSafe({ action: 'get', sheet: '📃 CONFIG_LISTAS' });
+      console.log('   linhas na aba:', Array.isArray(j) ? j.length : '?');
+      const cfg = JSON.parse(localStorage.getItem('cfg_cadastros') || '{}');
+      console.log('   chaves locais (cfg_cadastros):', Object.keys(cfg));
+      console.log('   vinculos local:', cfg.vinculos);
+    } catch(e) {
+      console.error('   ✗ falha ao ler aba:', e.message);
+    }
+
+    console.log('6. Storage local — chaves mapeadas:');
+    Object.keys(STORAGE_MAP).forEach(k => {
+      const v = localStorage.getItem(k);
+      console.log(`   • ${k}: ${v ? (v.length + ' chars') : '(vazio)'}`);
+    });
+
+    console.groupEnd();
+    return { ok: true };
+  };
+
+  // Inicializar: ping na planilha ao carregar
+  window.addEventListener('load', () => {
+    setTimeout(async () => {
+      const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+      if (!url) {
+        console.log('[aplica-sync v' + APLICA_SYNC_VERSION + '] sem APPS_SCRIPT_URL — modo local');
+        return;
+      }
+      const online = await planilhaOnline();
+      console.log('[aplica-sync v' + APLICA_SYNC_VERSION + '] planilha:', online ? '✓ online' : '✗ offline');
+      if (online && typeof setSyncStatus === 'function') {
+        setSyncStatus('ok', 'Conectado');
+      }
+    }, 3000);
+  });
+
+})();
 
 </script>
 </body>
