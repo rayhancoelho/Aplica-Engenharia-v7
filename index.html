@@ -23998,11 +23998,37 @@ window._aplicaRegistrarFalha = function(key, reason) {
   );
   _aplicaVerificarStatus();
 };
-window._aplicaRegistrarSucesso = function() {
+// Toast agregado de confirmação — debounce 2s pra evitar spam quando várias chaves
+// são salvas de uma vez (ex: ao cadastrar 1 cliente, 5+ chaves podem ser tocadas)
+let _aplicaSucessosPendentes = 0;
+let _aplicaTimerSucesso = null;
+let _aplicaChavesSalvas = new Set();
+window._aplicaRegistrarSucesso = function(key) {
   if (_aplicaContadorFalhas > 0) {
     _aplicaContadorFalhas = Math.max(0, _aplicaContadorFalhas - 1);
     if (_aplicaContadorFalhas === 0) window.aplicaEsconderBanner();
   }
+  _aplicaSucessosPendentes++;
+  if (key) _aplicaChavesSalvas.add(key);
+  if (_aplicaTimerSucesso) clearTimeout(_aplicaTimerSucesso);
+  _aplicaTimerSucesso = setTimeout(() => {
+    if (_aplicaContadorFalhas === 0 && typeof toast === 'function') {
+      const n = _aplicaSucessosPendentes;
+      const msg = (n === 1)
+        ? 'Salvo na planilha ✓'
+        : `${n} alterações salvas na planilha ✓`;
+      toast(msg, 'success');
+      // Atualiza bolinha de sync também
+      const dot = document.getElementById('sync-dot');
+      if (dot) {
+        dot.className = 'sync-dot ok';
+        dot.title = `✓ Última sync: ${new Date().toLocaleTimeString('pt-BR')} — ${Array.from(_aplicaChavesSalvas).join(', ')}`;
+      }
+    }
+    _aplicaSucessosPendentes = 0;
+    _aplicaChavesSalvas.clear();
+    _aplicaTimerSucesso = null;
+  }, 2000);
 };
 
 // Verificar a cada 5s + após cada operação
@@ -24233,7 +24259,7 @@ window.addEventListener('load', () => {
           }
         } else {
           if (typeof window._aplicaRegistrarSucesso === 'function') {
-            window._aplicaRegistrarSucesso();
+            window._aplicaRegistrarSucesso(key);
           }
         }
       });
