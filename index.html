@@ -7193,8 +7193,8 @@ function renderMarketingTable() {
   if (empty) empty.style.display = 'none';
 
   document.getElementById('mkt-table-body').innerHTML = DATA.marketing.slice(0,100).map(r => {
-    const inv = parseFloat((r[2]||'0').replace(',','.')) || 0;
-    const rec = parseFloat((r[5]||'0').replace(',','.')) || 0;
+    const inv = parseFloat((r[2]||'0').toString().replace(',','.')) || 0;
+    const rec = parseFloat((r[5]||'0').toString().replace(',','.')) || 0;
     const roi = inv > 0 ? ((rec - inv)/inv*100).toFixed(0) + '%' : '—';
     return `<tr>
       <td class="fw-bold">${r[0]||'—'}</td>
@@ -7362,7 +7362,7 @@ function initFinCharts() {
   const servKeys  = ['ATERRAMENTO','SPDA','LAUDO','PROJETO','MEDI','ILUMINA','ALARME'];
   const servCores = ['#f0a500','#3fb950','#4493f8','#bc8cff','#2ec4a0','#f85149','#8b949e'];
   const servVals  = servKeys.map(k =>
-    DATA.financeiro.reduce((acc, r) => acc + ((r[4]||'').toUpperCase().includes(k) ? (parseFloat((r[3]||'0').replace(',','.')) || 0) : 0), 0)
+    DATA.financeiro.reduce((acc, r) => acc + ((r[4]||'').toUpperCase().includes(k) ? (parseFloat((r[3]||'0').toString().replace(',','.')) || 0) : 0), 0)
   );
 
   const ctx2 = document.getElementById('chartServicos');
@@ -7726,7 +7726,10 @@ async function _saveProposta(row, prefix) {
       toast('Salvando...', 'info');
       if (existIdx >= 0) {
         const sheetRow = existIdx + 2;
-        await sheetsPut(CONFIG.SHEETS.CRM, 'A' + sheetRow, [row]);
+        // Calcula a letra da última coluna baseado no comprimento da linha (0-indexed → letra)
+        const _colLetter = (n) => { let s=''; do { s=String.fromCharCode(65 + n % 26) + s; n=Math.floor(n/26) - 1; } while (n >= 0); return s; };
+        const lastCol = _colLetter((row.length || 1) - 1);
+        await sheetsPut(CONFIG.SHEETS.CRM, `A${sheetRow}:${lastCol}${sheetRow}`, [row]);
       } else {
         await sheetsAppend(CONFIG.SHEETS.CRM, [row]);
       }
@@ -7748,7 +7751,7 @@ async function _saveProposta(row, prefix) {
   if (cnpjCli || razaoCli) {
     const chaveCliente = cnpjCli || razaoCli;
     const jaExiste = DATA.clientes.some(c => {
-      const cDoc = (c[0] || '').replace(/\D/g, '');
+      const cDoc = (c[0] || '').toString().replace(/\D/g, '');
       return (cnpjCli && cDoc === cnpjCli) || (!cnpjCli && (c[1] || '') === razaoCli);
     });
     if (!jaExiste) {
@@ -11790,7 +11793,7 @@ function nfAutoNum() {
 function _proximoNFNum() {
   let maxNum = 0;
   (DATA.financeiro || []).forEach(r => {
-    const nf = (r[2]||'').replace(/\D/g, '');
+    const nf = (r[2]||'').toString().replace(/\D/g, '');
     const n = parseInt(nf) || 0;
     if (n > maxNum) maxNum = n;
   });
@@ -12709,11 +12712,11 @@ let DATA_leads     = [];
 // ── MARKETING ──
 function renderMarketing() {
   // KPIs
-  const totalInv  = DATA.marketing.reduce((s,r) => s + (parseFloat((r[2]||'0').replace(',','.'))||0), 0)
+  const totalInv  = DATA.marketing.reduce((s,r) => s + (parseFloat((r[2]||'0').toString().replace(',','.'))||0), 0)
                   + DATA_campanhas.reduce((s,c) => s + (c.inv||0), 0);
   const totalLeads= DATA.marketing.reduce((s,r) => s + (parseInt(r[3])||0), 0)
                   + DATA_campanhas.reduce((s,c) => s + (c.leads||0), 0);
-  const totalRec  = DATA.marketing.reduce((s,r) => s + (parseFloat((r[5]||'0').replace(',','.'))||0), 0)
+  const totalRec  = DATA.marketing.reduce((s,r) => s + (parseFloat((r[5]||'0').toString().replace(',','.'))||0), 0)
                   + DATA_campanhas.reduce((s,c) => s + (c.rec||0), 0);
   const roi       = totalInv > 0 ? ((totalRec - totalInv) / totalInv * 100) : 0;
 
@@ -12727,9 +12730,9 @@ function renderMarketing() {
   const todasCamp = [
     ...DATA.marketing.map((r,i) => ({
       nome: r[0]||'—', canal: r[1]||'—',
-      inv: parseFloat((r[2]||'0').replace(',','.'))||0,
+      inv: parseFloat((r[2]||'0').toString().replace(',','.'))||0,
       leads: parseInt(r[3])||0, props: parseInt(r[4])||0,
-      rec: parseFloat((r[5]||'0').replace(',','.'))||0,
+      rec: parseFloat((r[5]||'0').toString().replace(',','.'))||0,
       _sheets: true, idx: i
     })),
     ...DATA_campanhas.map((c,i) => ({...c, _local: true, idx: i}))
@@ -18136,7 +18139,7 @@ function projAbrirNovo() {
   if (cliGroup) cliGroup.style.display = '';
 
   // Gerar próximo ID
-  const ids = DATA.projetos.map(r => parseInt((r[0]||'').replace(/\D/g,''))||0);
+  const ids = DATA.projetos.map(r => parseInt((r[0]||'').toString().replace(/\D/g,''))||0);
   const next = (ids.length ? Math.max(...ids) : 0) + 1;
   const mpId = document.getElementById('mp-id');
   if (mpId) mpId.value = `PROJ-${String(next).padStart(3,'0')}`;
@@ -19887,7 +19890,7 @@ function contSalvar() {
     contato.atividade || '',     // J - Atividade
     new Date().toISOString().split('T')[0]
   ];
-  if (!DATA.clientes.some(c => (c[0]||'').replace(/\D/g,'') === (cliRow[0]||'').replace(/\D/g,'') && (c[1]||'') === cliRow[1])) {
+  if (!DATA.clientes.some(c => (c[0]||'').toString().replace(/\D/g,'') === (cliRow[0]||'').toString().replace(/\D/g,'') && (c[1]||'') === cliRow[1])) {
     DATA.clientes.push(cliRow);
   }
   saveDataLocal();
