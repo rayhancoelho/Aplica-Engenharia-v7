@@ -6490,6 +6490,11 @@ window.addEventListener('load', async () => {
           } catch(_){}
         });
         console.log('[init] ✓ restaurado da planilha:', Object.keys(j));
+        // Hidrata chaves individuais (calc_blocos_*, prev_itens_*, fora_escopo_*, pagto_padrao)
+        // a partir de dados_extras_propostas que acabou de chegar
+        if (typeof window._aplicaHidratarExtras === 'function') {
+          window._aplicaHidratarExtras();
+        }
         if (typeof toast === 'function') {
           setTimeout(() => toast('✅ Dados restaurados da planilha após cache limpo', 'success'), 500);
         }
@@ -6502,6 +6507,36 @@ window.addEventListener('load', async () => {
   loadDataLocal();
   showApp();
   syncData();
+
+  // SEMPRE no boot: re-hidrata chaves extras (caso dados_extras_propostas exista mas
+  // chaves individuais tenham sido perdidas, ou foi atualizado direto na planilha)
+  setTimeout(() => {
+    if (typeof window._aplicaHidratarExtras === 'function') {
+      window._aplicaHidratarExtras();
+    }
+    // Se já existem chaves extras locais mas a master ainda não foi gerada
+    // (primeira execução desta versão), força agregação + push pra planilha
+    if (typeof window._aplicaReagregarExtras === 'function') {
+      const masterExiste = !!localStorage.getItem('dados_extras_propostas');
+      let temChavesExtras = false;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('calc_blocos_') || k.startsWith('prev_itens_') || k.startsWith('fora_escopo_') || k === 'pagto_padrao')) {
+          temChavesExtras = true; break;
+        }
+      }
+      if (temChavesExtras && !masterExiste) {
+        console.log('[init] migrando chaves extras antigas para dados_extras_propostas');
+        window._aplicaReagregarExtras();
+        // Dispara push manual: setItem(master) já vai pelo hook normal? Não — o bypass tava ligado.
+        // Melhor disparar setItem extra fora do bypass:
+        try {
+          const v = localStorage.getItem('dados_extras_propostas');
+          if (v) localStorage.setItem('dados_extras_propostas', v); // dispara hook → push
+        } catch(_){}
+      }
+    }
+  }, 500);
 });
 
 function showApp() {
@@ -24086,7 +24121,66 @@ window.addEventListener('load', () => {
     'sheet_id':           { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'sheet_id' },
     'apps_script_url':    { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'apps_script_url' },
     'cal_id':             { sheet: '⚙️ CONFIG',                 type: 'config_kv', key: 'cal_id' },
+    'dados_extras_propostas': { sheet: '📦 DADOS_EXTRAS_PROPOSTAS', type: 'rows', cols: ['chave','dados_json'] },
   };
+
+  // ── CHAVES EXTRAS — prefixos e chaves exatas que viram linhas em dados_extras_propostas ──
+  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_'];
+  const CHAVES_EXTRAS_EXATAS = ['pagto_padrao'];
+
+  function _ehChaveExtra(key) {
+    return PREFIXOS_EXTRAS.some(p => key.startsWith(p)) || CHAVES_EXTRAS_EXATAS.includes(key);
+  }
+
+  // Lê todas as chaves extras do localStorage e empacota em formato de linhas
+  function _reagregarDadosExtras() {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (_ehChaveExtra(k)) {
+        out.push({ chave: k, dados_json: localStorage.getItem(k) });
+      }
+    }
+    try {
+      Storage.prototype.__bypass = true;
+      _origSetItem.call(localStorage, 'dados_extras_propostas', JSON.stringify(out));
+      Storage.prototype.__bypass = false;
+    } catch(e) {
+      Storage.prototype.__bypass = false;
+      console.warn('[extras] erro ao agregar:', e);
+    }
+    return out.length;
+  }
+
+  // Restaura as chaves individuais (calc_blocos_X, prev_itens_X, fora_escopo_X, pagto_padrao)
+  // a partir da chave master dados_extras_propostas. Idempotente.
+  function _hidratarChavesExtras() {
+    try {
+      const raw = localStorage.getItem('dados_extras_propostas');
+      if (!raw) return 0;
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return 0;
+      let hidratadas = 0;
+      arr.forEach(item => {
+        if (item.chave && item.dados_json !== undefined && item.dados_json !== null) {
+          // Sobrescreve mesmo se já existe (planilha é fonte da verdade após pull)
+          Storage.prototype.__bypass = true;
+          _origSetItem.call(localStorage, item.chave, item.dados_json);
+          Storage.prototype.__bypass = false;
+          hidratadas++;
+        }
+      });
+      if (hidratadas > 0) console.log('[extras] ' + hidratadas + ' chaves restauradas da planilha');
+      return hidratadas;
+    } catch(e) {
+      console.warn('[extras] erro ao hidratar:', e);
+      return 0;
+    }
+  }
+
+  // Expor pro escopo global pra usar em pull/restore
+  window._aplicaHidratarExtras = _hidratarChavesExtras;
+  window._aplicaReagregarExtras = _reagregarDadosExtras;
 
   // ── Camada de chamada HTTP com timeout + retry ─────────────────────
   async function _appsCallSafe(payload, attempt = 1) {
@@ -24230,6 +24324,40 @@ window.addEventListener('load', () => {
     _origSetItem.apply(this, arguments);
     if (this !== window.localStorage) return;
     if (Storage.prototype.__bypass) return;  // pula durante restore inicial
+
+    // Chaves "extras" (calc_blocos_*, prev_itens_*, fora_escopo_*, pagto_padrao)
+    // não estão no STORAGE_MAP individualmente — são agregadas em dados_extras_propostas
+    if (_ehChaveExtra(key)) {
+      if (_debouncePush['__extras']) clearTimeout(_debouncePush['__extras']);
+      _debouncePush['__extras'] = setTimeout(() => {
+        const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+        if (!url) {
+          if (typeof window._aplicaRegistrarFalha === 'function') {
+            window._aplicaRegistrarFalha('dados_extras_propostas', 'APPS_SCRIPT_URL não configurado');
+          }
+          return;
+        }
+        _reagregarDadosExtras();
+        pushLocalStorageKey('dados_extras_propostas').then(r => {
+          const dot = document.getElementById('sync-dot');
+          if (dot) {
+            dot.className = 'sync-dot ' + (r.ok ? 'ok' : 'error');
+            dot.title = r.ok ? `✓ dados de proposta sincronizados` : `✗ dados extras: ${r.reason}`;
+          }
+          if (!r.ok) {
+            if (typeof window._aplicaRegistrarFalha === 'function') {
+              window._aplicaRegistrarFalha('dados_extras_propostas', r.reason);
+            }
+          } else {
+            if (typeof window._aplicaRegistrarSucesso === 'function') {
+              window._aplicaRegistrarSucesso('dados_proposta');
+            }
+          }
+        });
+      }, 1500);
+      return;
+    }
+
     if (!STORAGE_MAP[key]) return;
     // debounce por chave
     if (_debouncePush[key]) clearTimeout(_debouncePush[key]);
@@ -24277,6 +24405,8 @@ window.addEventListener('load', () => {
           try { localStorage.setItem(k, JSON.stringify(j[k])); } catch(_){}
         }
       });
+      // Após restaurar todas as chaves master, expande dados_extras_propostas em chaves individuais
+      _hidratarChavesExtras();
       toast('✅ Dados importados da planilha. Recarregando...', 'success');
       setTimeout(() => location.reload(), 1500);
     } catch(e) {
@@ -24431,6 +24561,11 @@ window.addEventListener('load', () => {
           count++;
         } catch(_){}
       });
+
+      // Após restaurar, expande dados_extras_propostas em chaves individuais
+      // (calc_blocos_*, prev_itens_*, fora_escopo_*, pagto_padrao)
+      const hidratadas = _hidratarChavesExtras();
+      if (hidratadas > 0) count += hidratadas;
 
       // Também sincroniza o DATA principal (CRM, financeiro, etc.) via syncData
       if (typeof syncData === 'function') {
