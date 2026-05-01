@@ -1,5 +1,3 @@
-  
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -8092,7 +8090,7 @@ function renderPipeline() {
 
   board.innerHTML = KANBAN_COLS.map(col => {
     const cards = rows.filter(r => (r[CRM_COL.STATUS] || '') === col.id);
-    const total = cards.reduce((s, r) => s + (parseFloat((r[CRM_COL.VALOR]||'0').replace(',','.')) || 0), 0);
+    const total = cards.reduce((s, r) => s + (parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0), 0);
 
     const cardsHtml = cards.length === 0
       ? `<div class="kanban-drop-zone" id="drop-${col.id.replace(/ /g,'_')}" ondragover="pipeDragOver(event,'${col.id}')" ondrop="pipeDrop(event,'${col.id}')" ondragleave="pipeDragLeave(event)">Arraste aqui</div>`
@@ -8111,7 +8109,7 @@ function renderPipeline() {
           const cardClass = diasClass === 'urgent' ? 'urgent' : diasClass === 'warning' ? 'warning' : 'ok';
           const cliente = (r[CRM_COL.RAZAO] || '—').slice(0, 26);
           const servico = (r[CRM_COL.SERVICO] || '—').slice(0, 30);
-          const valor   = parseFloat((r[CRM_COL.VALOR]||'0').replace(',','.')) || 0;
+          const valor   = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
 
           return `<div class="kanban-card ${cardClass}"
             draggable="true"
