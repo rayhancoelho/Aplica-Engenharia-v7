@@ -4432,6 +4432,28 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                     <textarea class="form-control" id="cad-rodape" rows="3"
                       placeholder="Ex: Proposta válida por 30 dias. Preços sujeitos a alteração sem aviso prévio.">Esta proposta é válida pelo período indicado. Os serviços serão executados por profissional habilitado com ART recolhida. Quaisquer alterações no escopo serão formalizadas por adendo.</textarea>
                   </div>
+                  <div class="form-group">
+                    <label class="form-label">Observação Padrão — Anexo III (instalações)
+                      <span style="color:var(--text3);font-size:10px">— aparece no card 5 quando "Texto Padrão (Anexo III)" estiver selecionado</span>
+                    </label>
+                    <textarea class="form-control" id="cad-obs-anexo3" rows="6"
+                      placeholder="Texto exibido no card 5 da proposta para Anexo III">A presente proposta está elaborada com base no enquadramento tributário aplicável ao Anexo III do Simples Nacional, conforme regime adotado pela Aplica Engenharia.
+
+Os valores apresentados consideram exclusivamente este enquadramento fiscal, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.02 referente a serviços de instalações.
+
+Caso haja necessidade de alteração para outro enquadramento, por solicitação do contratante ou por exigência específica, tal condição deverá ser previamente comunicada e acordada com a Aplica Engenharia, podendo implicar revisão dos valores propostos.</textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Observação Padrão — Anexo V (engenharia)
+                      <span style="color:var(--text3);font-size:10px">— aparece no card 5 quando "Anexo V" estiver selecionado</span>
+                    </label>
+                    <textarea class="form-control" id="cad-obs-anexo5" rows="6"
+                      placeholder="Texto exibido no card 5 da proposta para Anexo V">Anexo 5: Enquadramento Fiscal por Opção do Contratante
+
+Conforme alinhamento entre as partes, o contratante optou pelo enquadramento dos serviços no regime tributário do Anexo V do Simples Nacional.
+
+Os valores desta proposta já consideram a incidência fiscal correspondente a este enquadramento, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.01 referente a serviços de engenharia.</textarea>
+                  </div>
                 </div>
 
                 <!-- Condições de Pagamento Padrão (Parcelas) -->
@@ -4752,6 +4774,17 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                   <div class="form-group">
                     <label class="form-label">KM Ida + Volta</label>
                     <input type="number" class="form-control" id="calc-km" value="0" oninput="calcRecalcular()">
+                  </div>
+                  <div class="form-group" style="grid-column:1/-1">
+                    <label class="form-label">Link da Rota (Google Maps / Waze)
+                      <span style="color:var(--text3);font-size:10px">— cola o link da rota usada para calcular o KM</span>
+                    </label>
+                    <div style="display:flex;gap:6px;align-items:center">
+                      <input type="url" class="form-control" id="calc-link-rota"
+                        placeholder="https://maps.app.goo.gl/..." style="flex:1"
+                        oninput="localStorage.setItem('calc_link_rota', this.value)">
+                      <button class="btn btn-ghost btn-sm" type="button" onclick="(function(){var v=document.getElementById('calc-link-rota').value;if(v)window.open(v,'_blank');else toast('Cole um link primeiro','warning')})()" title="Abrir rota em nova aba" style="padding:6px 10px;font-size:14px">🗺️</button>
+                    </div>
                   </div>
                   <div class="form-group">
                     <label class="form-label">R$/km</label>
@@ -5346,6 +5379,13 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                   placeholder="Ex: Proposta válida por 30 dias. Prazo de execução: 5 dias úteis após aprovação. Pagamento: 50% entrada + 50% entrega."
                   oninput="prevAtualizar()"></textarea>
                 <div style="font-size:10px;color:var(--text3);margin-top:6px" id="prev-obs-hint">Texto preenchido automaticamente — selecione "Livre" para editar.</div>
+
+                <label class="form-label" style="font-size:11px;margin-top:14px">Observações das Atividades
+                  <span style="color:var(--text3);font-size:10px">— aparece logo após o texto do Anexo III/V na proposta</span>
+                </label>
+                <textarea class="form-control" id="prev-obs-atividades" rows="5"
+                  placeholder="Detalhes específicos das atividades desta proposta (ex: cronograma, particularidades técnicas, condições de obra...)"
+                  oninput="prevAtualizar()"></textarea>
               </div>
             </div>
           </div>
@@ -7780,6 +7820,43 @@ async function _saveProposta(row, prefix) {
 
   if (prefix === 'm') { closeModal('modal-nova-proposta'); clearForm(); }
   PROPOSTA_CONTEXTO = {};
+
+  // Sincronizar detalhes extras (observações de atividades, link da rota, custos ocultos) no Sheets
+  if (idProp) { try { await salvarPropostaDetalhes(idProp); } catch(_){} }
+}
+
+// ── PROPOSTA — detalhes extras por id (sincroniza via auto-push em 📦 DADOS_EXTRAS_PROPOSTAS) ──
+function salvarPropostaDetalhes(idProp) {
+  if (!idProp) return;
+  const obsAtividades = document.getElementById('prev-obs-atividades')?.value || '';
+  const linkRota      = document.getElementById('calc-link-rota')?.value || '';
+  const custos        = (typeof NP_ITENS_OCULTOS !== 'undefined') ? NP_ITENS_OCULTOS : [];
+  // Cada chave por proposta — prefixos registrados em PREFIXOS_EXTRAS para auto-sync
+  try { localStorage.setItem('obs_atividades_' + idProp, obsAtividades); } catch(_){}
+  try { localStorage.setItem('link_rota_' + idProp, linkRota); } catch(_){}
+  try { localStorage.setItem('custos_ocultos_proposta_' + idProp, JSON.stringify(custos)); } catch(_){}
+}
+
+function carregarPropostaDetalhes(idProp) {
+  if (!idProp) return;
+  const setEl = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  // Restaurar do localStorage (já foi puxado da planilha pelo _hidratarChavesExtras na inicialização)
+  const obs   = localStorage.getItem('obs_atividades_' + idProp) || '';
+  const rota  = localStorage.getItem('link_rota_' + idProp) || '';
+  const custosRaw = localStorage.getItem('custos_ocultos_proposta_' + idProp);
+  setEl('prev-obs-atividades', obs);
+  setEl('calc-link-rota', rota);
+  if (rota) localStorage.setItem('calc_link_rota', rota);
+  if (typeof NP_ITENS_OCULTOS !== 'undefined') {
+    try {
+      const arr = custosRaw ? JSON.parse(custosRaw) : [];
+      NP_ITENS_OCULTOS.length = 0;
+      if (Array.isArray(arr)) arr.forEach(it => NP_ITENS_OCULTOS.push(it));
+      if (typeof _saveItensOcultos === 'function') _saveItensOcultos();
+      if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+    } catch(_){}
+  }
+  if (typeof prevAtualizar === 'function') prevAtualizar();
 }
 
 function clearForm() {
@@ -8690,6 +8767,10 @@ function calcInit() {
   calcInitBlocos();
   calcRenderPagto();
   calcRecalcularBlocos();
+  // Restaurar link da rota salvo
+  const _lr = localStorage.getItem('calc_link_rota');
+  const _lrEl = document.getElementById('calc-link-rota');
+  if (_lr && _lrEl && !_lrEl.value) _lrEl.value = _lr;
 }
 
 function calcVincularProposta(silencioso) {
@@ -8912,22 +8993,46 @@ const RUBRICA_GERSON_B64 = 'data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4g
 let prevItens = [];
 let prevIdxCRM = null;
 
-// Textos de enquadramento tributário (conforme anexo recebido do Gerson)
-const ENQUADRAMENTO_TEXTOS = {
+// Textos de enquadramento tributário (defaults — sobrescritos pelo Cadastro)
+const ENQUADRAMENTO_TEXTOS_DEFAULT = {
   anexo3: 'A presente proposta está elaborada com base no enquadramento tributário aplicável ao Anexo III do Simples Nacional, conforme regime adotado pela Aplica Engenharia. Os valores apresentados consideram exclusivamente este enquadramento fiscal, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.02 referente a serviços de instalações. Caso haja necessidade de alteração para outro enquadramento, por solicitação do contratante ou por exigência específica, tal condição deverá ser previamente comunicada e acordada com a Aplica Engenharia, podendo implicar revisão dos valores propostos.',
   anexo5: 'Enquadramento Fiscal por Opção do Contratante — Conforme alinhamento entre as partes, o contratante optou pelo enquadramento dos serviços no regime tributário do Anexo V do Simples Nacional. Os valores desta proposta já consideram a incidência fiscal correspondente a este enquadramento, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.01 referente a serviços de engenharia.',
   nenhum: ''
 };
+function _cadCustomTexto(idDom, chaveSalva) {
+  const dom = document.getElementById(idDom)?.value;
+  if (dom && dom.trim()) return dom;
+  try {
+    const saved = JSON.parse(localStorage.getItem('cad_empresa') || '{}');
+    if (saved[chaveSalva] && saved[chaveSalva].trim()) return saved[chaveSalva];
+  } catch(_){}
+  return null;
+}
+function _getEnquadramentoTextos() {
+  return {
+    anexo3: _cadCustomTexto('cad-obs-anexo3', 'obs_anexo3') || ENQUADRAMENTO_TEXTOS_DEFAULT.anexo3,
+    anexo5: _cadCustomTexto('cad-obs-anexo5', 'obs_anexo5') || ENQUADRAMENTO_TEXTOS_DEFAULT.anexo5,
+    nenhum: ''
+  };
+}
+const ENQUADRAMENTO_TEXTOS = new Proxy({}, { get: (_, k) => _getEnquadramentoTextos()[k] });
 function _prevGetEnquadramentoTexto() {
   const v = document.getElementById('prev-enquadramento')?.value || 'anexo3';
-  return ENQUADRAMENTO_TEXTOS[v] || '';
+  return _getEnquadramentoTextos()[v] || '';
 }
 
-// Templates do campo Observações / Condições (card 5)
-const OBS_TEMPLATES = {
+// Templates do campo Observações / Condições (card 5) — defaults sobrescritos pelo Cadastro
+const OBS_TEMPLATES_DEFAULT = {
   padrao: 'A presente proposta está elaborada com base no enquadramento tributário aplicável ao Anexo III do Simples Nacional, conforme regime adotado pela Aplica Engenharia.\n\nOs valores apresentados consideram exclusivamente este enquadramento fiscal, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.02 referente a serviços de instalações.\n\nCaso haja necessidade de alteração para outro enquadramento, por solicitação do contratante ou por exigência específica, tal condição deverá ser previamente comunicada e acordada com a Aplica Engenharia, podendo implicar revisão dos valores propostos.',
   anexo5: 'Anexo 5: Enquadramento Fiscal por Opção do Contratante\n\nConforme alinhamento entre as partes, o contratante optou pelo enquadramento dos serviços no regime tributário do Anexo V do Simples Nacional.\n\nOs valores desta proposta já consideram a incidência fiscal correspondente a este enquadramento, sendo a emissão da nota fiscal realizada de acordo com a natureza dos serviços e sua classificação aplicável, incluindo, quando pertinente, o item 07.01 referente a serviços de engenharia.'
 };
+function _getObsTemplates() {
+  return {
+    padrao: _cadCustomTexto('cad-obs-anexo3', 'obs_anexo3') || OBS_TEMPLATES_DEFAULT.padrao,
+    anexo5: _cadCustomTexto('cad-obs-anexo5', 'obs_anexo5') || OBS_TEMPLATES_DEFAULT.anexo5
+  };
+}
+const OBS_TEMPLATES = new Proxy({}, { get: (_, k) => _getObsTemplates()[k] });
 function prevObsAplicarTemplate() {
   const sel = document.getElementById('prev-obs-modelo');
   const ta  = document.getElementById('prev-obs-prop');
@@ -8984,11 +9089,13 @@ function prevSelecionarDaLista() {
   const r = DATA.crm[prevIdxCRM];
   if (!r) return;
   const el = document.getElementById('prev-id');
-  if (el) el.value = r[CRM_COL.ID] || prevIdxCRM + 1;
+  const idProp = r[CRM_COL.ID] || prevIdxCRM + 1;
+  if (el) el.value = idProp;
   const ec = document.getElementById('prev-cliente');
   if (ec) ec.value = r[CRM_COL.RAZAO] || '';
   prevCarregarItens(r);
   prevAtualizar();
+  if (typeof carregarPropostaDetalhes === 'function') carregarPropostaDetalhes(idProp);
 }
 
 function prevVincular() {
@@ -9002,6 +9109,7 @@ function prevVincular() {
   if (ec) ec.value = r[CRM_COL.RAZAO] || '';
   prevCarregarItens(r);
   prevAtualizar();
+  if (typeof carregarPropostaDetalhes === 'function') carregarPropostaDetalhes(id);
 }
 
 function prevCarregarItens(r) {
@@ -9254,6 +9362,7 @@ function prevAtualizar() {
   const cidade  = document.getElementById('prev-cidade')?.value     || 'Schroeder / SC';
   const valDias = parseInt(document.getElementById('prev-val-dias')?.value || '30') || 30;
   const obsProp = document.getElementById('prev-obs-prop')?.value   || '';
+  const obsAtividades = document.getElementById('prev-obs-atividades')?.value || '';
 
   // — Dados proposta —
   const numProp = r ? String(r[CRM_COL.ID]||1).padStart(4,'0') : '0001';
@@ -9754,11 +9863,19 @@ function prevAtualizar() {
 
         <!-- 8. OBSERVAÇÕES (texto único; o enquadramento já está incluído via template de Observações) -->
         ${(() => {
-          const _full = obsProp || '';
-          if (!_full) return '';
+          const _anexo = obsProp || '';
+          const _ativ  = (obsAtividades || '').trim();
+          if (!_anexo && !_ativ) return '';
+          const _atividadesBloco = _ativ
+            ? `<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #d1d5db">
+                 <div style="font-size:11px;font-weight:700;color:#1a3c5e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Observações das Atividades</div>
+                 <div style="font-size:11px;color:#374151;line-height:1.8;white-space:pre-wrap">${_ativ}</div>
+               </div>`
+            : '';
           return `<div style="margin-bottom:16px">
             <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Observações / Condições Gerais</div>
-            <div style="font-size:11px;color:#374151;line-height:1.8;white-space:pre-wrap">${_full}</div>
+            <div style="font-size:11px;color:#374151;line-height:1.8;white-space:pre-wrap">${_anexo}</div>
+            ${_atividadesBloco}
           </div>`;
         })()}
 
@@ -13202,6 +13319,8 @@ function salvarCadastro() {
     rodape:    get('cad-rodape'),
     email2:    get('cad-email2'),
     telFixo:   get('cad-tel-fixo'),
+    obs_anexo3: get('cad-obs-anexo3'),
+    obs_anexo5: get('cad-obs-anexo5'),
   };
 
   // Persistir no localStorage
@@ -13224,6 +13343,9 @@ function salvarCadastro() {
   setEl('prev-val-dias', cadastro.val_dias);
   setEl('prev-prazo-entrega', cadastro.prazo_entrega);
   setEl('prev-obs-prop', cadastro.rodape);
+
+  // Reaplicar template do card 5 da proposta caso esteja em "padrao"/"anexo5"
+  if (typeof prevObsAplicarTemplate === 'function') { try { prevObsAplicarTemplate(); } catch(_){} }
 
   // Salvar no Sheets aba CADASTRO (opcional)
   if (CONFIG.APPS_SCRIPT_URL) {
@@ -13259,6 +13381,8 @@ function loadCadastroFromStorage() {
       'cad-descricao-padrao': cadastro.descricao_padrao,
       'cad-rodape': cadastro.rodape,
       'cad-email2': cadastro.email2, 'cad-tel-fixo': cadastro.telFixo,
+      'cad-obs-anexo3': cadastro.obs_anexo3,
+      'cad-obs-anexo5': cadastro.obs_anexo5,
     }).forEach(([id, v]) => setEl(id, v));
 
     // Propagar parâmetros
@@ -17070,11 +17194,21 @@ function _prevExportarWordDocxLegacy() {
 
   // Observações (o enquadramento já está no texto de obsProp via template — evita duplicação)
   const _obsFinal = obsProp || '';
-  if (_obsFinal) {
+  const _obsAtividadesDocx = (document.getElementById('prev-obs-atividades')?.value || '').trim();
+  if (_obsFinal || _obsAtividadesDocx) {
     bodyParts.push(heading('OBSERVAÇÕES / CONDIÇÕES GERAIS'));
-    _obsFinal.split(/\n\n+/).forEach(par => {
-      if (par.trim()) bodyParts.push(para(par.trim(), {size:18, color:'374151'}));
-    });
+    if (_obsFinal) {
+      _obsFinal.split(/\n\n+/).forEach(par => {
+        if (par.trim()) bodyParts.push(para(par.trim(), {size:18, color:'374151'}));
+      });
+    }
+    if (_obsAtividadesDocx) {
+      bodyParts.push(para('', {spacing:60}));
+      bodyParts.push(para('Observações das Atividades', {size:20, bold:true, color:'1a3c5e'}));
+      _obsAtividadesDocx.split(/\n\n+/).forEach(par => {
+        if (par.trim()) bodyParts.push(para(par.trim(), {size:18, color:'374151'}));
+      });
+    }
     bodyParts.push(para('', {spacing:80}));
   }
 
@@ -20622,10 +20756,15 @@ function equipeRender() {
   
   const vincIcons = { 'CLT': '🏷️', 'PJ/Terceiro': '🔧', 'Sócio': '⭐', 'Estagiário': '📚', 'Parceiro': '🤝' };
   
-  grid.innerHTML = membros.map((m, idx) => `
-    <div class="card" style="cursor:pointer" onclick="membroEditar(${EQUIPE_DATA.indexOf(m)})">
+  grid.innerHTML = membros.map((m, idx) => {
+    const realIdx = EQUIPE_DATA.indexOf(m);
+    return `
+    <div class="card" style="cursor:pointer;position:relative" onclick="membroEditar(${realIdx})">
+      <button onclick="event.stopPropagation();membroRemoverDireto(${realIdx})"
+        title="Remover membro"
+        style="position:absolute;top:6px;right:6px;background:rgba(248,81,73,0.12);border:1px solid rgba(248,81,73,0.35);color:var(--coral);width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:13px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;z-index:2">×</button>
       <div class="card-body" style="padding:14px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;padding-right:26px">
           <div>
             <div style="font-weight:700;font-size:14px">${m.nome}</div>
             <div style="font-size:12px;color:var(--text3)">${m.funcao || '—'}</div>
@@ -20637,7 +20776,18 @@ function equipeRender() {
         ${m.email ? '<div style="font-size:11px;color:var(--text3)">📧 ' + m.email + '</div>' : ''}
         ${m.projetos && m.projetos.length ? '<div style="font-size:11px;color:var(--teal);margin-top:4px">📋 ' + m.projetos.length + ' projeto(s)</div>' : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function membroRemoverDireto(idx) {
+  if (idx < 0 || idx >= EQUIPE_DATA.length) return;
+  const nome = EQUIPE_DATA[idx]?.nome || 'este membro';
+  if (!confirm(`Remover ${nome} da equipe?`)) return;
+  EQUIPE_DATA.splice(idx, 1);
+  localStorage.setItem('equipe_data', JSON.stringify(EQUIPE_DATA));
+  equipeRender();
+  toast('Membro removido', 'info');
 }
 
 function membroAbrirNovo() {
@@ -21250,6 +21400,7 @@ const CFG_CADASTROS_DEFAULTS = {
   tipos_cliente: ['Pessoa Física', 'Pessoa Jurídica', 'Condomínio', 'Órgão Público', 'Construtora', 'Indústria', 'Comércio', 'Incorporadora'],
   tipos_subestacao: ['Aérea', 'Abrigada', 'Pedestal', 'Blindada (GIS)', 'Compacta', 'Subterrânea', 'Simplificada'],
   niveis_kv: ['13.8 kV', '23 kV', '34.5 kV', '69 kV', '138 kV', '230 kV', '440 kV'],
+  pessoas_comissao: ['Anderson Oliveira', 'Edson Matte', 'Juares Araujo', 'Silvio'],
 };
 
 const CFG_CADASTROS_LABELS = {
@@ -21270,6 +21421,7 @@ const CFG_CADASTROS_LABELS = {
   tipos_cliente: '🏷️ Tipos de Cliente',
   tipos_subestacao: '⭐ Especial 1 (Proposta)',
   niveis_kv: '⭐ Especial 2 (Proposta)',
+  pessoas_comissao: '💸 Pessoas para Comissão (Custos Ocultos)',
 };
 
 // Carregar do localStorage ou usar defaults
@@ -21280,7 +21432,9 @@ Object.keys(CFG_CADASTROS_DEFAULTS).forEach(key => {
   }
 });
 
-function cfgCadastrosSalvar() {
+function cfgCadastrosSalvar(chaveAlterada) {
+  // Apenas localStorage — o auto-push (STORAGE_MAP['cfg_cadastros']) sincroniza
+  // automaticamente para a aba "📃 CONFIG_LISTAS" via type 'cfg_listas' (debounce 1,5s).
   localStorage.setItem('cfg_cadastros', JSON.stringify(CFG_CADASTROS));
 }
 
@@ -21318,7 +21472,7 @@ function cfgCadAdicionar(key) {
   if (!val) return;
   if (CFG_CADASTROS[key].includes(val)) { toast('Item já existe', 'warning'); return; }
   CFG_CADASTROS[key].push(val);
-  cfgCadastrosSalvar();
+  cfgCadastrosSalvar(key);
   cfgCadastrosRender();
   toast(`"${val}" adicionado`, 'success');
 }
@@ -21326,7 +21480,7 @@ function cfgCadAdicionar(key) {
 function cfgCadRemover(key, idx) {
   const item = CFG_CADASTROS[key][idx];
   CFG_CADASTROS[key].splice(idx, 1);
-  cfgCadastrosSalvar();
+  cfgCadastrosSalvar(key);
   cfgCadastrosRender();
   toast(`"${item}" removido`, 'info');
 }
@@ -21334,7 +21488,7 @@ function cfgCadRemover(key, idx) {
 function cfgCadResetar(key) {
   if (!confirm(`Restaurar "${CFG_CADASTROS_LABELS[key]}" para os valores padrão?`)) return;
   CFG_CADASTROS[key] = [...CFG_CADASTROS_DEFAULTS[key]];
-  cfgCadastrosSalvar();
+  cfgCadastrosSalvar(key);
   cfgCadastrosRender();
   toast('Lista restaurada', 'info');
 }
@@ -23312,28 +23466,49 @@ function _npOcultosAtualizarResumo() {
     }
   }
 
-  const totalComissao = comissoes.reduce((s,i) => s + (i.valor||0), 0);
-  const totalCustos = custos.reduce((s,i) => s + (i.valor||0), 0);
-  const margem = valorProposta - total;
-  const margemPct = valorProposta > 0 ? ((margem / valorProposta) * 100).toFixed(1) : 0;
-  const negativo = margem < 0;
+  const ehSoma = it => it.somaProposta !== false;
+  const custosSoma   = custos.filter(ehSoma);
+  const custosOculto = custos.filter(it => !ehSoma(it));
+  const comSoma      = comissoes.filter(ehSoma);
+  const comOculto    = comissoes.filter(it => !ehSoma(it));
+  const totCustosSoma   = custosSoma.reduce((s,i)=>s+(i.valor||0),0);
+  const totCustosOculto = custosOculto.reduce((s,i)=>s+(i.valor||0),0);
+  const totComSoma      = comSoma.reduce((s,i)=>s+(i.valor||0),0);
+  const totComOculto    = comOculto.reduce((s,i)=>s+(i.valor||0),0);
+  const totalRepassado  = totCustosSoma + totComSoma;
+  const totalOculto     = totCustosOculto + totComOculto;
+  const valorCobrado    = valorProposta + totalRepassado;
+  const margem          = valorProposta - totalOculto;
+  const margemPct       = valorCobrado > 0 ? ((margem / valorCobrado) * 100).toFixed(1) : 0;
+  const negativo        = margem < 0;
+  const total = NP_ITENS_OCULTOS.reduce((s,i)=>s+(i.valor||0),0);
 
   if (total > 0 || valorProposta > 0) {
     wrapResumo.innerHTML = `
       <div style="margin-top:12px;padding:14px;background:${negativo ? 'rgba(248,81,73,0.1)' : 'rgba(46,196,160,0.06)'};border-radius:10px;border:2px solid ${negativo ? 'var(--coral)' : 'var(--teal)'}">
         <div style="font-size:11px;font-weight:800;color:${negativo ? 'var(--coral)' : 'var(--teal)'};text-transform:uppercase;margin-bottom:8px">${negativo ? '🚨 MARGEM NEGATIVA' : '📊 Resumo Financeiro Interno'}</div>
         <div style="display:grid;grid-template-columns:1fr auto;gap:4px;font-size:12px">
-          <span style="color:var(--text)">Valor da Proposta</span>
+          <span style="color:var(--text)">Valor base da proposta</span>
           <span style="font-family:monospace;color:var(--teal);text-align:right;font-weight:800;font-size:13px">${fmtMoney(valorProposta)}</span>
-          ${totalCustos > 0 ? `<span style="color:var(--steel)">− Custos operacionais</span>
-          <span style="font-family:monospace;color:var(--steel);text-align:right;font-weight:700">- ${fmtMoney(totalCustos)}</span>` : ''}
-          ${totalComissao > 0 ? `<span style="color:var(--gold)">− Comissões</span>
-          <span style="font-family:monospace;color:var(--gold);text-align:right;font-weight:700">- ${fmtMoney(totalComissao)}</span>` : ''}
+          ${totCustosSoma > 0 ? `<span style="color:var(--teal)">+ Custos repassados ao cliente</span>
+          <span style="font-family:monospace;color:var(--teal);text-align:right;font-weight:700">+ ${fmtMoney(totCustosSoma)}</span>` : ''}
+          ${totComSoma > 0 ? `<span style="color:var(--gold)">+ Comissões repassadas</span>
+          <span style="font-family:monospace;color:var(--gold);text-align:right;font-weight:700">+ ${fmtMoney(totComSoma)}</span>` : ''}
+          ${totalRepassado > 0 ? `<span style="color:var(--text);font-weight:700;border-top:1px solid var(--border);padding-top:3px;margin-top:2px">= Valor cobrado do cliente</span>
+          <span style="font-family:monospace;color:var(--text);text-align:right;font-weight:800;border-top:1px solid var(--border);padding-top:3px;margin-top:2px">${fmtMoney(valorCobrado)}</span>` : ''}
+          ${totCustosOculto > 0 ? `<span style="color:var(--steel)">− Custos ocultos (internos)</span>
+          <span style="font-family:monospace;color:var(--steel);text-align:right;font-weight:700">- ${fmtMoney(totCustosOculto)}</span>` : ''}
+          ${totComOculto > 0 ? `<span style="color:var(--coral)">− Comissões ocultas</span>
+          <span style="font-family:monospace;color:var(--coral);text-align:right;font-weight:700">- ${fmtMoney(totComOculto)}</span>` : ''}
         </div>
         <div style="margin-top:8px;padding-top:8px;border-top:2px solid ${negativo ? 'var(--coral)' : 'var(--teal)'}44;display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:12px;font-weight:700;color:var(--text)">= Margem Líquida</span>
           <span style="font-family:monospace;font-weight:900;font-size:18px;color:${negativo ? 'var(--coral)' : 'var(--teal)'}">${fmtMoney(margem)} <span style="font-size:12px">(${margemPct}%)</span></span>
         </div>
+        ${totalRepassado > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--text2)">📌 Aplicar valor cobrado (${fmtMoney(valorCobrado)}) ao campo "Valor da Proposta"?</span>
+          <button onclick="npAplicarValorProposta()" class="btn btn-sm" style="background:var(--teal);color:#fff;font-weight:700;font-size:11px;padding:5px 12px;border:none;border-radius:5px;cursor:pointer">Aplicar</button>
+        </div>` : ''}
       </div>`;
   } else {
     wrapResumo.innerHTML = '';
@@ -23341,29 +23516,56 @@ function _npOcultosAtualizarResumo() {
 }
 
 function npAddItemOculto() {
-  NP_ITENS_OCULTOS.push({ tipo: 'Deslocamento', descricao: '', valor: 0, representante: '' });
+  NP_ITENS_OCULTOS.push({ tipo: 'Deslocamento', descricao: '', valor: 0, representante: '', somaProposta: true });
   npRenderItensOcultos();
   _saveItensOcultos();
 }
 
 function npAddComissaoOculta() {
-  NP_ITENS_OCULTOS.push({ tipo: 'Comissão', descricao: '', valor: 0, representante: '' });
+  NP_ITENS_OCULTOS.push({ tipo: 'Comissão', descricao: '', valor: 0, representante: '', somaProposta: true });
   npRenderItensOcultos();
   _saveItensOcultos();
 }
 
-// Coletar todas as pessoas do sistema (equipe + clientes CRM + parceiros)
+// Backfill default somaProposta=true em itens antigos
+(function _migraSomaProposta(){
+  if (typeof NP_ITENS_OCULTOS === 'undefined' || !Array.isArray(NP_ITENS_OCULTOS)) return;
+  let alterou = false;
+  NP_ITENS_OCULTOS.forEach(it => { if (typeof it.somaProposta === 'undefined') { it.somaProposta = true; alterou = true; } });
+  if (alterou && typeof _saveItensOcultos === 'function') _saveItensOcultos();
+})();
+
+function npToggleSomaProposta(idx) {
+  if (idx < 0 || idx >= NP_ITENS_OCULTOS.length) return;
+  NP_ITENS_OCULTOS[idx].somaProposta = !NP_ITENS_OCULTOS[idx].somaProposta;
+  _saveItensOcultos();
+  npRenderItensOcultos();
+}
+
+function npAplicarValorProposta() {
+  const ativos = NP_ITENS_OCULTOS.filter(i => i.somaProposta !== false);
+  const acrescimo = ativos.reduce((s,i) => s + (i.valor||0), 0);
+  if (acrescimo <= 0) { toast('Nenhum custo ativo para somar', 'warning'); return; }
+  const inp = document.getElementById('np-valor');
+  if (!inp) { toast('Campo de valor da proposta não encontrado', 'warning'); return; }
+  const base = parseFloat(inp.value || '0') || 0;
+  const novo = base + acrescimo;
+  inp.value = novo.toFixed(2);
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  // Após embutir no valor da proposta, custos viram "ocultos efetivos" para evitar dupla soma
+  ativos.forEach(it => { it.somaProposta = false; });
+  _saveItensOcultos();
+  npRenderItensOcultos();
+  toast(`Proposta atualizada: ${fmtMoney(novo)} (base ${fmtMoney(base)} + repasse ${fmtMoney(acrescimo)})`, 'success');
+}
+
+// Lista de pessoas para Comissão (cadastro dedicado em Configurações → Cadastros do Sistema)
 function _npGetTodasPessoas() {
-  const pessoas = new Set();
-  // Equipe
-  if (typeof EQUIPE_DATA !== 'undefined') EQUIPE_DATA.forEach(m => { if (m.nome) pessoas.add(m.nome); });
-  // Clientes do CRM (contatos)
-  if (DATA.crm) DATA.crm.forEach(r => {
-    if (r[CRM_COL.CONTATO]) pessoas.add(r[CRM_COL.CONTATO]);
-  });
-  // Parceiros cadastrados
-  if (typeof EQUIPE_DATA !== 'undefined') EQUIPE_DATA.filter(m => m.vinculo === 'Parceiro' || m.vinculo === 'PJ/Terceiro' || m.vinculo === 'Freelancer' || m.vinculo === 'Consultor').forEach(m => { if (m.nome) pessoas.add(m.nome); });
-  return [...pessoas].sort();
+  if (typeof cfgGetOpcoes === 'function') {
+    const lista = cfgGetOpcoes('pessoas_comissao');
+    if (lista && lista.length) return [...lista].sort();
+  }
+  return ['Anderson Oliveira', 'Edson Matte', 'Juares Araujo', 'Silvio'];
 }
 
 function npRenderItensOcultos() {
@@ -23385,6 +23587,7 @@ function npRenderItensOcultos() {
       wrapCustos.innerHTML = custos.map((item, ci) => {
         const i = NP_ITENS_OCULTOS.indexOf(item);
         const cor = corTipo[item.tipo] || '#4493f8';
+        const soma = item.somaProposta !== false;
         return `<div style="display:flex;gap:6px;align-items:center;padding:10px 12px;background:var(--s2);border-radius:8px;border-left:4px solid ${cor};box-shadow:0 1px 3px rgba(0,0,0,0.2)">
           <select style="background:${cor}22;border:1px solid ${cor}55;border-radius:5px;color:${cor};font-size:11px;padding:5px 8px;font-weight:700;min-width:120px"
             onchange="NP_ITENS_OCULTOS[${i}].tipo=this.value;npRenderItensOcultos()">
@@ -23393,6 +23596,11 @@ function npRenderItensOcultos() {
           <input type="text" placeholder="Descrição" value="${item.descricao||''}"
             oninput="NP_ITENS_OCULTOS[${i}].descricao=this.value;_saveItensOcultos()"
             style="flex:1;background:var(--s3);border:1px solid transparent;border-radius:5px;color:var(--text);font-size:12px;padding:5px 8px">
+          <button onclick="npToggleSomaProposta(${i})"
+            title="${soma ? 'ATIVO — soma este custo ao valor da proposta (clique para tornar oculto)' : 'OCULTO — apenas controle interno (clique para somar à proposta)'}"
+            style="font-size:9px;padding:5px 9px;border-radius:5px;font-weight:700;cursor:pointer;border:1px solid ${soma?'var(--teal)':'var(--text3)'};background:${soma?'rgba(46,196,160,0.15)':'transparent'};color:${soma?'var(--teal)':'var(--text3)'};white-space:nowrap;line-height:1">
+            ${soma ? '✓ Soma' : '∅ Oculto'}
+          </button>
           <div style="position:relative">
             <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:10px;color:${cor};font-weight:700">R$</span>
             <input type="number" value="${item.valor||''}" step="0.01"
@@ -23413,6 +23621,7 @@ function npRenderItensOcultos() {
     } else {
       wrapComissoes.innerHTML = comissoes.map((item) => {
         const i = NP_ITENS_OCULTOS.indexOf(item);
+        const soma = item.somaProposta !== false;
         return `<div style="display:flex;gap:6px;align-items:center;padding:10px 12px;background:rgba(240,165,0,0.06);border-radius:8px;border-left:4px solid var(--gold);box-shadow:0 1px 3px rgba(0,0,0,0.2)">
           <select style="background:rgba(240,165,0,0.15);border:1px solid rgba(240,165,0,0.4);border-radius:5px;color:var(--gold);font-size:11px;padding:5px 8px;font-weight:700;min-width:120px"
             onchange="NP_ITENS_OCULTOS[${i}].tipo=this.value;npRenderItensOcultos()">
@@ -23424,6 +23633,11 @@ function npRenderItensOcultos() {
             <option value="">— Selecione a pessoa —</option>
             ${pessoas.map(p => `<option ${(item.descricao||item.representante)===p?'selected':''}>${p}</option>`).join('')}
           </select>
+          <button onclick="npToggleSomaProposta(${i})"
+            title="${soma ? 'ATIVO — soma esta comissão ao valor da proposta (clique para tornar oculta)' : 'OCULTA — apenas controle interno (clique para somar à proposta)'}"
+            style="font-size:9px;padding:5px 9px;border-radius:5px;font-weight:700;cursor:pointer;border:1px solid ${soma?'var(--teal)':'var(--text3)'};background:${soma?'rgba(46,196,160,0.15)':'transparent'};color:${soma?'var(--teal)':'var(--text3)'};white-space:nowrap;line-height:1">
+            ${soma ? '✓ Soma' : '∅ Oculto'}
+          </button>
           <div style="position:relative">
             <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--gold);font-weight:700">R$</span>
             <input type="number" value="${item.valor||''}" step="0.01"
@@ -23436,56 +23650,8 @@ function npRenderItensOcultos() {
     }
   }
 
-  // ── RESUMO ──
-  if (wrapResumo) {
-    const total = NP_ITENS_OCULTOS.reduce((s, i) => s + (i.valor || 0), 0);
-    let valorProposta = parseFloat(document.getElementById('np-valor')?.value || '0') || 0;
-    if (!valorProposta) {
-      const campos = ['calc-total-geral','calc-total-liquido','calc-total-bruto','calc-total-final'];
-      for (const id of campos) {
-        const el = document.getElementById(id);
-        if (el) { const v = parseFloat((el.textContent||el.value||'').replace(/[^\d.,-]/g,'').replace(',','.')); if (v > 0) { valorProposta = v; break; } }
-      }
-    }
-    if (!valorProposta && typeof calcBlocos !== 'undefined' && calcBlocos.length) {
-      const vh = parseFloat(document.getElementById('calc-vh')?.value) || 200;
-      valorProposta = calcBlocos.reduce((s, b) => s + (b.itens||[]).reduce((s2, it) => s2 + ((it.horas||0) * vh * (it.qtd||1)), 0), 0);
-    }
-    if (!valorProposta) {
-      const propId = document.getElementById('calc-id-proposta')?.value || document.getElementById('np-id-prop')?.value || window._lastSavedPropId || '';
-      if (propId) {
-        const cr = DATA.crm.find(r => String(r[CRM_COL.ID]) === String(propId));
-        if (cr) valorProposta = parseFloat((cr[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
-      }
-    }
-
-    const totalComissao = comissoes.reduce((s,i) => s + (i.valor||0), 0);
-    const totalCustos = custos.reduce((s,i) => s + (i.valor||0), 0);
-    const margem = valorProposta - total;
-    const margemPct = valorProposta > 0 ? ((margem / valorProposta) * 100).toFixed(1) : 0;
-    const negativo = margem < 0;
-
-    if (total > 0 || valorProposta > 0) {
-      wrapResumo.innerHTML = `
-        <div style="margin-top:12px;padding:14px;background:${negativo ? 'rgba(248,81,73,0.1)' : 'rgba(46,196,160,0.06)'};border-radius:10px;border:2px solid ${negativo ? 'var(--coral)' : 'var(--teal)'}">
-          <div style="font-size:11px;font-weight:800;color:${negativo ? 'var(--coral)' : 'var(--teal)'};text-transform:uppercase;margin-bottom:8px">${negativo ? '🚨 MARGEM NEGATIVA' : '📊 Resumo Financeiro Interno'}</div>
-          <div style="display:grid;grid-template-columns:1fr auto;gap:4px;font-size:12px">
-            <span style="color:var(--text)">Valor da Proposta</span>
-            <span style="font-family:monospace;color:var(--teal);text-align:right;font-weight:800;font-size:13px">${fmtMoney(valorProposta)}</span>
-            ${totalCustos > 0 ? `<span style="color:var(--steel)">− Custos operacionais</span>
-            <span style="font-family:monospace;color:var(--steel);text-align:right;font-weight:700">- ${fmtMoney(totalCustos)}</span>` : ''}
-            ${totalComissao > 0 ? `<span style="color:var(--gold)">− Comissões</span>
-            <span style="font-family:monospace;color:var(--gold);text-align:right;font-weight:700">- ${fmtMoney(totalComissao)}</span>` : ''}
-          </div>
-          <div style="margin-top:8px;padding-top:8px;border-top:2px solid ${negativo ? 'var(--coral)' : 'var(--teal)'}44;display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:12px;font-weight:700;color:var(--text)">= Margem Líquida</span>
-            <span style="font-family:monospace;font-weight:900;font-size:18px;color:${negativo ? 'var(--coral)' : 'var(--teal)'}">${fmtMoney(margem)} <span style="font-size:12px">(${margemPct}%)</span></span>
-          </div>
-        </div>`;
-    } else {
-      wrapResumo.innerHTML = '';
-    }
-  }
+  // ── RESUMO ── (delegado para a função única _npOcultosAtualizarResumo)
+  _npOcultosAtualizarResumo();
 }
 
 // ══════════════════════════════════════════════════════
@@ -24128,7 +24294,7 @@ window.addEventListener('load', () => {
   };
 
   // ── CHAVES EXTRAS — prefixos e chaves exatas que viram linhas em dados_extras_propostas ──
-  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_'];
+  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_', 'obs_atividades_', 'link_rota_', 'custos_ocultos_proposta_'];
   const CHAVES_EXTRAS_EXATAS = ['pagto_padrao'];
 
   function _ehChaveExtra(key) {
