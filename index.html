@@ -25496,6 +25496,102 @@ window.addEventListener('load', () => {
     setTimeout(() => location.reload(), 500);
   };
 
+  // Diagnóstica PROFUNDA — faz uma chamada direta ao Apps Script e mostra
+  // exatamente o que ele responde (raw JSON, status HTTP, headers, etc.)
+  window.aplicaTestarPlanilha = async function() {
+    console.group('🌐 APLICA — TESTE DIRETO COM A PLANILHA');
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) {
+      console.error('❌ Sem APPS_SCRIPT_URL configurado.');
+      console.groupEnd();
+      return;
+    }
+
+    // 1. Ping
+    console.log('1️⃣  PING — testando se o Apps Script responde...');
+    try {
+      const r = await fetch(url + '?action=ping', { redirect: 'follow' });
+      console.log('   HTTP status:', r.status, r.statusText);
+      console.log('   Content-Type:', r.headers.get('content-type'));
+      const txt = await r.text();
+      console.log('   Resposta crua (primeiros 500 chars):', txt.slice(0, 500));
+      try {
+        const j = JSON.parse(txt);
+        console.log('   Resposta JSON:', j);
+      } catch(e) {
+        console.warn('   ⚠️ Resposta NÃO é JSON válido. Provavelmente o Apps Script está retornando uma página HTML de erro/login.');
+      }
+    } catch(e) {
+      console.error('   ❌ Falha de rede:', e.message);
+    }
+
+    // 2. SYNC — chamada que normalmente popula DATA
+    console.log('');
+    console.log('2️⃣  SYNC — chamando action=sync (puxa todas as abas)...');
+    try {
+      const r = await fetch(url + '?action=sync', { redirect: 'follow' });
+      console.log('   HTTP status:', r.status, r.statusText);
+      const txt = await r.text();
+      console.log('   Tamanho da resposta:', txt.length, 'chars');
+      console.log('   Primeiros 800 chars:', txt.slice(0, 800));
+
+      try {
+        const j = JSON.parse(txt);
+        console.log('   ✓ JSON parseado. Conteúdo:');
+        Object.keys(j).forEach(k => {
+          const v = j[k];
+          if (Array.isArray(v)) {
+            console.log(`     • ${k}: ${v.length} linhas` + (v.length > 0 ? ' (1ª: ' + JSON.stringify(v[0]).slice(0,100) + '...)' : ''));
+          } else if (typeof v === 'object' && v !== null) {
+            console.log(`     • ${k}:`, v);
+          } else {
+            console.log(`     • ${k}:`, v);
+          }
+        });
+        if (j.error) {
+          console.error('   ❌ Apps Script retornou ERRO:', j.error);
+        }
+      } catch(e) {
+        console.error('   ❌ JSON inválido:', e.message);
+      }
+    } catch(e) {
+      console.error('   ❌ Falha:', e.message);
+    }
+
+    // 3. GET diretamente da aba CRM
+    console.log('');
+    console.log('3️⃣  GET — lendo aba CRM diretamente (action=get&sheet=📋 CRM)...');
+    try {
+      const r = await fetch(url + '?action=get&sheet=' + encodeURIComponent('📋 CRM'), { redirect: 'follow' });
+      const txt = await r.text();
+      console.log('   Status:', r.status, '· Tamanho:', txt.length, 'chars');
+      try {
+        const j = JSON.parse(txt);
+        if (Array.isArray(j)) {
+          console.log('   ✓ Linhas retornadas:', j.length);
+          if (j.length > 0) console.log('   1ª linha:', j[0]);
+        } else if (j.error) {
+          console.error('   ❌ Erro do Apps Script:', j.error);
+        } else {
+          console.log('   Resposta:', j);
+        }
+      } catch(e) {
+        console.warn('   ⚠️ Resposta não-JSON:', txt.slice(0,300));
+      }
+    } catch(e) {
+      console.error('   ❌ Falha:', e.message);
+    }
+
+    console.groupEnd();
+    console.log('');
+    console.log('💡 Possíveis causas se vier vazio:');
+    console.log('   1) Permissões do Apps Script foram revogadas → reabra o link de implantação no script.google.com e re-autorize');
+    console.log('   2) A URL do deploy expirou → criar uma NOVA implantação (Implantar → Nova implantação)');
+    console.log('   3) Os nomes das abas na planilha não batem com os esperados (📋 CRM, 🤝 CLIENTES, etc.)');
+    console.log('   4) A planilha original foi renomeada/movida e o script perdeu o vínculo');
+    return true;
+  };
+
 })();
 </script>
 
