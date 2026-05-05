@@ -2920,7 +2920,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <div style="font-size:14px;font-weight:700;color:var(--text)">Usar Proposta Existente</div>
             <div style="font-size:12px;color:var(--text3)">Duplique uma proposta para ganhar tempo — serviços, atividades e valores já vêm preenchidos.</div>
           </div>
-          <button class="btn btn-primary" onclick="npUsarPropostaExistente()" style="white-space:nowrap;padding:10px 20px;font-size:13px">
+          <button type="button" class="btn btn-primary" onclick="event.stopPropagation();npUsarPropostaExistente();return false;" data-action="abrir-duplicar" style="white-space:nowrap;padding:10px 20px;font-size:13px;position:relative;z-index:5;cursor:pointer">
             📋 Duplicar Proposta
           </button>
         </div>
@@ -8963,9 +8963,30 @@ document.addEventListener('DOMContentLoaded', () => {
 // Helpers de data
 function isoDate(br) {
   if (!br) return '';
-  const m = br.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  return br;
+  // Date object → ISO string sliced
+  if (br instanceof Date) {
+    if (isNaN(br.getTime())) return '';
+    const y = br.getFullYear(), m = String(br.getMonth()+1).padStart(2,'0'), d = String(br.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(br).trim();
+  if (!s) return '';
+  // DD/MM/AAAA → AAAA-MM-DD
+  const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+  // ISO timestamp ou AAAA-MM-DD → corta nos primeiros 10 chars
+  const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+  // DD-MM-AAAA (com hífen) → AAAA-MM-DD
+  const m3 = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (m3) return `${m3[3]}-${m3[2]}-${m3[1]}`;
+  // Última tentativa: parsear como Date
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) {
+    const y = dt.getFullYear(), m = String(dt.getMonth()+1).padStart(2,'0'), d = String(dt.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  return '';
 }
 
 function brDate(iso) {
@@ -9725,9 +9746,9 @@ function prevAtualizar() {
           </div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA</div>
-          <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}</div>
-          <div style="font-size:10px;color:#6b7280">Data: ${dataHoje} · Validade: ${dataVal}</div>
+          <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA${(r && r[CRM_COL.REVISAO]) ? ` <span style="display:inline-block;margin-left:6px;padding:2px 8px;background:#f0a500;color:#fff;font-size:10px;font-weight:700;border-radius:4px;letter-spacing:0.5px;vertical-align:middle">${r[CRM_COL.REVISAO]}</span>` : ''}</div>
+          <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}${(r && r[CRM_COL.REVISAO]) ? ` <span style="font-size:13px;color:#1a3c5e;font-weight:700">— ${r[CRM_COL.REVISAO]}</span>` : ''}</div>
+          <div style="font-size:10px;color:#6b7280">Data: ${dataHoje} · Validade: ${dataVal}${(r && r[CRM_COL.REVISAO]) ? ` · <strong style="color:#1a3c5e">Revisão: ${r[CRM_COL.REVISAO]}</strong>` : ''}</div>
         </div>
       </div>
 
@@ -16904,9 +16925,9 @@ function _prevExportarWordDocxLegacy() {
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
   ].join('');
   const headerRightLines = [
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r>${(r && r[CRM_COL.REVISAO]) ? `<w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="ffffff"/><w:shd w:val="clear" w:color="auto" w:fill="f0a500"/></w:rPr><w:t xml:space="preserve">  ${esc(r[CRM_COL.REVISAO])}  </w:t></w:r>` : ''}</w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}${(r && r[CRM_COL.REVISAO]) ? ' · Revisão: ' + esc(r[CRM_COL.REVISAO]) : ''}</w:t></w:r></w:p>`,
   ].join('');
   bodyParts.push(`<w:tbl>
     <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tblBorders></w:tblPr>
@@ -22683,14 +22704,14 @@ function npFiltrarPropostasExistentes() {
       localObra ? `📍 <b>Local:</b> ${localObra}` : '',
       campoEsp  ? `⭐ <b>Campo Especial:</b> ${campoEsp}` : ''
     ].filter(Boolean).join(' · ');
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:border-color 0.15s"
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;cursor:default;transition:border-color 0.15s;position:relative"
         onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:13px">#${String(id).padStart(4,'0')} — ${razao}</div>
         ${extraLinha ? `<div style="font-size:11px;color:var(--teal);margin-top:2px">${extraLinha}</div>` : ''}
         <div style="font-size:12px;color:var(--text3);margin-top:2px">${serv} · ${data} · ${typeof fmtMoney === 'function' ? fmtMoney(valor) : 'R$ '+valor.toFixed(2)}</div>
       </div>
-      <button class="btn btn-teal btn-sm" onclick="npDuplicarProposta(${idx})">📋 Duplicar</button>
+      <button type="button" class="btn btn-teal btn-sm" data-dup-idx="${idx}" onclick="event.stopPropagation();npDuplicarProposta(${idx});return false;" style="position:relative;z-index:10;cursor:pointer;flex-shrink:0">📋 Duplicar</button>
     </div>`;
   }).join('');
 }
@@ -24893,12 +24914,10 @@ window.addEventListener('load', () => {
   'use strict';
 
   // ─────────────────────────────────────────────────────────
-  // FIX issue 2: Botão "Ver" no Cadastro de Clientes
-  // Problema: a função procurava o cliente em DATA.crm, mas
-  // clientes cadastrados direto (sem proposta ainda) não estão
-  // no CRM, e a função apenas mostrava "Cliente não encontrado".
-  // Solução: detectar clientes-só-cadastro e oferecer ações úteis
-  // (Nova Proposta deste cliente / Ver na aba Outros / etc.)
+  // FIX issue 2 (revisado): Botão "Ver" agora mostra os DADOS
+  // do cliente em um modal — antes ele navegava direto para
+  // o CRM filtrado pelas propostas, mas o usuário quer ver o
+  // cadastro/perfil do cliente, não a lista de propostas dele.
   // ─────────────────────────────────────────────────────────
   const _origCliVerDetalhe = typeof cliVerDetalhe === 'function' ? cliVerDetalhe : null;
   window.cliVerDetalhe = function(chave) {
@@ -24908,33 +24927,14 @@ window.addEventListener('load', () => {
     const chaveClean  = _normalizar(chave);
     const chaveLower  = String(chave).toLowerCase().trim();
 
-    // 1) Tentar achar no CRM (cliente com ao menos 1 proposta)
+    // Coletar TODAS as propostas deste cliente
     const propostas = (DATA.crm || []).filter(r => {
       const cnpj  = _normalizar(r[CRM_COL.CNPJ]);
       const razao = String(r[CRM_COL.RAZAO] || '').toLowerCase().trim();
       return (cnpj && cnpj === chaveClean) || (razao && razao === chaveLower);
     });
 
-    if (propostas.length) {
-      // Caminho normal: filtrar CRM e navegar
-      const razaoMostrar = propostas[0][CRM_COL.RAZAO] || chave;
-      const searchEl = document.getElementById('crm-search');
-      if (searchEl) searchEl.value = razaoMostrar;
-      // Limpar filtros de status/serviço/etc. para garantir que aparecem todas as propostas do cliente
-      ['crm-filter-status','crm-filter-servico','crm-filter-retorno','crm-filter-mes','crm-filter-ano']
-        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-      try { filterCRM(); } catch(_){}
-      nav('crm');
-      // re-aplicar filtro depois da troca de página, caso algum init resete a busca
-      setTimeout(() => {
-        if (searchEl && searchEl.value !== razaoMostrar) searchEl.value = razaoMostrar;
-        try { filterCRM(); } catch(_){}
-      }, 150);
-      toast(`📂 ${propostas.length} proposta${propostas.length>1?'s':''} de ${razaoMostrar.slice(0,32)}`, 'info');
-      return;
-    }
-
-    // 2) Cliente cadastrado, mas SEM proposta ainda — montar modal informativo
+    // Tentar pegar dados de cadastro também (se cliente foi cadastrado direto na aba Outros)
     let cliCad = null;
     try {
       const outros = (typeof CONTATOS !== 'undefined' && CONTATOS.outros) ? CONTATOS.outros : [];
@@ -24945,71 +24945,199 @@ window.addEventListener('load', () => {
       }) || null;
     } catch(_){}
 
-    const nomeCliente = cliCad?.nome || chave;
-    const docCliente  = cliCad?.doc  || (chave.match(/[\d.\-\/]/) ? chave : '');
+    // Se não tem nada, avisar
+    if (!propostas.length && !cliCad) {
+      toast('Cliente não encontrado', 'warning');
+      return;
+    }
 
-    // Remover modal antigo se existir
-    document.getElementById('modal-cli-sem-proposta')?.remove();
+    // Pegar a "fonte verdade" — preferir cadastro direto, senão usar 1ª proposta
+    const ref = cliCad || {};
+    const refRow = propostas[0] || null;
+    const nome   = ref.nome  || (refRow ? refRow[CRM_COL.RAZAO]    : '') || chave;
+    const fant   = (refRow ? refRow[CRM_COL.FANTASIA] : '') || ref.fantasia || '';
+    const cnpj   = ref.doc   || (refRow ? refRow[CRM_COL.CNPJ]     : '') || (chave.match(/[\d.\-\/]/) ? chave : '');
+    const end    = (refRow ? refRow[CRM_COL.ENDERECO] : '') || ref.endereco || '';
+    const cidade = ref.cidade || '';
+    const uf     = ref.uf || '';
+    const fone   = ref.fone || (refRow ? refRow[CRM_COL.FONE] : '') || '';
+    const email  = ref.email|| (refRow ? refRow[CRM_COL.EMAIL]: '') || '';
+    const pessoa = ref.pessoa || (refRow ? refRow[CRM_COL.CONTATO] : '') || '';
 
+    // Estatísticas das propostas
+    const total    = propostas.length;
+    const ganhas   = propostas.filter(r => (r[CRM_COL.STATUS]||'').toLowerCase() === 'ganha').length;
+    const perdidas = propostas.filter(r => (r[CRM_COL.STATUS]||'').toLowerCase() === 'perdida').length;
+    const abertas  = total - ganhas - perdidas;
+    const receita  = propostas
+      .filter(r => (r[CRM_COL.STATUS]||'').toLowerCase() === 'ganha')
+      .reduce((s, r) => s + (parseFloat(String(r[CRM_COL.VALOR]||'0').replace(',','.')) || 0), 0);
+    const fmt$ = (v) => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    // Buscar contatos adicionais salvos na aba CONTATOS
+    let contatosExtras = [];
+    try {
+      // Pegar contatos vinculados às propostas deste cliente
+      const propIds = propostas.map(r => String(r[CRM_COL.ID] || ''));
+      contatosExtras = (DATA.contatos || []).filter(c =>
+        c[CT.TIPO] === 'proposta' && propIds.includes(String(c[CT.REF]))
+      );
+      // Deduplicar por nome+telefone
+      const seen = new Set();
+      contatosExtras = contatosExtras.filter(c => {
+        const k = (c[CT.NOME]||'') + '|' + (c[CT.TEL]||'') + '|' + (c[CT.EMAIL]||'');
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    } catch(_){}
+
+    // Lista resumida das últimas propostas (max 5)
+    const ultProps = propostas.slice(-5).reverse();
+
+    // Construir e abrir modal
+    document.getElementById('modal-cli-detalhe')?.remove();
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay open';
-    overlay.id = 'modal-cli-sem-proposta';
-    overlay.style.display = 'flex';
+    overlay.id = 'modal-cli-detalhe';
+    overlay.style.cssText = 'display:flex';
     overlay.innerHTML = `
-      <div class="modal" style="max-width:480px">
+      <div class="modal modal-lg" style="max-width:680px">
         <div class="modal-header">
-          <div class="modal-title">👤 ${nomeCliente.slice(0,40)}</div>
-          <button class="modal-close" onclick="document.getElementById('modal-cli-sem-proposta').remove()">×</button>
+          <div class="modal-title">👤 ${(nome||'Cliente').slice(0,50)}${fant && fant !== nome ? ` <span style="color:var(--text3);font-weight:400;font-size:13px">— ${fant.slice(0,30)}</span>` : ''}</div>
+          <button class="modal-close" onclick="document.getElementById('modal-cli-detalhe').remove()">×</button>
         </div>
-        <div class="modal-body" style="padding:20px">
-          <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
-            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Cliente Cadastrado</div>
-            <div style="font-weight:600;color:var(--text);margin-bottom:4px">${nomeCliente}</div>
-            ${docCliente ? `<div style="font-family:monospace;font-size:12px;color:var(--text2)">${docCliente}</div>` : ''}
-            ${cliCad?.fone  ? `<div style="font-size:12px;color:var(--text2);margin-top:4px">📞 ${cliCad.fone}</div>` : ''}
-            ${cliCad?.email ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">✉️ ${cliCad.email}</div>` : ''}
+        <div class="modal-body" style="padding:20px;max-height:70vh;overflow-y:auto">
+          <!-- Cabeçalho com dados básicos -->
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;font-size:12px">
+              ${cnpj  ? `<div><span style="color:var(--text3);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;display:block;margin-bottom:2px">CNPJ / CPF</span><span style="font-family:monospace;color:var(--text);font-weight:600">${cnpj}</span></div>` : ''}
+              ${pessoa? `<div><span style="color:var(--text3);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;display:block;margin-bottom:2px">Contato Principal</span><span style="color:var(--text)">${pessoa}</span></div>` : ''}
+              ${fone  ? `<div><span style="color:var(--text3);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;display:block;margin-bottom:2px">Telefone</span><span style="color:var(--text)">📞 ${fone}</span></div>` : ''}
+              ${email ? `<div><span style="color:var(--text3);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;display:block;margin-bottom:2px">E-mail</span><span style="color:var(--text);word-break:break-all">✉️ ${email}</span></div>` : ''}
+              ${end   ? `<div style="grid-column:1/-1"><span style="color:var(--text3);text-transform:uppercase;font-size:10px;letter-spacing:0.05em;display:block;margin-bottom:2px">Endereço</span><span style="color:var(--text)">📍 ${end}${cidade?' — '+cidade:''}${uf?'/'+uf:''}</span></div>` : ''}
+            </div>
           </div>
-          <div style="background:rgba(240,165,0,0.08);border:1px solid rgba(240,165,0,0.25);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text)">
-            ⚠️ Este cliente <b>ainda não tem propostas</b> registradas no CRM.
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary" id="btn-cli-nova-prop">
-              ➕ Nova Proposta para este Cliente
-            </button>
-            <button class="btn btn-ghost" onclick="document.getElementById('modal-cli-sem-proposta').remove()">
-              Fechar
-            </button>
-          </div>
+
+          <!-- KPIs -->
+          ${total > 0 ? `
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+            <div style="background:rgba(68,147,248,0.08);border:1px solid rgba(68,147,248,0.25);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:var(--steel)">${total}</div>
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Propostas</div>
+            </div>
+            <div style="background:rgba(63,185,80,0.08);border:1px solid rgba(63,185,80,0.25);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:var(--green)">${ganhas}</div>
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Ganhas</div>
+            </div>
+            <div style="background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.25);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:var(--coral)">${perdidas}</div>
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Perdidas</div>
+            </div>
+            <div style="background:rgba(46,196,160,0.08);border:1px solid rgba(46,196,160,0.25);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:14px;font-weight:800;color:var(--teal)">${fmt$(receita)}</div>
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase">Receita</div>
+            </div>
+          </div>` : '<div style="background:rgba(240,165,0,0.08);border:1px solid rgba(240,165,0,0.25);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text)">⚠️ Cliente cadastrado, ainda <b>sem propostas</b> registradas.</div>'}
+
+          ${contatosExtras.length ? `
+          <!-- Contatos adicionais -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:8px">📇 Outros Contatos (${contatosExtras.length})</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${contatosExtras.slice(0,8).map(c => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--s2);border:1px solid var(--border);border-radius:6px;font-size:12px">
+                  <div>
+                    <span style="font-weight:600;color:var(--text)">${(c[CT.NOME]||'—').slice(0,30)}</span>
+                    ${c[CT.CARGO] ? `<span style="color:var(--text3);font-size:11px;margin-left:6px">— ${c[CT.CARGO]}</span>` : ''}
+                  </div>
+                  <div style="color:var(--text2);font-size:11px;display:flex;gap:10px">
+                    ${c[CT.TEL]   ? `<span>📞 ${c[CT.TEL]}</span>`   : ''}
+                    ${c[CT.EMAIL] ? `<span style="word-break:break-all">✉️ ${c[CT.EMAIL]}</span>` : ''}
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>` : ''}
+
+          ${ultProps.length ? `
+          <!-- Últimas propostas -->
+          <div style="margin-bottom:8px">
+            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:8px">📋 Últimas Propostas</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${ultProps.map(p => {
+                const id   = p[CRM_COL.ID] || '';
+                const sv   = (p[CRM_COL.SERVICO]||'—').slice(0,40);
+                const v    = parseFloat(String(p[CRM_COL.VALOR]||'0').replace(',','.')) || 0;
+                const st   = p[CRM_COL.STATUS] || '—';
+                const stCl = ({'Ganha':'var(--green)','Perdida':'var(--coral)','Em prospecção':'var(--steel)','Enviada':'var(--gold)','Em Negociação':'var(--lavender)'})[st] || 'var(--text3)';
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--s2);border:1px solid var(--border);border-radius:6px;font-size:12px">
+                  <div style="flex:1;min-width:0">
+                    <span style="font-family:monospace;color:var(--gold);font-weight:700">#${String(id).padStart(4,'0')}</span>
+                    <span style="color:var(--text);margin-left:8px">${sv}</span>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center;flex-shrink:0">
+                    <span style="color:var(--teal);font-family:monospace;font-weight:600">${fmt$(v)}</span>
+                    <span style="color:${stCl};font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 6px;border:1px solid ${stCl};border-radius:4px">${st}</span>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+        </div>
+        <div class="modal-footer" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="document.getElementById('modal-cli-detalhe').remove()">Fechar</button>
+          <div style="flex:1"></div>
+          ${propostas.length ? `<button class="btn btn-ghost" id="btn-cli-ver-crm">📋 Ver no CRM</button>` : ''}
+          <button class="btn btn-primary" id="btn-cli-nova-prop-detalhe">➕ Nova Proposta</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
 
-    document.getElementById('btn-cli-nova-prop').onclick = () => {
-      overlay.remove();
-      // Iniciar nova proposta com dados pré-preenchidos
-      try {
-        if (typeof npNovaPropostaNova === 'function') npNovaPropostaNova();
-        else if (typeof npIniciarNova === 'function') npIniciarNova();
-      } catch(_){}
-      nav('nova-proposta-page');
-      setTimeout(() => {
-        const setF = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
-        setF('np-razao',    nomeCliente);
-        setF('np-fantasia', nomeCliente);
-        setF('np-cnpj',     docCliente);
-        if (cliCad) {
-          // Preencher 1º contato com dados do cadastro
+    // Handler: Ver no CRM filtrado
+    const btnCRM = document.getElementById('btn-cli-ver-crm');
+    if (btnCRM) {
+      btnCRM.onclick = () => {
+        overlay.remove();
+        const searchEl = document.getElementById('crm-search');
+        if (searchEl) searchEl.value = nome;
+        ['crm-filter-status','crm-filter-servico','crm-filter-retorno','crm-filter-mes','crm-filter-ano']
+          .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        try { filterCRM(); } catch(_){}
+        nav('crm');
+        setTimeout(() => {
+          if (searchEl && searchEl.value !== nome) searchEl.value = nome;
+          try { filterCRM(); } catch(_){}
+        }, 150);
+      };
+    }
+
+    // Handler: Nova Proposta para este cliente
+    const btnNova = document.getElementById('btn-cli-nova-prop-detalhe');
+    if (btnNova) {
+      btnNova.onclick = () => {
+        overlay.remove();
+        try {
+          if (typeof npNovaPropostaNova === 'function') npNovaPropostaNova();
+          else if (typeof npIniciarNova === 'function') npIniciarNova();
+        } catch(_){}
+        nav('nova-proposta-page');
+        setTimeout(() => {
+          const setF = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+          setF('np-razao',    nome);
+          setF('np-fantasia', fant || nome);
+          setF('np-cnpj',     cnpj);
+          setF('np-endereco', end);
           if (Array.isArray(npContatos) && npContatos[0]) {
-            npContatos[0].nome     = cliCad.pessoa || cliCad.nome || '';
-            npContatos[0].telefone = cliCad.fone   || '';
-            npContatos[0].email    = cliCad.email  || '';
-            npContatos[0].whatsapp = cliCad.fone   || '';
+            npContatos[0].nome     = pessoa || '';
+            npContatos[0].telefone = fone   || '';
+            npContatos[0].email    = email  || '';
+            npContatos[0].whatsapp = fone   || '';
             if (typeof npRenderContatos === 'function') npRenderContatos();
           }
-        }
-        toast('✏️ Nova proposta para ' + nomeCliente.slice(0,30), 'success');
-      }, 200);
-    };
+          toast('✏️ Nova proposta para ' + nome.slice(0,30), 'success');
+        }, 200);
+      };
+    }
   };
 
   // ─────────────────────────────────────────────────────────
@@ -25099,6 +25227,60 @@ window.addEventListener('load', () => {
   //  apenas para deixar registrado o local da correção.)
 
   console.log('[aplica-patches] correções aplicadas: issues 1, 2, 3, 4, 5');
+
+  // ─────────────────────────────────────────────────────────
+  // BOTÃO DUPLICAR PROPOSTA — rede de segurança via event delegation
+  // Caso o `onclick` inline falhe (por algum motivo CSS, z-index,
+  // ou conflito com outro listener), capturamos o click no document
+  // em fase de captura e disparamos a ação.
+  // ─────────────────────────────────────────────────────────
+  document.addEventListener('click', function(ev) {
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+
+    // 1) Botão "Duplicar" dentro da lista do modal (data-dup-idx)
+    const btnDup = t.closest('button[data-dup-idx]');
+    if (btnDup) {
+      const idx = parseInt(btnDup.getAttribute('data-dup-idx'), 10);
+      if (!Number.isNaN(idx)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        try {
+          if (typeof npDuplicarProposta === 'function') {
+            npDuplicarProposta(idx);
+          } else {
+            console.error('[Duplicar] npDuplicarProposta não definido');
+            if (typeof toast === 'function') toast('Função de duplicação não carregada', 'error');
+          }
+        } catch (e) {
+          console.error('[Duplicar] erro ao executar:', e);
+          if (typeof toast === 'function') toast('Erro ao duplicar: ' + e.message, 'error');
+        }
+        return;
+      }
+    }
+
+    // 2) Botão grande "Duplicar Proposta" (data-action="abrir-duplicar")
+    const btnAbrir = t.closest('button[data-action="abrir-duplicar"]');
+    if (btnAbrir) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      try {
+        if (typeof npUsarPropostaExistente === 'function') {
+          npUsarPropostaExistente();
+        } else {
+          console.error('[Duplicar] npUsarPropostaExistente não definido');
+          if (typeof toast === 'function') toast('Função não carregada', 'error');
+        }
+      } catch (e) {
+        console.error('[Duplicar] erro ao abrir modal:', e);
+        if (typeof toast === 'function') toast('Erro: ' + e.message, 'error');
+      }
+      return;
+    }
+  }, true); // ← phase de CAPTURE para vencer qualquer outro listener
+
+  console.log('[aplica-patches] event-delegation para botão Duplicar instalada');
 })();
 </script>
 
