@@ -23473,12 +23473,14 @@ function execExportarDocs() {
 // ══════════════════════════════════════════════════════
 let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[]');
 
-// Injetar seção de itens ocultos no FINAL da Calculadora (Step 2)
-setTimeout(() => {
+// Construir o HTML do painel uma vez só
+function _npBuildOcultosPanel() {
+  if (document.getElementById('np-itens-ocultos-card')) return; // já injetado
   const calcPage = document.getElementById('np-step-2');
   if (!calcPage) return;
 
   const ocultosDiv = document.createElement('div');
+  ocultosDiv.id = 'np-itens-ocultos-card';
   ocultosDiv.className = 'card';
   ocultosDiv.style.cssText = 'margin-top:16px;border:2px solid var(--coral);background:linear-gradient(135deg, rgba(248,81,73,0.06), rgba(240,165,0,0.04))';
   ocultosDiv.innerHTML = `
@@ -23489,7 +23491,7 @@ setTimeout(() => {
       <div style="font-size:11px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:rgba(248,81,73,0.08);border-radius:6px;border-left:4px solid var(--coral)">
         ⚠️ <strong>Controle interno</strong> — não aparece no PDF. Ao marcar como <b style="color:var(--coral)">Ganha</b>, tudo é lançado em <strong style="color:var(--coral)">Despesas + Financeiro</strong> automaticamente.
       </div>
-      
+
       <!-- SEÇÃO 1: CUSTOS (sem comissão) -->
       <div style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -23498,7 +23500,7 @@ setTimeout(() => {
         </div>
         <div id="np-itens-ocultos-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
       </div>
-      
+
       <!-- SEÇÃO 2: COMISSÕES (separada) -->
       <div style="border-top:2px solid var(--gold);padding-top:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -23507,14 +23509,25 @@ setTimeout(() => {
         </div>
         <div id="np-comissoes-ocultas-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
       </div>
-      
+
       <!-- RESUMO -->
       <div id="np-ocultos-resumo"></div>
     </div>
   `;
   calcPage.appendChild(ocultosDiv);
-  npRenderItensOcultos();
-}, 2000);
+  if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+  console.log('[ocultos] painel injetado no Step 2');
+}
+
+// Tentar injetar várias vezes — em load, em delay, e em qualquer nav() futura
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(_npBuildOcultosPanel, 100);
+  setTimeout(_npBuildOcultosPanel, 800);
+  setTimeout(_npBuildOcultosPanel, 2500);
+});
+// Também tentar imediatamente (se o DOM já estava pronto)
+setTimeout(_npBuildOcultosPanel, 50);
+setTimeout(_npBuildOcultosPanel, 2000);
 
 function _saveItensOcultos() { localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS)); }
 
@@ -23561,7 +23574,7 @@ function _npOcultosAtualizarResumo() {
   const margem          = valorProposta - totalOculto;
   const margemPct       = valorCobrado > 0 ? ((margem / valorCobrado) * 100).toFixed(1) : 0;
   const negativo        = margem < 0;
-  const total = NP_ITENS_OCULTOS.reduce((s,i)=>s+(i.valor||0),0);
+  // (declaração antiga "const total" removida — já foi declarada acima na linha do filter)
 
   if (total > 0 || valorProposta > 0) {
     wrapResumo.innerHTML = `
@@ -25281,6 +25294,27 @@ window.addEventListener('load', () => {
   }, true); // ← phase de CAPTURE para vencer qualquer outro listener
 
   console.log('[aplica-patches] event-delegation para botão Duplicar instalada');
+
+  // ─────────────────────────────────────────────────────────
+  // Painel "Custos Ocultos / Comissões" — garantir injeção
+  // ─────────────────────────────────────────────────────────
+  // Esse painel é injetado dinamicamente em np-step-2. Caso o
+  // setTimeout de carga inicial não tenha conseguido (DOM não
+  // pronto, etc.), tentar de novo sempre que entrarmos em
+  // 'nova-proposta-page'.
+  if (typeof nav === 'function') {
+    const _navOrigOcultos = nav;
+    nav = function(id) {
+      const ret = _navOrigOcultos(id);
+      if (id === 'nova-proposta-page' && typeof _npBuildOcultosPanel === 'function') {
+        setTimeout(_npBuildOcultosPanel, 100);
+        setTimeout(_npBuildOcultosPanel, 600);
+      }
+      return ret;
+    };
+  }
+
+  console.log('[aplica-patches] nav-hook para painel ocultos instalado');
 })();
 </script>
 
