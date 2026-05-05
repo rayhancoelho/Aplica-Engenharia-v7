@@ -9658,11 +9658,21 @@ function prevAtualizar() {
   // — Seção normas: pegar itens únicos dos blocos da calculadora —
   let normasSet = new Set();
   let descricoesSecs = [];
+  let premissasSet = new Set();   // Set para deduplicar premissas iguais entre serviços
+  let premissasPorServico = [];   // mantém ordem e relação com serviço
   blocoItens.forEach(bi => {
     const nd = normaDe(bi.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
     if ((nd.descricao || nd.obs) && showDesc) {
       descricoesSecs.push({ titulo: bi.desc, texto: nd.descricao, obs: nd.obs });
+    }
+    if (nd.premissas) {
+      const linhas = String(nd.premissas).split('\n').map(s => s.trim()).filter(Boolean);
+      const novas = linhas.filter(l => !premissasSet.has(l.toLowerCase()));
+      novas.forEach(l => premissasSet.add(l.toLowerCase()));
+      if (novas.length && !premissasPorServico.find(p => p.servico === bi.desc)) {
+        premissasPorServico.push({ servico: bi.desc, itens: novas });
+      }
     }
   });
   // Também checar prevItens
@@ -9671,6 +9681,14 @@ function prevAtualizar() {
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
     if ((nd.descricao || nd.obs) && showDesc && !descricoesSecs.find(d => d.titulo === it.desc)) {
       descricoesSecs.push({ titulo: it.desc, texto: nd.descricao, obs: nd.obs });
+    }
+    if (nd.premissas) {
+      const linhas = String(nd.premissas).split('\n').map(s => s.trim()).filter(Boolean);
+      const novas = linhas.filter(l => !premissasSet.has(l.toLowerCase()));
+      novas.forEach(l => premissasSet.add(l.toLowerCase()));
+      if (novas.length && !premissasPorServico.find(p => p.servico === it.desc)) {
+        premissasPorServico.push({ servico: it.desc, itens: novas });
+      }
     }
   });
 
@@ -9692,6 +9710,19 @@ function prevAtualizar() {
           <div style="font-size:11px;font-weight:700;color:#111827;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
           ${d.texto ? `<div style="font-size:11px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>` : ''}
           ${d.obs ? `<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f0a500;border-radius:3px;font-size:10.5px;color:#78350f;font-style:italic;line-height:1.6"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
+        </div>`).join('')}
+    </div>` : '';
+
+  // ── Seção PREMISSAS — agrupadas por serviço, em formato de tópicos ──
+  const secaoPremissas = premissasPorServico.length ? `
+    <div class="prev-section" style="margin-bottom:16px;page-break-inside:avoid">
+      <div class="prev-section-title">Premissas e Condições de Execução</div>
+      ${premissasPorServico.map(p => `
+        <div style="margin-bottom:10px">
+          ${premissasPorServico.length > 1 ? `<div style="font-size:10.5px;font-weight:700;color:#1a3c5e;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.4px">${p.servico}</div>` : ''}
+          <div style="font-size:11px;color:#374151;line-height:1.7">
+            ${p.itens.map(item => `<div style="padding-left:14px;text-indent:-14px;margin-bottom:3px">• ${String(item).replace(/</g,'&lt;')}</div>`).join('')}
+          </div>
         </div>`).join('')}
     </div>` : '';
 
@@ -9815,7 +9846,20 @@ function prevAtualizar() {
           ${descricoesSecs.map(d => `
             <div style="margin-bottom:10px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-              <div style="font-size:10px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>
+              ${d.texto ? `<div style="font-size:10px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>` : ''}
+              ${d.obs ? `<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f0a500;border-radius:3px;font-size:9.5px;color:#78350f;font-style:italic;line-height:1.6"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
+
+        <!-- 4b. PREMISSAS E CONDIÇÕES DE EXECUÇÃO -->
+        ${premissasPorServico.length ? `<div style="margin-bottom:16px;page-break-inside:avoid">
+          <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Premissas e Condições de Execução</div>
+          ${premissasPorServico.map(p => `
+            <div style="margin-bottom:8px">
+              ${premissasPorServico.length > 1 ? `<div style="font-size:10px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.4px">${p.servico}</div>` : ''}
+              <div style="font-size:10px;color:#374151;line-height:1.7">
+                ${p.itens.map(item => `<div style="padding-left:14px;text-indent:-14px;margin-bottom:2px">• ${String(item).replace(/</g,'&lt;')}</div>`).join('')}
+              </div>
             </div>`).join('')}
         </div>` : ''}
 
@@ -13716,15 +13760,17 @@ function normaDe(item) {
     normas:   (custom?.normas    !== undefined ? custom.normas    : def?.normas    || ''),
     descricao:(custom?.descricao !== undefined ? custom.descricao : def?.descricao || ''),
     obs:      (custom?.obs       !== undefined ? custom.obs       : ''),
+    premissas:(custom?.premissas !== undefined ? custom.premissas : ''),
   };
 }
-function normaSalvar(item, normas, descricao, obs) {
-  // Preserva obs existente se não for passado (compatibilidade com chamadas antigas)
+function normaSalvar(item, normas, descricao, obs, premissas) {
+  // Preserva campos existentes se não forem passados
   const atual = NORMAS_CUSTOM[item] || {};
   NORMAS_CUSTOM[item] = {
     normas,
     descricao,
-    obs: (obs !== undefined ? obs : (atual.obs || '')),
+    obs:       (obs       !== undefined ? obs       : (atual.obs       || '')),
+    premissas: (premissas !== undefined ? premissas : (atual.premissas || '')),
   };
   localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
 }
@@ -13849,10 +13895,11 @@ function cfgEditarSubservico(servico, subservico) {
       <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Serviço: <b>${escTxt(servico)}</b></div>
 
       <!-- ABAS -->
-      <div style="display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:14px">
-        <button type="button" class="cfg-edit-tab active" data-tab="normas"  style="padding:8px 14px;background:none;border:none;border-bottom:3px solid var(--gold);color:var(--gold);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📋 Normas</button>
-        <button type="button" class="cfg-edit-tab"        data-tab="desc"    style="padding:8px 14px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📝 Descrição</button>
-        <button type="button" class="cfg-edit-tab"        data-tab="obs"     style="padding:8px 14px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">💬 Observações</button>
+      <div style="display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:14px;flex-wrap:wrap">
+        <button type="button" class="cfg-edit-tab active" data-tab="normas"    style="padding:8px 12px;background:none;border:none;border-bottom:3px solid var(--gold);color:var(--gold);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📋 Normas</button>
+        <button type="button" class="cfg-edit-tab"        data-tab="desc"      style="padding:8px 12px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📝 Descrição</button>
+        <button type="button" class="cfg-edit-tab"        data-tab="premissas" style="padding:8px 12px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📌 Premissas</button>
+        <button type="button" class="cfg-edit-tab"        data-tab="obs"       style="padding:8px 12px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">💬 Observações</button>
       </div>
 
       <!-- TAB CONTENT: NORMAS -->
@@ -13870,6 +13917,15 @@ function cfgEditarSubservico(servico, subservico) {
           <label class="form-label">Texto Descritivo <span style="font-size:10px;color:var(--text3)">(aparece no PDF)</span></label>
           <textarea class="form-control" id="_cfg-desc" rows="7" placeholder="Descrição técnica do serviço...">${escTxt(nd.descricao)}</textarea>
           <div style="font-size:10px;color:var(--text3);margin-top:4px">Descrição técnica formal que vai para o cliente na proposta.</div>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT: PREMISSAS -->
+      <div class="cfg-edit-pane" data-pane="premissas" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Premissas do Serviço <span style="font-size:10px;color:var(--text3)">(aparecem como tópicos na seção "Premissas e Observações" do PDF)</span></label>
+          <textarea class="form-control" id="_cfg-premissas" rows="9" placeholder="Uma premissa por linha. Exemplos:&#10;Acesso ao local liberado pelo cliente nos horários combinados&#10;Energia elétrica disponível durante a execução&#10;Cliente fornecerá EPI específico para área classificada&#10;Documentação técnica do empreendimento será disponibilizada">${escTxt(nd.premissas)}</textarea>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">Cada linha vira um tópico (•) no PDF. Use para condições de execução, responsabilidades do cliente, requisitos prévios, etc.</div>
         </div>
       </div>
 
@@ -13909,10 +13965,11 @@ function cfgEditarSubservico(servico, subservico) {
 }
 
 function cfgSalvarSubservico(subservico, overlay) {
-  const normas = document.getElementById('_cfg-normas')?.value || '';
-  const desc   = document.getElementById('_cfg-desc')?.value   || '';
-  const obs    = document.getElementById('_cfg-obs')?.value    || '';
-  normaSalvar(subservico, normas, desc, obs);
+  const normas    = document.getElementById('_cfg-normas')?.value    || '';
+  const desc      = document.getElementById('_cfg-desc')?.value      || '';
+  const obs       = document.getElementById('_cfg-obs')?.value       || '';
+  const premissas = document.getElementById('_cfg-premissas')?.value || '';
+  normaSalvar(subservico, normas, desc, obs, premissas);
   overlay.remove();
   cfgRenderServicos();
   toast(`"${subservico}" atualizado ✅`, 'success');
@@ -16949,10 +17006,18 @@ function _prevExportarWordDocxLegacy() {
   const uniqueItens = [...new Set(allItens)];
   let normasSet = new Set();
   let descritivos = [];
+  let premissasPorServicoW = [];
+  const premissasSetW = new Set();
   uniqueItens.forEach(nome => {
     const nd = normaDe(nome);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
-    if (nd.descricao) descritivos.push({ nome, texto: nd.descricao });
+    if (nd.descricao || nd.obs) descritivos.push({ nome, texto: nd.descricao || '', obs: nd.obs || '' });
+    if (nd.premissas) {
+      const linhas = String(nd.premissas).split('\n').map(s => s.trim()).filter(Boolean);
+      const novas = linhas.filter(l => !premissasSetW.has(l.toLowerCase()));
+      novas.forEach(l => premissasSetW.add(l.toLowerCase()));
+      if (novas.length) premissasPorServicoW.push({ servico: nome, itens: novas });
+    }
   });
   const normasLista = [...normasSet].filter(Boolean);
 
@@ -17089,10 +17154,32 @@ function _prevExportarWordDocxLegacy() {
           const final = limpo.endsWith('.') ? limpo : limpo + '.';
           bodyParts.push(para(`•  ${final}`, { size: 18, color: '374151', indent: '360', spacing: 60 }));
         });
-        bodyParts.push(para('', { spacing: 40 }));
-      } else {
+      } else if (d.texto) {
         bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
       }
+      // Observações em itálico abaixo do texto descritivo
+      if (d.obs) {
+        const obsLinhas = String(d.obs).split('\n').map(s => s.trim()).filter(Boolean);
+        obsLinhas.forEach((linha, idx) => {
+          const prefix = idx === 0 ? 'Obs.: ' : '';
+          bodyParts.push(`<w:p><w:pPr><w:spacing w:after="40"/><w:ind w:left="240"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="16"/><w:color w:val="78350f"/></w:rPr><w:t xml:space="preserve">${esc(prefix + linha)}</w:t></w:r></w:p>`);
+        });
+      }
+      bodyParts.push(para('', { spacing: 40 }));
+    });
+  }
+
+  // ── 3d. Premissas e Condições de Execução ──
+  if (premissasPorServicoW.length) {
+    bodyParts.push(heading('PREMISSAS E CONDIÇÕES DE EXECUÇÃO'));
+    premissasPorServicoW.forEach(p => {
+      if (premissasPorServicoW.length > 1) {
+        bodyParts.push(para(p.servico, { bold: true, size: 18, color: '1a3c5e', spacing: 40 }));
+      }
+      p.itens.forEach(item => {
+        bodyParts.push(para(`•  ${item}`, { size: 18, color: '374151', indent: '360', spacing: 60 }));
+      });
+      bodyParts.push(para('', { spacing: 40 }));
     });
   }
 
@@ -23748,11 +23835,31 @@ function npAplicarValorProposta() {
   const novo = base + acrescimo;
   inp.value = novo.toFixed(2);
   inp.dispatchEvent(new Event('input', { bubbles: true }));
+
+  // ── Refletir na proposta impressa ──
+  // O total da proposta impressa é calculado da Calculadora (não usa np-valor).
+  // Adicionamos o acréscimo ao campo "Outros Extras" (calc-extras), que
+  // entra no total bruto do PDF. Assim a proposta impressa mostra o valor cheio.
+  const inpExtras = document.getElementById('calc-extras');
+  if (inpExtras) {
+    const extAtual = parseFloat(inpExtras.value || '0') || 0;
+    inpExtras.value = (extAtual + acrescimo).toFixed(2);
+    inpExtras.dispatchEvent(new Event('input', { bubbles: true }));
+    // Forçar recálculo da calculadora para atualizar UI/totals
+    if (typeof calcRecalcular === 'function') calcRecalcular();
+  }
+
   // Após embutir no valor da proposta, custos viram "ocultos efetivos" para evitar dupla soma
   ativos.forEach(it => { it.somaProposta = false; });
   _saveItensOcultos();
   npRenderItensOcultos();
-  toast(`Proposta atualizada: ${fmtMoney(novo)} (base ${fmtMoney(base)} + repasse ${fmtMoney(acrescimo)})`, 'success');
+
+  // Atualizar preview se estiver renderizado
+  if (typeof prevAtualizar === 'function') {
+    setTimeout(prevAtualizar, 100);
+  }
+
+  toast(`✅ Proposta atualizada: ${fmtMoney(novo)} (base ${fmtMoney(base)} + custos ${fmtMoney(acrescimo)} aplicados em "Outros Extras")`, 'success');
 }
 
 // Lista de pessoas para Comissão (cadastro dedicado em Configurações → Cadastros do Sistema)
@@ -25156,6 +25263,32 @@ window.addEventListener('load', () => {
             </div>
           </div>` : '<div style="background:rgba(240,165,0,0.08);border:1px solid rgba(240,165,0,0.25);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text)">⚠️ Cliente cadastrado, ainda <b>sem propostas</b> registradas.</div>'}
 
+          ${(() => {
+            // ── Contatos extras cadastrados junto com o cliente (cliCad.extras) ──
+            const extras = Array.isArray(cliCad?.extras) ? cliCad.extras.filter(c => c.nome || c.email || c.telefone) : [];
+            if (!extras.length) return '';
+            return `
+            <div style="margin-bottom:16px">
+              <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;font-weight:700;margin-bottom:8px">👥 Contatos Adicionais Cadastrados (${extras.length})</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                ${extras.map((c, ci) => `
+                  <div style="padding:10px 12px;background:var(--s2);border:1px solid var(--border);border-radius:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+                        <span style="font-weight:700;color:var(--text)">${(c.nome||'—').replace(/</g,'&lt;')}</span>
+                        ${c.cargo ? `<span style="color:var(--lavender);font-size:11px;background:rgba(188,140,255,0.12);padding:2px 6px;border-radius:4px">${(c.cargo||'').replace(/</g,'&lt;')}</span>` : ''}
+                      </div>
+                      <div style="display:flex;gap:14px;margin-top:4px;color:var(--text2);font-size:11px;flex-wrap:wrap">
+                        ${c.telefone ? `<span>📞 ${(c.telefone||'').replace(/</g,'&lt;')}</span>` : ''}
+                        ${c.email    ? `<span style="word-break:break-all">✉️ ${(c.email||'').replace(/</g,'&lt;')}</span>` : ''}
+                      </div>
+                    </div>
+                    <button class="btn btn-ghost btn-sm" data-cli-edit="${ci}" title="Editar este contato" style="flex-shrink:0">✏️</button>
+                  </div>`).join('')}
+              </div>
+            </div>`;
+          })()}
+
           ${contatosExtras.length ? `
           <!-- Contatos adicionais -->
           <div style="margin-bottom:16px">
@@ -25202,12 +25335,112 @@ window.addEventListener('load', () => {
         </div>
         <div class="modal-footer" style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-ghost" onclick="document.getElementById('modal-cli-detalhe').remove()">Fechar</button>
+          ${cliCad ? `<button class="btn btn-ghost" id="btn-cli-edit-full" style="color:var(--lavender)">✏️ Editar Cliente</button>` : ''}
           <div style="flex:1"></div>
           ${propostas.length ? `<button class="btn btn-ghost" id="btn-cli-ver-crm">📋 Ver no CRM</button>` : ''}
           <button class="btn btn-primary" id="btn-cli-nova-prop-detalhe">➕ Nova Proposta</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
+
+    // Handler: botões de editar contato extra individual
+    overlay.querySelectorAll('button[data-cli-edit]').forEach(btn => {
+      btn.onclick = () => {
+        const ci = parseInt(btn.getAttribute('data-cli-edit'), 10);
+        if (Number.isNaN(ci)) return;
+        overlay.remove();
+        // Abrir modal de cadastro do cliente em modo edição
+        // Localizar o cliente em CONTATOS.outros pelo nome+doc
+        try {
+          const idx = (CONTATOS.outros || []).findIndex(c =>
+            String(c?.nome||'').toLowerCase().trim() === String(nome||'').toLowerCase().trim()
+          );
+          if (idx < 0) {
+            toast('Cliente não encontrado para edição', 'warning');
+            return;
+          }
+          // Preencher formulário do contato
+          const cli = CONTATOS.outros[idx];
+          if (typeof cliCadastrarCliente === 'function') cliCadastrarCliente();
+          setTimeout(() => {
+            const set = (id,v) => { const e = document.getElementById(id); if (e) e.value = v||''; };
+            set('cont-nome', cli.nome);
+            set('cont-doc',  cli.doc);
+            set('cont-cargo', cli.cargo);
+            set('cont-pessoa', cli.pessoa);
+            set('cont-fone', cli.fone);
+            set('cont-email', cli.email);
+            set('cont-uf', cli.uf);
+            set('cont-cidade', cli.cidade);
+            set('cont-atividade', cli.atividade);
+            set('cont-obs', cli.obs);
+            // Carregar contatos extras editáveis
+            if (typeof _contExtras !== 'undefined') {
+              _contExtras.length = 0;
+              (cli.extras||[]).forEach(c => _contExtras.push({...c}));
+              if (typeof contExtrasRender === 'function') contExtrasRender();
+            }
+            // Marcar editIdx para o tipo correto (outros)
+            const m = document.getElementById('modal-novo-contato');
+            if (m) {
+              m.dataset.editIdx = String(idx);
+              const ttl = document.getElementById('modal-contato-titulo');
+              if (ttl) ttl.textContent = '✏️ Editar Cliente: ' + (cli.nome||'').slice(0,40);
+            }
+            // Foco direto no contato extra escolhido
+            setTimeout(() => {
+              const wrap = document.getElementById('cont-extras-wrap');
+              if (wrap) {
+                const item = wrap.children[ci];
+                if (item) {
+                  item.scrollIntoView({behavior:'smooth', block:'center'});
+                  item.style.boxShadow = '0 0 0 2px var(--gold)';
+                  setTimeout(() => { item.style.boxShadow = ''; }, 1500);
+                }
+              }
+            }, 300);
+          }, 200);
+        } catch(e) { console.error(e); toast('Erro ao abrir edição', 'error'); }
+      };
+    });
+
+    // Handler: Editar Cliente Inteiro
+    const btnEditFull = document.getElementById('btn-cli-edit-full');
+    if (btnEditFull && cliCad) {
+      btnEditFull.onclick = () => {
+        const idx = (CONTATOS.outros || []).findIndex(c =>
+          String(c?.nome||'').toLowerCase().trim() === String(nome||'').toLowerCase().trim()
+        );
+        if (idx < 0) { toast('Cliente não encontrado', 'warning'); return; }
+        overlay.remove();
+        if (typeof cliCadastrarCliente === 'function') cliCadastrarCliente();
+        setTimeout(() => {
+          const cli = CONTATOS.outros[idx];
+          const set = (id,v) => { const e = document.getElementById(id); if (e) e.value = v||''; };
+          set('cont-nome', cli.nome);
+          set('cont-doc',  cli.doc);
+          set('cont-cargo', cli.cargo);
+          set('cont-pessoa', cli.pessoa);
+          set('cont-fone', cli.fone);
+          set('cont-email', cli.email);
+          set('cont-uf', cli.uf);
+          set('cont-cidade', cli.cidade);
+          set('cont-atividade', cli.atividade);
+          set('cont-obs', cli.obs);
+          if (typeof _contExtras !== 'undefined') {
+            _contExtras.length = 0;
+            (cli.extras||[]).forEach(c => _contExtras.push({...c}));
+            if (typeof contExtrasRender === 'function') contExtrasRender();
+          }
+          const m = document.getElementById('modal-novo-contato');
+          if (m) {
+            m.dataset.editIdx = String(idx);
+            const ttl = document.getElementById('modal-contato-titulo');
+            if (ttl) ttl.textContent = '✏️ Editar Cliente: ' + (cli.nome||'').slice(0,40);
+          }
+        }, 200);
+      };
+    }
 
     // Handler: Ver no CRM filtrado
     const btnCRM = document.getElementById('btn-cli-ver-crm');
@@ -25591,6 +25824,161 @@ window.addEventListener('load', () => {
     console.log('   4) A planilha original foi renomeada/movida e o script perdeu o vínculo');
     return true;
   };
+
+  // Procura dados em qualquer canto do localStorage — útil para recuperar
+  // dados quando a planilha está vazia mas o usuário acha que tinha algo.
+  window.aplicaProcurarDados = function() {
+    console.group('🔎 APLICA — PROCURA DE DADOS NO NAVEGADOR');
+    const keys = Object.keys(localStorage).sort();
+    console.log(`Total de ${keys.length} chaves no localStorage`);
+    console.log('');
+
+    const interessantes = [];
+    keys.forEach(k => {
+      const v = localStorage.getItem(k) || '';
+      const len = v.length;
+      let preview = '';
+      let count = 0;
+      try {
+        const parsed = JSON.parse(v);
+        if (Array.isArray(parsed)) {
+          count = parsed.length;
+          preview = `array com ${count} itens`;
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          // Conta linhas em DATA-like
+          if (parsed.crm) count = parsed.crm.length;
+          const sub = Object.keys(parsed).slice(0,5).join(', ');
+          preview = `objeto {${sub}${Object.keys(parsed).length>5?', ...':''}}`;
+        }
+      } catch(_) {
+        preview = v.slice(0, 60).replace(/\n/g,' ');
+      }
+
+      const tamMsg = len < 1024 ? `${len} chars` : `${(len/1024).toFixed(1)} KB`;
+      console.log(`  • ${k.padEnd(38)} ${tamMsg.padStart(10)}  ${preview}`);
+
+      // Detectar dados importantes
+      if (count > 0 || (len > 200 && (k.includes('crm') || k.includes('data') || k.includes('cliente') || k.includes('proposta') || k.includes('rascunho') || k.includes('calc_blocos')))) {
+        interessantes.push({ k, len, count });
+      }
+    });
+
+    console.log('');
+    console.groupEnd();
+
+    if (interessantes.length) {
+      console.log('🟢 CHAVES COM DADOS POTENCIALMENTE RECUPERÁVEIS:');
+      interessantes.forEach(({k,len,count}) => {
+        console.log(`   • ${k} — ${len} chars${count?', '+count+' linhas/itens':''}`);
+      });
+      console.log('');
+      console.log('Para inspecionar uma chave: console.log(JSON.parse(localStorage.getItem("NOME_DA_CHAVE")))');
+    } else {
+      console.log('⚠️ Nenhum dado relevante encontrado no localStorage deste navegador.');
+      console.log('   → O navegador atual não tem backup de propostas/clientes/etc.');
+      console.log('   → Se você usava em OUTRO computador/navegador, abra o sistema lá e use Backup.');
+    }
+    return interessantes;
+  };
+
+  // Abre a planilha vinculada ao Apps Script em uma nova aba
+  window.aplicaAbrirPlanilha = function() {
+    const sid = (typeof CONFIG !== 'undefined') ? CONFIG.SHEET_ID : null;
+    if (!sid) {
+      console.error('SHEET_ID não configurado. Você precisa abrir manualmente.');
+      return;
+    }
+    const url = 'https://docs.google.com/spreadsheets/d/' + sid + '/edit';
+    console.log('Abrindo planilha:', url);
+    window.open(url, '_blank');
+  };
+
+  // ─────────────────────────────────────────────────────────
+  // FIX issue 5 (parte 2): hidratar DADOS_EXTRAS_PROPOSTAS
+  //
+  // O sync padrão (action=sync) NÃO traz a aba 📦 DADOS_EXTRAS_PROPOSTAS,
+  // que é onde ficam os calc_blocos_* e prev_itens_* de cada proposta.
+  // Sem isso, ao duplicar uma proposta vinda da planilha (não criada
+  // localmente), os serviços vêm vazios.
+  //
+  // Solução: depois de cada sync bem-sucedido, fazer uma chamada extra
+  // (action=get) para essa aba e popular as chaves individuais.
+  // ─────────────────────────────────────────────────────────
+  async function _hidratarExtrasDaPlanilha() {
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) { console.log('[extras] sem APPS_SCRIPT_URL — pulando'); return 0; }
+
+    // Tenta primeiro sem range (Apps Script novo), com fallback para range fixo (Apps Script antigo)
+    const tentativas = [
+      url + '?action=get&sheet=' + encodeURIComponent('📦 DADOS_EXTRAS_PROPOSTAS'),
+      url + '?action=get&sheet=' + encodeURIComponent('📦 DADOS_EXTRAS_PROPOSTAS') + '&range=A2:B5000',
+    ];
+
+    let rows = null;
+    let lastErr = null;
+    for (const tentativaUrl of tentativas) {
+      try {
+        const r = await fetch(tentativaUrl, { redirect: 'follow' });
+        const j = await r.json();
+        if (j && j.error) { lastErr = j.error; continue; }
+        if (Array.isArray(j)) { rows = j; break; }
+      } catch(e) { lastErr = e.message; }
+    }
+
+    if (!rows) {
+      console.warn('[extras] não consegui buscar DADOS_EXTRAS_PROPOSTAS:', lastErr);
+      return 0;
+    }
+
+    // Filtrar só linhas com chave + valor (descarta cabeçalho e vazias)
+    const validas = rows.filter(r => Array.isArray(r) && r[0] && String(r[0]).trim() !== '' && r[0] !== 'chave');
+    console.log('[extras] ' + validas.length + ' linhas extras encontradas na planilha');
+
+    if (!validas.length) return 0;
+
+    // Reconstruir a chave master dados_extras_propostas
+    const masterArr = validas.map(r => ({
+      chave: String(r[0]).trim(),
+      dados_json: (typeof r[1] === 'string') ? r[1] : (r[1] !== null && r[1] !== undefined ? JSON.stringify(r[1]) : ''),
+    }));
+
+    try {
+      // Bypass auto-push para não criar loop
+      if (typeof Storage !== 'undefined') Storage.prototype.__bypass = true;
+      localStorage.setItem('dados_extras_propostas', JSON.stringify(masterArr));
+      if (typeof Storage !== 'undefined') Storage.prototype.__bypass = false;
+    } catch(_){}
+
+    // Expandir em chaves individuais (calc_blocos_*, prev_itens_*, etc.)
+    if (typeof window._aplicaHidratarExtras === 'function') {
+      const n = window._aplicaHidratarExtras();
+      console.log('[extras] ✓ ' + n + ' chaves individuais hidratadas');
+      return n;
+    }
+    return 0;
+  }
+
+  // Hook em syncData: após cada sync bem-sucedido, hidratar extras
+  if (typeof syncData === 'function') {
+    const _origSyncData = syncData;
+    syncData = async function() {
+      const ret = await _origSyncData.apply(this, arguments);
+      // depois do sync, busca a aba extra (em paralelo, não bloqueia)
+      setTimeout(() => {
+        _hidratarExtrasDaPlanilha().catch(e => console.warn('[extras] falha:', e));
+      }, 100);
+      return ret;
+    };
+    console.log('[aplica-patches] hook de hidratação de DADOS_EXTRAS_PROPOSTAS instalado');
+  }
+
+  // Disponibilizar comando manual no console
+  window.aplicaHidratarExtras = _hidratarExtrasDaPlanilha;
+
+  // Disparar uma vez no boot (caso o sync já tenha rodado antes do patch carregar)
+  setTimeout(() => {
+    _hidratarExtrasDaPlanilha().catch(_=>{});
+  }, 4000);
 
 })();
 </script>
