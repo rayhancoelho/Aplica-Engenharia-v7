@@ -25418,6 +25418,84 @@ window.addEventListener('load', () => {
   }
 
   console.log('[aplica-patches] nav-hook para painel ocultos instalado');
+
+  // ─────────────────────────────────────────────────────────
+  // DIAGNÓSTICO E RECUPERAÇÃO DE SYNC
+  // No console (F12 → Console), digite:
+  //   • aplicaSyncDiag()    — mostra status detalhado
+  //   • aplicaForcarSync()  — força ressincronização
+  //   • aplicaResetSync()   — limpa cache local e re-baixa tudo
+  // ─────────────────────────────────────────────────────────
+  window.aplicaSyncDiag = function() {
+    console.group('🔬 APLICA — DIAGNÓSTICO DE SINCRONIZAÇÃO');
+    try {
+      const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+      const sid = (typeof CONFIG !== 'undefined') ? CONFIG.SHEET_ID : null;
+      console.log('1. APPS_SCRIPT_URL:', url || '❌ VAZIO — Configurações → URL do Apps Script');
+      console.log('2. SHEET_ID:', sid || '⚠️ vazio (pode ser opcional)');
+
+      const localKeys = ['aplica_data','cad_empresa','servicos_custom','normas_custom','calc_blocos_*','rev_info_*'];
+      console.log('3. localStorage:');
+      const ad = localStorage.getItem('aplica_data');
+      console.log('   • aplica_data:', ad ? (ad.length + ' chars') : '(vazio)');
+      console.log('   • cad_empresa:', localStorage.getItem('cad_empresa') ? 'sim' : '(vazio)');
+      console.log('   • apps_script_url:', localStorage.getItem('apps_script_url') ? 'sim' : '(vazio)');
+
+      if (typeof DATA !== 'undefined') {
+        console.log('4. DATA em memória:');
+        console.log('   • crm:        ' + (DATA.crm        ? DATA.crm.length        : 0) + ' linhas');
+        console.log('   • clientes:   ' + (DATA.clientes   ? DATA.clientes.length   : 0) + ' linhas');
+        console.log('   • financeiro: ' + (DATA.financeiro ? DATA.financeiro.length : 0) + ' linhas');
+        console.log('   • projetos:   ' + (DATA.projetos   ? DATA.projetos.length   : 0) + ' linhas');
+        console.log('   • despesas:   ' + (DATA.despesas   ? DATA.despesas.length   : 0) + ' linhas');
+        console.log('   • marketing:  ' + (DATA.marketing  ? DATA.marketing.length  : 0) + ' linhas');
+        console.log('   • contatos:   ' + (DATA.contatos   ? DATA.contatos.length   : 0) + ' linhas');
+        console.log('   • loaded:', DATA.loaded);
+      } else {
+        console.log('4. DATA: ❌ não inicializado');
+      }
+
+      console.log('5. Funções críticas:');
+      ['_appsGet','syncData','loadDataLocal','saveDataLocal','renderAllPages',
+       'renderCRMTable','renderDashboardCRM','setSyncStatus'].forEach(fn => {
+        console.log('   • ' + fn + ':', typeof window[fn] === 'function' ? '✓' : '❌ MISSING');
+      });
+    } finally {
+      console.groupEnd();
+    }
+    console.log('Para forçar sync: aplicaForcarSync()');
+    console.log('Para reset total: aplicaResetSync()');
+    return true;
+  };
+
+  window.aplicaForcarSync = async function() {
+    console.log('[aplicaForcarSync] iniciando...');
+    if (typeof syncData !== 'function') {
+      console.error('❌ syncData não está definido — bug no carregamento do app');
+      return false;
+    }
+    try {
+      await syncData();
+      console.log('[aplicaForcarSync] ✓ concluído');
+      return true;
+    } catch(e) {
+      console.error('[aplicaForcarSync] ❌ falhou:', e);
+      return false;
+    }
+  };
+
+  window.aplicaResetSync = async function() {
+    if (!confirm('⚠️ Isso vai LIMPAR o cache local e re-baixar TUDO da planilha. Continuar?')) return;
+    console.log('[aplicaResetSync] limpando cache local...');
+    // Preservar config (URL/sheet ID) — NÃO apagar essas chaves
+    const preservar = ['apps_script_url','sheet_id','cal_id','cad_empresa'];
+    const backup = {};
+    preservar.forEach(k => { backup[k] = localStorage.getItem(k); });
+    localStorage.removeItem('aplica_data');
+    console.log('[aplicaResetSync] aplica_data removido. Recarregando...');
+    setTimeout(() => location.reload(), 500);
+  };
+
 })();
 </script>
 
