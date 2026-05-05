@@ -15671,6 +15671,16 @@ function npAbrirEdicaoProposta(idx) {
     if (contato2) contatosParsed.push({ tipo: 'WhatsApp', nome: contato2, valor: email2 || '', telefone: '', whatsapp: '', email: email2||'', cargo: '', area: 'Geral' });
   }
 
+  // Helper: converter DD/MM/AAAA → AAAA-MM-DD (formato de <input type="date">)
+  const _dateToIso = (v) => {
+    if (!v) return '';
+    const s = String(v).trim();
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    return '';
+  };
+
   // Montar contexto
   PROPOSTA_CONTEXTO = {
     modoEdicao: true,
@@ -15683,8 +15693,8 @@ function npAbrirEdicaoProposta(idx) {
     municipio:  '',
     canal:      r[CRM_COL.CANAL]    || '',
     valor:      (parseFloat(String(r[CRM_COL.VALOR] || '0').replace(',', '.')) || 0).toString(),
-    validade:   '',
-    followup:   r[CRM_COL.FOLLOWUP] || '',
+    validade:   _dateToIso(r[CRM_COL.VALIDADE]),
+    followup:   _dateToIso(r[CRM_COL.FOLLOWUP]),
     status:     r[CRM_COL.STATUS]   || 'Em prospecção',
     obs:        r[CRM_COL.OBS]      || '',
     contatos:   contatosParsed,
@@ -15701,6 +15711,20 @@ function npAbrirEdicaoProposta(idx) {
   const idEl = document.getElementById('np-id-prop');
   if (idEl) idEl.value = PROPOSTA_CONTEXTO.idProp;
 
+  // FIX issue 1: Forçar volta ao Step 1 ao abrir uma proposta para editar
+  // (sem isso, se o usuário estava no Step 2/3 da proposta anterior, o nav
+  // dispara npGoStep(_npCurrentStep) que pode rodar com dados ainda não populados)
+  if (typeof _npCurrentStep !== 'undefined') _npCurrentStep = 1;
+
+  // FIX issue 1: Limpar campos da Calculadora e do Preview da proposta anterior
+  // (eles não são tocados pelos campos np-* e por isso vazam dados)
+  ['calc-id-proposta','calc-cliente','calc-num-proposta','prev-id','prev-cliente'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if (el) el.value = '';
+  });
+  prevItens = [];
+  prevIdxCRM = null;
+
   nav('nova-proposta-page');
   setTimeout(() => {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
@@ -15710,6 +15734,8 @@ function npAbrirEdicaoProposta(idx) {
     set('np-fantasia', PROPOSTA_CONTEXTO.fantasia);
     set('np-endereco', PROPOSTA_CONTEXTO.endereco);
     set('np-valor',    PROPOSTA_CONTEXTO.valor);
+    set('np-validade', PROPOSTA_CONTEXTO.validade);   // FIX issue 4
+    set('np-followup', PROPOSTA_CONTEXTO.followup);   // FIX issue 4
     set('np-obs',      PROPOSTA_CONTEXTO.obs);
     // Nome proposta e pessoa responsável
     const nomeComp = r[5] || '';
@@ -22677,6 +22703,15 @@ function npDuplicarProposta(idx) {
   // Snapshot da linha — proteção contra qualquer mutação posterior
   const rSnap = [...r];
 
+  // FIX issue 5: capturar calc_blocos da proposta original ANTES de qualquer reset
+  const _idOriginal = String(rSnap[CRM_COL.ID] || '');
+  let _blocosOriginalJSON = null;
+  if (_idOriginal) {
+    try {
+      _blocosOriginalJSON = localStorage.getItem('calc_blocos_' + _idOriginal);
+    } catch(_){}
+  }
+
   const el = id => document.getElementById(id);
   closeModal('modal-usar-proposta');
 
@@ -22691,6 +22726,12 @@ function npDuplicarProposta(idx) {
   calcBlocos = [];
   npContatos = [];
   npServicos = [];
+
+  // FIX issue 1: voltar para o Step 1 e limpar campos das outras steps
+  if (typeof _npCurrentStep !== 'undefined') _npCurrentStep = 1;
+  ['calc-id-proposta','calc-cliente','calc-num-proposta','prev-id','prev-cliente'].forEach(fid => {
+    const e2 = document.getElementById(fid); if (e2) e2.value = '';
+  });
 
   // Restaurar título da página (remover banner "✏️ Editando Proposta #X")
   const titulo = document.querySelector('#page-nova-proposta-page .card-title');
@@ -22714,6 +22755,24 @@ function npDuplicarProposta(idx) {
     const idEl = el('np-id-prop');
     if (idEl) idEl.value = '';
     if (typeof npSetProximoId === 'function') npSetProximoId();
+
+    // FIX issue 5: copiar os calc_blocos (itens das tabelas com horas/revisões)
+    // da proposta original para a nova. Sem isso, a duplicada vem com tabelas
+    // vazias e o usuário precisa re-digitar tudo.
+    const _novoId = el('np-id-prop')?.value || '';
+    if (_novoId && _blocosOriginalJSON) {
+      try {
+        // Salvar no localStorage com a nova chave para que a calculadora encontre
+        localStorage.setItem('calc_blocos_' + _novoId, _blocosOriginalJSON);
+        // Carregar imediatamente em calcBlocos para o caso do user ir direto à calc
+        const _parsed = JSON.parse(_blocosOriginalJSON);
+        if (Array.isArray(_parsed) && _parsed.length) {
+          calcBlocos = _parsed.map((b, i) => ({ ...b, id: b.id || i + 1 }));
+          window._calcBlocosJaCarregados = true;
+          console.log('[Duplicar] calc_blocos copiados de #' + _idOriginal + ' → #' + _novoId + ' (' + calcBlocos.length + ' blocos)');
+        }
+      } catch(e) { console.warn('[Duplicar] erro ao copiar calc_blocos:', e); }
+    }
 
     // Copiar TODOS os dados do cliente — usando o snapshot rSnap
     if (el('np-cnpj')) el('np-cnpj').value = rSnap[CRM_COL.CNPJ] || '';
@@ -24823,5 +24882,225 @@ window.addEventListener('load', () => {
 })();
 
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PATCHES — correções de bugs reportados (05/05/2026)
+     • Issue 2: Botão "Ver" no Cadastro de Clientes (clientes sem proposta)
+     • Issue 3: Badge de Revisão no CRM
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+(function aplicaPatchesBugs() {
+  'use strict';
+
+  // ─────────────────────────────────────────────────────────
+  // FIX issue 2: Botão "Ver" no Cadastro de Clientes
+  // Problema: a função procurava o cliente em DATA.crm, mas
+  // clientes cadastrados direto (sem proposta ainda) não estão
+  // no CRM, e a função apenas mostrava "Cliente não encontrado".
+  // Solução: detectar clientes-só-cadastro e oferecer ações úteis
+  // (Nova Proposta deste cliente / Ver na aba Outros / etc.)
+  // ─────────────────────────────────────────────────────────
+  const _origCliVerDetalhe = typeof cliVerDetalhe === 'function' ? cliVerDetalhe : null;
+  window.cliVerDetalhe = function(chave) {
+    if (!chave) { toast('Identificação do cliente vazia', 'warning'); return; }
+
+    const _normalizar = (s) => String(s || '').replace(/[.\-\/\s]/g, '').toLowerCase().trim();
+    const chaveClean  = _normalizar(chave);
+    const chaveLower  = String(chave).toLowerCase().trim();
+
+    // 1) Tentar achar no CRM (cliente com ao menos 1 proposta)
+    const propostas = (DATA.crm || []).filter(r => {
+      const cnpj  = _normalizar(r[CRM_COL.CNPJ]);
+      const razao = String(r[CRM_COL.RAZAO] || '').toLowerCase().trim();
+      return (cnpj && cnpj === chaveClean) || (razao && razao === chaveLower);
+    });
+
+    if (propostas.length) {
+      // Caminho normal: filtrar CRM e navegar
+      const razaoMostrar = propostas[0][CRM_COL.RAZAO] || chave;
+      const searchEl = document.getElementById('crm-search');
+      if (searchEl) searchEl.value = razaoMostrar;
+      // Limpar filtros de status/serviço/etc. para garantir que aparecem todas as propostas do cliente
+      ['crm-filter-status','crm-filter-servico','crm-filter-retorno','crm-filter-mes','crm-filter-ano']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      try { filterCRM(); } catch(_){}
+      nav('crm');
+      // re-aplicar filtro depois da troca de página, caso algum init resete a busca
+      setTimeout(() => {
+        if (searchEl && searchEl.value !== razaoMostrar) searchEl.value = razaoMostrar;
+        try { filterCRM(); } catch(_){}
+      }, 150);
+      toast(`📂 ${propostas.length} proposta${propostas.length>1?'s':''} de ${razaoMostrar.slice(0,32)}`, 'info');
+      return;
+    }
+
+    // 2) Cliente cadastrado, mas SEM proposta ainda — montar modal informativo
+    let cliCad = null;
+    try {
+      const outros = (typeof CONTATOS !== 'undefined' && CONTATOS.outros) ? CONTATOS.outros : [];
+      cliCad = outros.find(c => {
+        const doc  = _normalizar(c?.doc);
+        const nome = String(c?.nome || '').toLowerCase().trim();
+        return (doc && doc === chaveClean) || (nome && nome === chaveLower);
+      }) || null;
+    } catch(_){}
+
+    const nomeCliente = cliCad?.nome || chave;
+    const docCliente  = cliCad?.doc  || (chave.match(/[\d.\-\/]/) ? chave : '');
+
+    // Remover modal antigo se existir
+    document.getElementById('modal-cli-sem-proposta')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    overlay.id = 'modal-cli-sem-proposta';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:480px">
+        <div class="modal-header">
+          <div class="modal-title">👤 ${nomeCliente.slice(0,40)}</div>
+          <button class="modal-close" onclick="document.getElementById('modal-cli-sem-proposta').remove()">×</button>
+        </div>
+        <div class="modal-body" style="padding:20px">
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px">
+            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Cliente Cadastrado</div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:4px">${nomeCliente}</div>
+            ${docCliente ? `<div style="font-family:monospace;font-size:12px;color:var(--text2)">${docCliente}</div>` : ''}
+            ${cliCad?.fone  ? `<div style="font-size:12px;color:var(--text2);margin-top:4px">📞 ${cliCad.fone}</div>` : ''}
+            ${cliCad?.email ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">✉️ ${cliCad.email}</div>` : ''}
+          </div>
+          <div style="background:rgba(240,165,0,0.08);border:1px solid rgba(240,165,0,0.25);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text)">
+            ⚠️ Este cliente <b>ainda não tem propostas</b> registradas no CRM.
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" id="btn-cli-nova-prop">
+              ➕ Nova Proposta para este Cliente
+            </button>
+            <button class="btn btn-ghost" onclick="document.getElementById('modal-cli-sem-proposta').remove()">
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('btn-cli-nova-prop').onclick = () => {
+      overlay.remove();
+      // Iniciar nova proposta com dados pré-preenchidos
+      try {
+        if (typeof npNovaPropostaNova === 'function') npNovaPropostaNova();
+        else if (typeof npIniciarNova === 'function') npIniciarNova();
+      } catch(_){}
+      nav('nova-proposta-page');
+      setTimeout(() => {
+        const setF = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+        setF('np-razao',    nomeCliente);
+        setF('np-fantasia', nomeCliente);
+        setF('np-cnpj',     docCliente);
+        if (cliCad) {
+          // Preencher 1º contato com dados do cadastro
+          if (Array.isArray(npContatos) && npContatos[0]) {
+            npContatos[0].nome     = cliCad.pessoa || cliCad.nome || '';
+            npContatos[0].telefone = cliCad.fone   || '';
+            npContatos[0].email    = cliCad.email  || '';
+            npContatos[0].whatsapp = cliCad.fone   || '';
+            if (typeof npRenderContatos === 'function') npRenderContatos();
+          }
+        }
+        toast('✏️ Nova proposta para ' + nomeCliente.slice(0,30), 'success');
+      }, 200);
+    };
+  };
+
+  // ─────────────────────────────────────────────────────────
+  // FIX issue 3: Badge de Revisão no CRM
+  // Problema: salvarRevisao gravava o número da revisão em
+  // CRM_COL.REVISAO (col 37), mas renderCRMRows nunca exibia
+  // esse dado — usuário não tinha indicador visual.
+  // Solução: re-decorar a tabela depois de cada render para
+  // adicionar um badge "REV-001" ao lado do nome do cliente.
+  // ─────────────────────────────────────────────────────────
+  function _aplicarBadgesRevisao() {
+    const tbody = document.getElementById('crm-table-body');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach(tr => {
+      // Achar idx da row a partir do botão Editar (onclick="abrirEditar(N)")
+      const btnEditar = tr.querySelector('button[onclick^="abrirEditar("]');
+      if (!btnEditar) return;
+      const m = (btnEditar.getAttribute('onclick') || '').match(/abrirEditar\((\d+)\)/);
+      if (!m) return;
+      const idx = parseInt(m[1], 10);
+      const r = DATA.crm[idx];
+      if (!r) return;
+      const rev = r[CRM_COL.REVISAO];
+      if (!rev) return;
+
+      // Já tem badge? não duplicar
+      const cellCliente = tr.children[1];
+      if (!cellCliente || cellCliente.querySelector('.rev-badge-injected')) return;
+
+      const span = document.createElement('span');
+      span.className = 'rev-badge-injected';
+      span.textContent = '🔄 ' + rev;
+      span.title = 'Esta proposta tem revisão registrada';
+      span.style.cssText = 'display:inline-block;margin-left:6px;padding:2px 7px;border-radius:10px;'
+        + 'background:rgba(188,140,255,0.15);color:var(--lavender);'
+        + 'border:1px solid rgba(188,140,255,0.3);font-size:9px;font-weight:700;'
+        + 'letter-spacing:0.04em;text-transform:uppercase;vertical-align:middle';
+      // Inserir junto ao nome do cliente (1º .fw-bold da célula)
+      const nome = cellCliente.querySelector('.fw-bold');
+      if (nome) nome.appendChild(span);
+      else cellCliente.appendChild(span);
+    });
+  }
+
+  // Decorar após render — usar MutationObserver para captar todos os re-renders
+  function _instalarObserverRev() {
+    const tbody = document.getElementById('crm-table-body');
+    if (!tbody) { setTimeout(_instalarObserverRev, 300); return; }
+    const obs = new MutationObserver(() => {
+      // throttle simples
+      if (_instalarObserverRev._t) clearTimeout(_instalarObserverRev._t);
+      _instalarObserverRev._t = setTimeout(_aplicarBadgesRevisao, 30);
+    });
+    obs.observe(tbody, { childList: true });
+    _aplicarBadgesRevisao(); // primeira passada
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(_instalarObserverRev, 500));
+  } else {
+    setTimeout(_instalarObserverRev, 500);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // FIX issue 3 (parte 2): garantir que o badge apareça
+  // imediatamente após salvar uma revisão (sem precisar
+  // esperar o próximo render do CRM).
+  // ─────────────────────────────────────────────────────────
+  const _origSalvarRev = window.salvarRevisao;
+  if (typeof _origSalvarRev === 'function') {
+    window.salvarRevisao = async function() {
+      const ret = await _origSalvarRev.apply(this, arguments);
+      setTimeout(_aplicarBadgesRevisao, 200);
+      setTimeout(_aplicarBadgesRevisao, 800);
+      return ret;
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // FIX issue 1 (reforço): se algum nav('nova-proposta-page')
+  // foi disparado por código que NÃO passou por
+  // npAbrirEdicaoProposta nem npDuplicarProposta, garantir
+  // que campos de calc/preview da proposta anterior sejam
+  // limpos quando o modo edição não está ativo.
+  // ─────────────────────────────────────────────────────────
+  // (Já tratado nas duas funções principais. Este bloco é
+  //  apenas para deixar registrado o local da correção.)
+
+  console.log('[aplica-patches] correções aplicadas: issues 1, 2, 3, 4, 5');
+})();
+</script>
+
 </body>
 </html>
