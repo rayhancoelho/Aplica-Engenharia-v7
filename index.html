@@ -9661,16 +9661,16 @@ function prevAtualizar() {
   blocoItens.forEach(bi => {
     const nd = normaDe(bi.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
-    if (nd.descricao && showDesc) {
-      descricoesSecs.push({ titulo: bi.desc, texto: nd.descricao });
+    if ((nd.descricao || nd.obs) && showDesc) {
+      descricoesSecs.push({ titulo: bi.desc, texto: nd.descricao, obs: nd.obs });
     }
   });
   // Também checar prevItens
   prevItens.forEach(it => {
     const nd = normaDe(it.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
-    if (nd.descricao && showDesc && !descricoesSecs.find(d => d.titulo === it.desc)) {
-      descricoesSecs.push({ titulo: it.desc, texto: nd.descricao });
+    if ((nd.descricao || nd.obs) && showDesc && !descricoesSecs.find(d => d.titulo === it.desc)) {
+      descricoesSecs.push({ titulo: it.desc, texto: nd.descricao, obs: nd.obs });
     }
   });
 
@@ -9690,7 +9690,8 @@ function prevAtualizar() {
       ${descricoesSecs.map(d => `
         <div style="margin-bottom:12px">
           <div style="font-size:11px;font-weight:700;color:#111827;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-          <div style="font-size:11px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>
+          ${d.texto ? `<div style="font-size:11px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>` : ''}
+          ${d.obs ? `<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f0a500;border-radius:3px;font-size:10.5px;color:#78350f;font-style:italic;line-height:1.6"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
         </div>`).join('')}
     </div>` : '';
 
@@ -9746,13 +9747,35 @@ function prevAtualizar() {
           </div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA${(r && r[CRM_COL.REVISAO]) ? ` <span style="display:inline-block;margin-left:6px;padding:2px 8px;background:#f0a500;color:#fff;font-size:10px;font-weight:700;border-radius:4px;letter-spacing:0.5px;vertical-align:middle">${r[CRM_COL.REVISAO]}</span>` : ''}</div>
-          <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}${(r && r[CRM_COL.REVISAO]) ? ` <span style="font-size:13px;color:#1a3c5e;font-weight:700">— ${r[CRM_COL.REVISAO]}</span>` : ''}</div>
+          <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA</div>
+          <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}</div>
           <div style="font-size:10px;color:#6b7280">Data: ${dataHoje} · Validade: ${dataVal}${(r && r[CRM_COL.REVISAO]) ? ` · <strong style="color:#1a3c5e">Revisão: ${r[CRM_COL.REVISAO]}</strong>` : ''}</div>
         </div>
       </div>
 
       <div style="padding:0 24px 20px">
+
+        ${(() => {
+          // ── Bloco de REVISÃO (só aparece quando há revisão registrada) ──
+          if (!r || !r[CRM_COL.REVISAO]) return '';
+          let revData = null;
+          try {
+            const raw = localStorage.getItem('rev_info_' + (r[CRM_COL.ID] || ''));
+            if (raw) revData = JSON.parse(raw);
+          } catch(_){}
+          const motivo = revData?.motivo || '';
+          const alts   = Array.isArray(revData?.alteracoes) ? revData.alteracoes : [];
+          const dtRev  = revData?.data || '';
+          if (!motivo && !alts.length) {
+            // Mostra apenas o badge mínimo, sem o card grande
+            return `<div style="margin:14px 0 0;padding:8px 14px;background:#fef3c7;border-left:4px solid #f0a500;border-radius:4px;font-size:11px;color:#78350f"><strong>📝 Documento revisado — ${r[CRM_COL.REVISAO]}</strong></div>`;
+          }
+          return `<div style="margin:14px 0 0;padding:12px 16px;background:#fef3c7;border-left:4px solid #f0a500;border-radius:4px">
+            <div style="font-size:12px;font-weight:800;color:#78350f;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">📝 Revisão ${r[CRM_COL.REVISAO]}${dtRev ? ' — ' + dtRev : ''}</div>
+            ${motivo ? `<div style="font-size:11px;color:#1a1a2e;line-height:1.5;margin-bottom:${alts.length?'6px':'0'}"><strong>Motivo:</strong> ${motivo.replace(/</g,'&lt;')}</div>` : ''}
+            ${alts.length ? `<div style="font-size:11px;color:#1a1a2e;line-height:1.5"><strong>Itens alterados:</strong> ${alts.join(', ')}</div>` : ''}
+          </div>`;
+        })()}
 
         <!-- 1. DADOS DO CONTRATANTE -->
         <div style="margin:20px 0 16px">
@@ -10255,6 +10278,15 @@ async function salvarRevisao() {
   const valNovo = parseFloat(document.getElementById('rev-val-novo')?.value || '0') || 0;
   const motivo  = document.getElementById('rev-motivo')?.value  || '';
 
+  // Coletar checkboxes "O que foi alterado?"
+  const alteracoes = [];
+  if (document.getElementById('rev-alt-servicos')?.checked)  alteracoes.push('Serviços');
+  if (document.getElementById('rev-alt-valor')?.checked)     alteracoes.push('Valor');
+  if (document.getElementById('rev-alt-pagamento')?.checked) alteracoes.push('Condições de Pagamento');
+  if (document.getElementById('rev-alt-prazo')?.checked)     alteracoes.push('Prazo / Validade');
+  if (document.getElementById('rev-alt-escopo')?.checked)    alteracoes.push('Escopo');
+  if (document.getElementById('rev-alt-outro')?.checked)     alteracoes.push('Outro');
+
   if (!idProp) { toast('Informe o ID da proposta', 'warning'); return; }
 
   const rev = {
@@ -10265,10 +10297,24 @@ async function salvarRevisao() {
     val_ant:  valAnt,
     val_novo: valNovo,
     motivo,
+    alteracoes,
     data:     new Date().toLocaleDateString('pt-BR'),
   };
 
   DATA_revisoes.push(rev);
+
+  // Salvar info enriquecida da revisão atual em localStorage
+  // (motivo + checkboxes ficam disponíveis para o PDF/preview)
+  try {
+    localStorage.setItem('rev_info_' + idProp, JSON.stringify({
+      num:        rev.num,
+      motivo,
+      alteracoes,
+      data:       rev.data,
+      val_ant:    valAnt,
+      val_novo:   valNovo,
+    }));
+  } catch(_){}
 
   // Salvar no Sheets aba HISTORICO_PROPOSTAS
   if (CONFIG.APPS_SCRIPT_URL) {
@@ -10332,6 +10378,9 @@ async function salvarRevisao() {
   // Limpar form
   ['rev-id-prop','rev-cliente','rev-num','rev-val-ant','rev-val-novo','rev-motivo'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
+  });
+  ['rev-alt-servicos','rev-alt-valor','rev-alt-pagamento','rev-alt-prazo','rev-alt-escopo','rev-alt-outro'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.checked = false;
   });
 }
 
@@ -13666,10 +13715,17 @@ function normaDe(item) {
   return {
     normas:   (custom?.normas    !== undefined ? custom.normas    : def?.normas    || ''),
     descricao:(custom?.descricao !== undefined ? custom.descricao : def?.descricao || ''),
+    obs:      (custom?.obs       !== undefined ? custom.obs       : ''),
   };
 }
-function normaSalvar(item, normas, descricao) {
-  NORMAS_CUSTOM[item] = { normas, descricao };
+function normaSalvar(item, normas, descricao, obs) {
+  // Preserva obs existente se não for passado (compatibilidade com chamadas antigas)
+  const atual = NORMAS_CUSTOM[item] || {};
+  NORMAS_CUSTOM[item] = {
+    normas,
+    descricao,
+    obs: (obs !== undefined ? obs : (atual.obs || '')),
+  };
   localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
 }
 
@@ -13782,20 +13838,48 @@ function cfgEditarSubservico(servico, subservico) {
   const nd = normaDe(subservico);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay open'; overlay.style.zIndex = '999';
-  overlay.innerHTML = `<div class="modal" style="max-width:550px">
+  const escAttr = (s) => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const escTxt  = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  overlay.innerHTML = `<div class="modal" style="max-width:600px">
     <div class="modal-header">
-      <div class="modal-title">✏️ Editar: ${subservico}</div>
+      <div class="modal-title">✏️ Editar: ${escTxt(subservico)}</div>
       <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
     </div>
     <div class="modal-body">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Serviço: <b>${servico}</b></div>
-      <div class="form-group" style="margin-bottom:12px">
-        <label class="form-label">Normas Técnicas</label>
-        <input type="text" class="form-control" id="_cfg-normas" value="${(nd.normas||'').replace(/"/g,'&quot;')}" placeholder="Ex: ABNT NBR 5410, NR-10">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Serviço: <b>${escTxt(servico)}</b></div>
+
+      <!-- ABAS -->
+      <div style="display:flex;gap:2px;border-bottom:2px solid var(--border);margin-bottom:14px">
+        <button type="button" class="cfg-edit-tab active" data-tab="normas"  style="padding:8px 14px;background:none;border:none;border-bottom:3px solid var(--gold);color:var(--gold);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📋 Normas</button>
+        <button type="button" class="cfg-edit-tab"        data-tab="desc"    style="padding:8px 14px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">📝 Descrição</button>
+        <button type="button" class="cfg-edit-tab"        data-tab="obs"     style="padding:8px 14px;background:none;border:none;border-bottom:3px solid transparent;color:var(--text3);font-weight:700;font-size:12px;cursor:pointer;margin-bottom:-2px">💬 Observações</button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Texto Descritivo (aparece no PDF)</label>
-        <textarea class="form-control" id="_cfg-desc" rows="5" placeholder="Descrição técnica do serviço...">${nd.descricao||''}</textarea>
+
+      <!-- TAB CONTENT: NORMAS -->
+      <div class="cfg-edit-pane" data-pane="normas">
+        <div class="form-group">
+          <label class="form-label">Normas Técnicas <span style="font-size:10px;color:var(--text3)">(separe por vírgula)</span></label>
+          <input type="text" class="form-control" id="_cfg-normas" value="${escAttr(nd.normas)}" placeholder="Ex: ABNT NBR 5410, NR-10">
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">As normas aparecem abaixo do nome do serviço no PDF.</div>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT: DESCRIÇÃO -->
+      <div class="cfg-edit-pane" data-pane="desc" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Texto Descritivo <span style="font-size:10px;color:var(--text3)">(aparece no PDF)</span></label>
+          <textarea class="form-control" id="_cfg-desc" rows="7" placeholder="Descrição técnica do serviço...">${escTxt(nd.descricao)}</textarea>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">Descrição técnica formal que vai para o cliente na proposta.</div>
+        </div>
+      </div>
+
+      <!-- TAB CONTENT: OBSERVAÇÕES -->
+      <div class="cfg-edit-pane" data-pane="obs" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Observações <span style="font-size:10px;color:var(--text3)">(aparece em <i>itálico</i> abaixo da descrição no PDF)</span></label>
+          <textarea class="form-control" id="_cfg-obs" rows="6" placeholder="Notas, condições especiais, exceções, comentários internos...">${escTxt(nd.obs)}</textarea>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">Use para condições adicionais, exceções, alertas ou observações específicas deste subserviço.</div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -13804,12 +13888,31 @@ function cfgEditarSubservico(servico, subservico) {
     </div>
   </div>`;
   document.body.appendChild(overlay);
+
+  // Lógica das abas
+  overlay.querySelectorAll('.cfg-edit-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      overlay.querySelectorAll('.cfg-edit-tab').forEach(b => {
+        b.style.borderBottomColor = 'transparent';
+        b.style.color = 'var(--text3)';
+        b.classList.remove('active');
+      });
+      btn.style.borderBottomColor = 'var(--gold)';
+      btn.style.color = 'var(--gold)';
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      overlay.querySelectorAll('.cfg-edit-pane').forEach(p => {
+        p.style.display = (p.dataset.pane === tab) ? '' : 'none';
+      });
+    });
+  });
 }
 
 function cfgSalvarSubservico(subservico, overlay) {
   const normas = document.getElementById('_cfg-normas')?.value || '';
-  const desc = document.getElementById('_cfg-desc')?.value || '';
-  normaSalvar(subservico, normas, desc);
+  const desc   = document.getElementById('_cfg-desc')?.value   || '';
+  const obs    = document.getElementById('_cfg-obs')?.value    || '';
+  normaSalvar(subservico, normas, desc, obs);
   overlay.remove();
   cfgRenderServicos();
   toast(`"${subservico}" atualizado ✅`, 'success');
@@ -16925,7 +17028,7 @@ function _prevExportarWordDocxLegacy() {
     `<w:p><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">${esc(tel)}${tel && emailEmp ? ' · ' : ''}${esc(emailEmp)}</w:t></w:r></w:p>`,
   ].join('');
   const headerRightLines = [
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r>${(r && r[CRM_COL.REVISAO]) ? `<w:r><w:rPr><w:b/><w:sz w:val="20"/><w:color w:val="ffffff"/><w:shd w:val="clear" w:color="auto" w:fill="f0a500"/></w:rPr><w:t xml:space="preserve">  ${esc(r[CRM_COL.REVISAO])}  </w:t></w:r>` : ''}</w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}${(r && r[CRM_COL.REVISAO]) ? ' · Revisão: ' + esc(r[CRM_COL.REVISAO]) : ''}</w:t></w:r></w:p>`,
   ].join('');
