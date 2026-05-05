@@ -24597,7 +24597,7 @@ window.addEventListener('load', () => {
   };
 
   // ── CHAVES EXTRAS — prefixos e chaves exatas que viram linhas em dados_extras_propostas ──
-  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_', 'obs_atividades_', 'link_rota_', 'custos_ocultos_proposta_'];
+  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_', 'obs_atividades_', 'link_rota_', 'custos_ocultos_proposta_', 'calc_meta_', 'rev_info_'];
   const CHAVES_EXTRAS_EXATAS = ['pagto_padrao'];
 
   function _ehChaveExtra(key) {
@@ -25979,6 +25979,172 @@ window.addEventListener('load', () => {
   setTimeout(() => {
     _hidratarExtrasDaPlanilha().catch(_=>{});
   }, 4000);
+
+  // ─────────────────────────────────────────────────────────
+  // PERSISTÊNCIA DE CAMPOS DA CALCULADORA (Hora Eng., ART, Desconto,
+  // Imposto, KM, R$/km, Visitas, Pedágio, Link da Rota)
+  //
+  // Esses campos eram resetados aos valores padrão (vh=200, art=1000,
+  // desc=5%, imp=6%, etc.) ao editar/duplicar uma proposta. Solução:
+  // gravar todos por proposta em `calc_meta_<id>` e restaurar.
+  // ─────────────────────────────────────────────────────────
+  const CALC_META_FIELDS = [
+    { id: 'calc-vh',         key: 'vh',       def: 200 },
+    { id: 'calc-art',        key: 'art',      def: 1000 },
+    { id: 'calc-desc',       key: 'desc',     def: 5 },
+    { id: 'calc-imp',        key: 'imp',      def: 6 },
+    { id: 'calc-km',         key: 'km',       def: 0 },
+    { id: 'calc-rkm',        key: 'rkm',      def: 0.8 },
+    { id: 'calc-vis',        key: 'vis',      def: 1 },
+    { id: 'calc-extras',     key: 'extras',   def: 0 },
+    { id: 'calc-link-rota',  key: 'linkRota', def: '', isText: true },
+  ];
+
+  function _calcMetaIdAtivo() {
+    // Tenta pegar do calc-id-proposta, depois np-id-prop
+    const calcId = (document.getElementById('calc-id-proposta')?.value || '').trim();
+    if (calcId) return calcId;
+    const npId = (document.getElementById('np-id-prop')?.value || '').trim();
+    return npId;
+  }
+
+  function _calcMetaSalvar() {
+    const id = _calcMetaIdAtivo();
+    if (!id) return;
+    const meta = {};
+    CALC_META_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      meta[f.key] = f.isText ? (el.value || '') : (parseFloat(el.value || '0') || 0);
+    });
+    try {
+      localStorage.setItem('calc_meta_' + id, JSON.stringify(meta));
+    } catch(_){}
+  }
+
+  function _calcMetaCarregar(idProp) {
+    const id = String(idProp || _calcMetaIdAtivo() || '').trim();
+    if (!id) return false;
+    let meta = null;
+    try {
+      const raw = localStorage.getItem('calc_meta_' + id);
+      if (raw) meta = JSON.parse(raw);
+    } catch(_){}
+    if (!meta || typeof meta !== 'object') return false;
+
+    CALC_META_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      const v = meta[f.key];
+      if (v === undefined || v === null) return;
+      el.value = (f.isText ? String(v) : v);
+    });
+
+    // Disparar recálculo + atualizar preview
+    if (typeof calcRecalcular === 'function') calcRecalcular();
+    if (typeof prevAtualizar === 'function') setTimeout(prevAtualizar, 100);
+    return true;
+  }
+
+  // Auto-save em qualquer mudança nos campos
+  function _calcMetaInstalarAutoSave() {
+    CALC_META_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el || el.dataset._metaHook) return;
+      el.dataset._metaHook = '1';
+      el.addEventListener('input', () => {
+        clearTimeout(_calcMetaInstalarAutoSave._t);
+        _calcMetaInstalarAutoSave._t = setTimeout(_calcMetaSalvar, 300);
+      });
+      el.addEventListener('change', () => {
+        clearTimeout(_calcMetaInstalarAutoSave._t);
+        _calcMetaInstalarAutoSave._t = setTimeout(_calcMetaSalvar, 300);
+      });
+    });
+  }
+
+  // Tentar instalar listeners assim que o DOM estiver pronto, e re-tentar
+  // periodicamente nos primeiros segundos (caso campos sejam injetados depois)
+  setTimeout(_calcMetaInstalarAutoSave, 500);
+  setTimeout(_calcMetaInstalarAutoSave, 2000);
+  setTimeout(_calcMetaInstalarAutoSave, 5000);
+
+  // Hook em nav: ao entrar na nova-proposta-page, tentar carregar meta
+  if (typeof nav === 'function') {
+    const _navMetaOrig = nav;
+    nav = function(id) {
+      const ret = _navMetaOrig(id);
+      if (id === 'nova-proposta-page') {
+        setTimeout(() => {
+          _calcMetaInstalarAutoSave();
+          // Carregar meta da proposta atual (se houver)
+          const idAtivo = _calcMetaIdAtivo();
+          if (idAtivo) _calcMetaCarregar(idAtivo);
+        }, 300);
+      }
+      return ret;
+    };
+  }
+
+  // Hook em npAbrirEdicaoProposta: ao abrir uma proposta para editar,
+  // carregar os meta-campos da Calculadora
+  if (typeof npAbrirEdicaoProposta === 'function') {
+    const _origAbrirEdicao = npAbrirEdicaoProposta;
+    window.npAbrirEdicaoProposta = function(idx) {
+      const ret = _origAbrirEdicao.apply(this, arguments);
+      try {
+        const r = (typeof DATA !== 'undefined' && DATA.crm) ? DATA.crm[idx] : null;
+        const idProp = r ? String(r[CRM_COL.ID] || '') : '';
+        if (idProp) {
+          // Aguardar o sistema popular Step 1 antes de tentar restaurar
+          setTimeout(() => _calcMetaCarregar(idProp), 600);
+          setTimeout(() => _calcMetaCarregar(idProp), 1500);
+        }
+      } catch(e) { console.warn('[calc-meta] erro ao carregar:', e); }
+      return ret;
+    };
+  }
+
+  // Hook em npDuplicarProposta: ao duplicar, copiar meta da original
+  // para a nova proposta (mesma técnica usada para calc_blocos)
+  if (typeof npDuplicarProposta === 'function') {
+    const _origDuplicar = npDuplicarProposta;
+    window.npDuplicarProposta = function(idx) {
+      // Capturar meta da proposta original ANTES da duplicação
+      let metaOriginalJSON = null;
+      let idOriginal = '';
+      try {
+        const r = (typeof DATA !== 'undefined' && DATA.crm) ? DATA.crm[idx] : null;
+        idOriginal = r ? String(r[CRM_COL.ID] || '') : '';
+        if (idOriginal) {
+          metaOriginalJSON = localStorage.getItem('calc_meta_' + idOriginal);
+        }
+      } catch(_){}
+
+      const ret = _origDuplicar.apply(this, arguments);
+
+      // Após a duplicação, copiar a meta para o novo ID
+      if (metaOriginalJSON) {
+        setTimeout(() => {
+          const novoId = (document.getElementById('np-id-prop')?.value || '').trim();
+          if (novoId && novoId !== idOriginal) {
+            try {
+              localStorage.setItem('calc_meta_' + novoId, metaOriginalJSON);
+              _calcMetaCarregar(novoId);
+              console.log('[calc-meta] copiado de #' + idOriginal + ' → #' + novoId);
+            } catch(e) { console.warn('[calc-meta] erro ao copiar:', e); }
+          }
+        }, 800);
+      }
+      return ret;
+    };
+  }
+
+  // Comando manual no console para debug
+  window.aplicaCalcMetaSalvar = _calcMetaSalvar;
+  window.aplicaCalcMetaCarregar = _calcMetaCarregar;
+
+  console.log('[aplica-patches] persistência de meta-campos da Calculadora instalada');
 
 })();
 </script>
