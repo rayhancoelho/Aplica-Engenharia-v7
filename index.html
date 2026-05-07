@@ -6258,6 +6258,14 @@ Os valores desta proposta já consideram a incidência fiscal correspondente a e
           <label class="form-label">Novo Valor (R$)</label>
           <input type="number" class="form-control" id="rev-val-novo" placeholder="0">
         </div>
+        <div class="form-group">
+          <label class="form-label">📅 Nova Data de Emissão <span style="font-size:10px;color:var(--text3)">(opcional)</span></label>
+          <input type="date" class="form-control" id="rev-nova-data">
+        </div>
+        <div class="form-group">
+          <label class="form-label">⏳ Nova Validade <span style="font-size:10px;color:var(--text3)">(opcional)</span></label>
+          <input type="date" class="form-control" id="rev-nova-validade">
+        </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">Motivo / Descrição</label>
           <textarea class="form-control" id="rev-motivo" placeholder="Descreva o motivo da revisão e as alterações realizadas..."></textarea>
@@ -9151,8 +9159,12 @@ function prevCarregarItens(r) {
       if (!bloco.itens) return;
       bloco.itens.forEach(it => {
         if (!it.desc) return;
-        const horas = (it.horas || 0) + (it.rev || 0);
-        prevItens.push({ desc: it.desc, qtd: it.qtd || 1, unit: 0, horas: (it.horas||0), rev: (it.rev||0), bloco: bloco.nome || bloco.servico || '' });
+        if (it.tipo === 'valor') {
+          // Item de valor fixo (Material/Equipamento) — usa o valor direto, não entra na distribuição por horas
+          prevItens.push({ desc: it.desc, qtd: it.qtd || 1, unit: parseFloat(it.valor)||0, horas: 0, rev: 0, bloco: bloco.nome || bloco.servico || '', _tipoValor: true });
+        } else {
+          prevItens.push({ desc: it.desc, qtd: it.qtd || 1, unit: 0, horas: (it.horas||0), rev: (it.rev||0), bloco: bloco.nome || bloco.servico || '' });
+        }
       });
     });
     const valorProp = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
@@ -9162,16 +9174,19 @@ function prevCarregarItens(r) {
     const _rkmV = parseFloat(document.getElementById('calc-rkm')?.value || '0.8') || 0.8;
     const _visV = parseFloat(document.getElementById('calc-vis')?.value || '1') || 1;
     const _extV = parseFloat(document.getElementById('calc-extras')?.value || '0') || 0;
-    const valorServicos = Math.max(0, valorProp - _artV - (_kmV * _rkmV * _visV) - _extV);
-    if (prevItens.length && valorServicos > 0) {
-      const totalHoras = prevItens.reduce((s, it) => s + (it.horas || 0), 0);
+    // Subtrair também a soma dos itens tipo='valor' (têm valor próprio)
+    const _somaValores = prevItens.filter(it => it._tipoValor).reduce((s, it) => s + (it.unit * it.qtd), 0);
+    const valorServicos = Math.max(0, valorProp - _artV - (_kmV * _rkmV * _visV) - _extV - _somaValores);
+    const itensComHoras = prevItens.filter(it => !it._tipoValor);
+    if (itensComHoras.length && valorServicos > 0) {
+      const totalHoras = itensComHoras.reduce((s, it) => s + (it.horas || 0), 0);
       if (totalHoras > 0) {
-        prevItens.forEach(it => { it.unit = Math.round(valorServicos * ((it.horas||0) / totalHoras)); });
+        itensComHoras.forEach(it => { it.unit = Math.round(valorServicos * ((it.horas||0) / totalHoras)); });
       } else {
-        prevItens.forEach(it => { it.unit = Math.round(valorServicos / prevItens.length); });
+        itensComHoras.forEach(it => { it.unit = Math.round(valorServicos / itensComHoras.length); });
       }
-      const somaF = prevItens.reduce((s, it) => s + (it.qtd * it.unit), 0);
-      if (somaF !== Math.round(valorServicos) && prevItens.length) prevItens[prevItens.length - 1].unit += (Math.round(valorServicos) - somaF);
+      const somaF = itensComHoras.reduce((s, it) => s + (it.qtd * it.unit), 0);
+      if (somaF !== Math.round(valorServicos) && itensComHoras.length) itensComHoras[itensComHoras.length - 1].unit += (Math.round(valorServicos) - somaF);
     }
   }
 
@@ -9663,7 +9678,9 @@ function prevAtualizar() {
   blocoItens.forEach(bi => {
     const nd = normaDe(bi.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
-    if ((nd.descricao || nd.obs) && showDesc) {
+    // Obs e Descrição: agora SEMPRE coletadas (ignoram showDesc — esse só
+    // controla se a descricao aparece, mas obs sempre aparece)
+    if (nd.descricao || nd.obs) {
       descricoesSecs.push({ titulo: bi.desc, texto: nd.descricao, obs: nd.obs });
     }
     if (nd.premissas) {
@@ -9679,7 +9696,7 @@ function prevAtualizar() {
   prevItens.forEach(it => {
     const nd = normaDe(it.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
-    if ((nd.descricao || nd.obs) && showDesc && !descricoesSecs.find(d => d.titulo === it.desc)) {
+    if ((nd.descricao || nd.obs) && !descricoesSecs.find(d => d.titulo === it.desc)) {
       descricoesSecs.push({ titulo: it.desc, texto: nd.descricao, obs: nd.obs });
     }
     if (nd.premissas) {
@@ -9709,7 +9726,7 @@ function prevAtualizar() {
         <div style="margin-bottom:12px">
           <div style="font-size:11px;font-weight:700;color:#111827;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
           ${d.texto ? `<div style="font-size:11px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>` : ''}
-          ${d.obs ? `<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f0a500;border-radius:3px;font-size:10.5px;color:#78350f;font-style:italic;line-height:1.6"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
+          ${d.obs ? `<div style="margin-top:4px;font-size:10px;color:#374151;font-style:italic;line-height:1.6;padding-left:2px"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
         </div>`).join('')}
     </div>` : '';
 
@@ -9816,9 +9833,9 @@ function prevAtualizar() {
             <div><span style="color:#6b7280">CNPJ/CPF:</span> <strong>${cnpj}</strong></div>
             <div><span style="color:#6b7280">Contato:</span> <strong>${contato}</strong></div>
             <div><span style="color:#6b7280">Telefone:</span> <strong>${fone}</strong></div>
-            ${endCli !== '—' ? `<div style="grid-column:1/-1"><span style="color:#6b7280">Endereço:</span> <strong>${endCli}</strong></div>` : ''}
-            ${localObra ? `<div><span style="color:#6b7280">Local da Obra:</span> <strong>${localObra}</strong></div>` : ''}
-            ${campoEspecial ? `<div><span style="color:#6b7280">Campo Especial:</span> <strong>${campoEspecial}</strong></div>` : ''}
+            ${(() => { const _e = String(endCli||'').trim().replace(/^[:—\s]+|[:\s]+$/g,'').trim(); return (_e && _e !== '—') ? `<div style="grid-column:1/-1"><span style="color:#6b7280">Endereço:</span> <strong>${_e}</strong></div>` : ''; })()}
+            ${(() => { const _e = String(localObra||'').trim().replace(/^[:—\s]+|[:\s]+$/g,'').trim(); return _e ? `<div><span style="color:#6b7280">Local da Obra:</span> <strong>${_e}</strong></div>` : ''; })()}
+            ${(() => { const _e = String(campoEspecial||'').trim().replace(/^[:—\s]+|[:\s]+$/g,'').trim(); return _e ? `<div><span style="color:#6b7280">Campo Especial:</span> <strong>${_e}</strong></div>` : ''; })()}
           </div>
         </div>
 
@@ -9840,14 +9857,14 @@ function prevAtualizar() {
           </div>
         </div>` : ''}
 
-        <!-- 4. ESCOPO DOS SERVIÇOS -->
-        ${secaoDescricoes ? `<div style="margin-bottom:16px">
+        <!-- 4. ESCOPO DOS SERVIÇOS / OBSERVAÇÕES -->
+        ${descricoesSecs.length ? `<div style="margin-bottom:16px">
           <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Produtos e Serviços</div>
           ${descricoesSecs.map(d => `
             <div style="margin-bottom:10px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
-              ${d.texto ? `<div style="font-size:10px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>` : ''}
-              ${d.obs ? `<div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f0a500;border-radius:3px;font-size:9.5px;color:#78350f;font-style:italic;line-height:1.6"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
+              ${(showDesc && d.texto) ? `<div style="font-size:10px;color:#374151;line-height:1.8">${(()=>{ let _t = (d.texto||'').replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/([^\n])•/g,'$1\n•').replace(/\.(\s*)([A-Z])/g,'.\n$2'); return _t.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>{ const c=s.replace(/^[•\-–—▸]\s*/,''); const f=c.endsWith('.')?c:c+'.'; return '<div style="padding-left:12px;text-indent:-12px;margin-bottom:2px">• '+f+'</div>'; }).join(''); })()}</div>` : ''}
+              ${d.obs ? `<div style="margin-top:4px;font-size:10px;color:#374151;font-style:italic;line-height:1.6;padding-left:2px"><strong style="font-style:normal">Obs.:</strong> ${(d.obs||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>` : ''}
             </div>`).join('')}
         </div>` : ''}
 
@@ -10321,6 +10338,8 @@ async function salvarRevisao() {
   const valAnt  = parseFloat(document.getElementById('rev-val-ant')?.value  || '0') || 0;
   const valNovo = parseFloat(document.getElementById('rev-val-novo')?.value || '0') || 0;
   const motivo  = document.getElementById('rev-motivo')?.value  || '';
+  const novaData     = document.getElementById('rev-nova-data')?.value     || '';
+  const novaValidade = document.getElementById('rev-nova-validade')?.value || '';
 
   // Coletar checkboxes "O que foi alterado?"
   const alteracoes = [];
@@ -10333,6 +10352,28 @@ async function salvarRevisao() {
 
   if (!idProp) { toast('Informe o ID da proposta', 'warning'); return; }
 
+  // Aplicar novas datas no CRM, se preenchidas
+  if ((novaData || novaValidade) && Array.isArray(DATA?.crm)) {
+    const idx = DATA.crm.findIndex(r => String(r[CRM_COL.ID]) === String(idProp));
+    if (idx >= 0) {
+      const _toBR = (iso) => {
+        if (!iso) return '';
+        const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+      };
+      if (novaData) {
+        DATA.crm[idx][CRM_COL.DATA_ABER] = _toBR(novaData);
+        if (!alteracoes.includes('Prazo / Validade')) alteracoes.push('Prazo / Validade');
+      }
+      if (novaValidade) {
+        DATA.crm[idx][CRM_COL.VALIDADE] = _toBR(novaValidade);
+        if (!alteracoes.includes('Prazo / Validade')) alteracoes.push('Prazo / Validade');
+      }
+      try { saveDataLocal(); } catch(_){}
+      try { renderCRMTable(); } catch(_){}
+    }
+  }
+
   const rev = {
     proposta: idProp,
     cliente,
@@ -10342,6 +10383,8 @@ async function salvarRevisao() {
     val_novo: valNovo,
     motivo,
     alteracoes,
+    nova_data: novaData,
+    nova_validade: novaValidade,
     data:     new Date().toLocaleDateString('pt-BR'),
   };
 
@@ -10351,12 +10394,14 @@ async function salvarRevisao() {
   // (motivo + checkboxes ficam disponíveis para o PDF/preview)
   try {
     localStorage.setItem('rev_info_' + idProp, JSON.stringify({
-      num:        rev.num,
+      num:           rev.num,
       motivo,
       alteracoes,
-      data:       rev.data,
-      val_ant:    valAnt,
-      val_novo:   valNovo,
+      data:          rev.data,
+      val_ant:       valAnt,
+      val_novo:      valNovo,
+      nova_data:     novaData,
+      nova_validade: novaValidade,
     }));
   } catch(_){}
 
@@ -10420,7 +10465,7 @@ async function salvarRevisao() {
   }
 
   // Limpar form
-  ['rev-id-prop','rev-cliente','rev-num','rev-val-ant','rev-val-novo','rev-motivo'].forEach(id => {
+  ['rev-id-prop','rev-cliente','rev-num','rev-val-ant','rev-val-novo','rev-motivo','rev-nova-data','rev-nova-validade'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   ['rev-alt-servicos','rev-alt-valor','rev-alt-pagamento','rev-alt-prazo','rev-alt-escopo','rev-alt-outro'].forEach(id => {
@@ -15317,7 +15362,13 @@ function calcRenderBlocos() {
   const vh = parseFloat(document.getElementById('calc-vh')?.value || '200') || 200;
 
   wrap.innerHTML = calcBlocos.map((bloco, bi) => {
-    const subtotal = bloco.itens.reduce((s, it) => s + ((it.horas||0)+(it.rev||0))*vh, 0);
+    const subtotal = bloco.itens.reduce((s, it) => {
+      if (it.tipo === 'valor') return s + (parseFloat(it.valor)||0);
+      return s + ((it.horas||0)+(it.rev||0))*vh;
+    }, 0);
+
+    // Se TODOS os itens do bloco são tipo='valor', oculta as colunas Horas/Revisão
+    const todosValor = bloco.itens.length > 0 && bloco.itens.every(it => it.tipo === 'valor');
 
     const itensHtml = `
       <div style="overflow-x:auto;padding:8px 14px">
@@ -15327,15 +15378,18 @@ function calcRenderBlocos() {
               <th style="width:20px"></th>
               <th style="width:20px">#</th>
               <th>Descrição do Item / Serviço</th>
-              <th style="width:62px">Horas</th>
-              <th style="width:62px">Revisão</th>
+              ${todosValor ? '' : `
+                <th style="width:62px">Horas</th>
+                <th style="width:62px">Revisão</th>
+              `}
               <th style="width:88px">Valor</th>
-              <th style="width:24px"></th>
+              <th style="width:50px"></th>
             </tr>
           </thead>
           <tbody id="calc-tbody-${bi}">
             ${bloco.itens.map((it, ii) => {
-              const val = ((it.horas||0)+(it.rev||0))*vh;
+              const isValor = it.tipo === 'valor';
+              const val = isValor ? (parseFloat(it.valor)||0) : ((it.horas||0)+(it.rev||0))*vh;
               return `<tr draggable="true"
                 ondragstart="calcBlocoDragStart(event,${bi},${ii})"
                 ondragover="calcBlocoDragOver(event,${bi},${ii})"
@@ -15343,23 +15397,42 @@ function calcRenderBlocos() {
                 ondragend="calcBlocoDragEnd()"
                 id="calc-brow-${bi}-${ii}">
                 <td><span class="drag-handle">⋮⋮</span></td>
-                <td style="color:var(--text3);text-align:center;font-size:11px">${ii+1}</td>
-                <td><input value="${it.desc||''}" placeholder="Descrição"
+                <td style="color:var(--text3);text-align:center;font-size:11px">${ii+1}${isValor ? '<span style="display:block;font-size:8px;color:var(--gold);font-weight:700">📦</span>' : ''}</td>
+                <td><input value="${it.desc||''}" placeholder="${isValor?'Descrição (Material/Equip./etc.)':'Descrição'}"
                   oninput="calcBlocos[${bi}].itens[${ii}].desc=this.value"></td>
-                <td><input type="number" value="${it.horas||0}" min="0" step="0.5" style="text-align:center"
-                  oninput="calcBlocos[${bi}].itens[${ii}].horas=parseFloat(this.value)||0;calcRecalcularBlocos()"></td>
-                <td><input type="number" value="${it.rev||0}" min="0" step="0.5" style="text-align:center" title="Horas de revisão"
-                  oninput="calcBlocos[${bi}].itens[${ii}].rev=parseFloat(this.value)||0;calcRecalcularBlocos()"></td>
-                <td><div class="val-auto">${fmtMoney(val)}</div></td>
-                <td><button style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:14px;padding:4px"
-                  onclick="calcBlocoRemoveItem(${bi},${ii})">×</button></td>
+                ${todosValor ? '' /* colunas Horas/Revisão suprimidas quando todos são valor */ : (isValor ? `
+                  <td colspan="2" style="text-align:center">
+                    <input type="number" value="${it.valor||0}" min="0" step="0.01"
+                      placeholder="R$ Valor" title="Valor fixo do item (sem horas)"
+                      style="text-align:right;background:rgba(240,165,0,0.08);border:1px solid rgba(240,165,0,0.3);color:var(--gold);font-weight:700;width:96%"
+                      oninput="calcBlocos[${bi}].itens[${ii}].valor=parseFloat(this.value)||0;calcRecalcularBlocos()">
+                  </td>
+                ` : `
+                  <td><input type="number" value="${it.horas||0}" min="0" step="0.5" style="text-align:center"
+                    oninput="calcBlocos[${bi}].itens[${ii}].horas=parseFloat(this.value)||0;calcRecalcularBlocos()"></td>
+                  <td><input type="number" value="${it.rev||0}" min="0" step="0.5" style="text-align:center" title="Horas de revisão"
+                    oninput="calcBlocos[${bi}].itens[${ii}].rev=parseFloat(this.value)||0;calcRecalcularBlocos()"></td>
+                `)}
+                ${todosValor ? `
+                  <td><input type="number" value="${it.valor||0}" min="0" step="0.01"
+                    placeholder="R$ Valor"
+                    style="text-align:right;background:rgba(240,165,0,0.08);border:1px solid rgba(240,165,0,0.3);color:var(--gold);font-weight:700;width:96%;padding:5px 8px;border-radius:4px"
+                    oninput="calcBlocos[${bi}].itens[${ii}].valor=parseFloat(this.value)||0;calcRecalcularBlocos()"></td>
+                ` : `<td><div class="val-auto">${fmtMoney(val)}</div></td>`}
+                <td style="white-space:nowrap">
+                  <button title="${isValor?'Converter para item por horas':'Converter para item de valor fixo (Material)'}" style="background:none;border:none;color:${isValor?'var(--gold)':'var(--text3)'};cursor:pointer;font-size:13px;padding:4px;margin-right:2px"
+                    onclick="calcBlocoToggleTipoItem(${bi},${ii})">${isValor?'⏲':'📦'}</button>
+                  <button style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:14px;padding:4px"
+                    onclick="calcBlocoRemoveItem(${bi},${ii})">×</button>
+                </td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
-        <div style="display:flex;gap:6px;padding:6px 0 2px">
+        <div style="display:flex;gap:6px;padding:6px 0 2px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="calcBlocoCarregarSubs(${bi})">⟳ Do Serviço</button>
           <button class="btn btn-ghost btn-sm" onclick="calcBlocoAddItem(${bi})">+ Item</button>
+          <button class="btn btn-ghost btn-sm" onclick="calcBlocoAddItemValor(${bi})" title="Adiciona um item de valor fixo (Material, Equipamento, etc.) — sem horas" style="border-color:rgba(240,165,0,0.4);color:var(--gold)">+ Material (R$)</button>
         </div>
       </div>`;
 
@@ -15399,6 +15472,36 @@ function calcRemoveBloco(bi) {
 
 function calcBlocoAddItem(bi) {
   calcBlocos[bi].itens.push({ desc: '', horas: 0, rev: 0 });
+  calcRenderBlocos();
+  calcRecalcularBlocos();
+}
+
+function calcBlocoAddItemValor(bi) {
+  // Item de valor fixo (Material, Equipamento, etc.) — sem horas
+  calcBlocos[bi].itens.push({ desc: '', tipo: 'valor', valor: 0 });
+  calcRenderBlocos();
+  calcRecalcularBlocos();
+}
+
+function calcBlocoToggleTipoItem(bi, ii) {
+  const it = calcBlocos[bi]?.itens?.[ii];
+  if (!it) return;
+  if (it.tipo === 'valor') {
+    // Converter de Valor para Horas — preserva descrição, zera valor
+    delete it.tipo;
+    delete it.valor;
+    it.horas = 0;
+    it.rev = 0;
+  } else {
+    // Converter de Horas para Valor — preserva descrição
+    // Se tem horas digitadas, computa o valor atual baseado em vh e usa como valor inicial
+    const vh = parseFloat(document.getElementById('calc-vh')?.value || '200') || 200;
+    const valorAtual = ((it.horas||0) + (it.rev||0)) * vh;
+    delete it.horas;
+    delete it.rev;
+    it.tipo = 'valor';
+    it.valor = valorAtual;
+  }
   calcRenderBlocos();
   calcRecalcularBlocos();
 }
@@ -15451,12 +15554,17 @@ function calcRecalcularBlocos() {
   const vis   = parseFloat(document.getElementById('calc-vis')?.value)    || 1;
   const extras= parseFloat(document.getElementById('calc-extras')?.value) || 0;
 
+  // Helper: valor de um item (suporta tipo='valor' ou cálculo por horas)
+  const _valItem = (it) => {
+    if (it.tipo === 'valor') return parseFloat(it.valor) || 0;
+    return ((it.horas||0)+(it.rev||0)) * vh;
+  };
+
   let subtotal = 0, totalH = 0;
   calcBlocos.forEach(bloco => {
     bloco.itens.forEach(it => {
-      const h = (it.horas||0) + (it.rev||0);
-      subtotal += h * vh;
-      totalH   += h;
+      subtotal += _valItem(it);
+      if (it.tipo !== 'valor') totalH += (it.horas||0) + (it.rev||0);
     });
   });
 
@@ -15483,7 +15591,7 @@ function calcRecalcularBlocos() {
 
   // Atualizar subtotais nos headers dos blocos E valores individuais dos itens
   calcBlocos.forEach((bloco, bi) => {
-    const st = bloco.itens.reduce((s, it) => s + ((it.horas||0)+(it.rev||0))*vh, 0);
+    const st = bloco.itens.reduce((s, it) => s + _valItem(it), 0);
     const stEl = document.querySelector(`#calc-bloco-${bi} .calc-bloco-subtotal`);
     if (stEl) stEl.textContent = fmtMoney(st);
     // Atualizar valor de cada item
@@ -17135,34 +17243,38 @@ function _prevExportarWordDocxLegacy() {
     bodyParts.push(para('', {spacing:80}));
   }
 
-  // ── 3c. (opcional) Escopo / descrições ──
-  if (showDesc && descritivos.length) {
+  // ── 3c. Escopo / Descrições / Observações ──
+  // Renderiza se há QUALQUER serviço com descricao OU obs.
+  // showDesc só controla se a descricao aparece — obs sempre aparece.
+  if (descritivos.length) {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
     descritivos.forEach(d => {
       bodyParts.push(para(d.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
-      let txt = d.texto || '';
-      // Normalizar quebras de linha Windows
-      txt = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      // Inserir quebra antes de bullet • se colado no texto anterior
-      txt = txt.replace(/([^\n])•/g, '$1\n•');
-      // Inserir quebra após ponto seguido de maiúscula (com ou sem espaço)
-      txt = txt.replace(/\.(\s*)([A-Z])/g, '.\n$2');
-      const topicos = txt.split('\n').map(s => s.trim()).filter(s => s.length > 0);
-      if (topicos.length > 1) {
-        topicos.forEach(t => {
-          const limpo = t.replace(/^[•\-–—▸]\s*/, '');
-          const final = limpo.endsWith('.') ? limpo : limpo + '.';
-          bodyParts.push(para(`•  ${final}`, { size: 18, color: '374151', indent: '360', spacing: 60 }));
-        });
-      } else if (d.texto) {
-        bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
+      if (showDesc && d.texto) {
+        let txt = d.texto || '';
+        // Normalizar quebras de linha Windows
+        txt = txt.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        // Inserir quebra antes de bullet • se colado no texto anterior
+        txt = txt.replace(/([^\n])•/g, '$1\n•');
+        // Inserir quebra após ponto seguido de maiúscula (com ou sem espaço)
+        txt = txt.replace(/\.(\s*)([A-Z])/g, '.\n$2');
+        const topicos = txt.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+        if (topicos.length > 1) {
+          topicos.forEach(t => {
+            const limpo = t.replace(/^[•\-–—▸]\s*/, '');
+            const final = limpo.endsWith('.') ? limpo : limpo + '.';
+            bodyParts.push(para(`•  ${final}`, { size: 18, color: '374151', indent: '360', spacing: 60 }));
+          });
+        } else {
+          bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
+        }
       }
-      // Observações em itálico abaixo do texto descritivo
+      // Observações em itálico abaixo do texto descritivo (cor natural, sem destaque)
       if (d.obs) {
         const obsLinhas = String(d.obs).split('\n').map(s => s.trim()).filter(Boolean);
         obsLinhas.forEach((linha, idx) => {
           const prefix = idx === 0 ? 'Obs.: ' : '';
-          bodyParts.push(`<w:p><w:pPr><w:spacing w:after="40"/><w:ind w:left="240"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="16"/><w:color w:val="78350f"/></w:rPr><w:t xml:space="preserve">${esc(prefix + linha)}</w:t></w:r></w:p>`);
+          bodyParts.push(`<w:p><w:pPr><w:spacing w:after="40"/><w:ind w:left="120"/></w:pPr><w:r><w:rPr><w:i/><w:sz w:val="18"/><w:color w:val="374151"/></w:rPr><w:t xml:space="preserve">${esc(prefix + linha)}</w:t></w:r></w:p>`);
         });
       }
       bodyParts.push(para('', { spacing: 40 }));
@@ -23862,13 +23974,74 @@ function npAplicarValorProposta() {
   toast(`✅ Proposta atualizada: ${fmtMoney(novo)} (base ${fmtMoney(base)} + custos ${fmtMoney(acrescimo)} aplicados em "Outros Extras")`, 'success');
 }
 
-// Lista de pessoas para Comissão (cadastro dedicado em Configurações → Cadastros do Sistema)
+// Lista de pessoas para Comissão — agrega TODOS os cadastros do sistema:
+// - Cadastro dedicado (Configurações → Cadastros do Sistema → pessoas_comissao)
+// - Representantes (CONTATOS.representantes)
+// - Projetistas (CONTATOS.projetistas)
+// - Equipe (CONFIG.equipe ou DATA.equipe)
+// - Contatos vindos da planilha (DATA.contatos — aba 📞 CONTATOS)
 function _npGetTodasPessoas() {
-  if (typeof cfgGetOpcoes === 'function') {
-    const lista = cfgGetOpcoes('pessoas_comissao');
-    if (lista && lista.length) return [...lista].sort();
+  const set = new Set();
+
+  // 1) Lista dedicada
+  try {
+    if (typeof cfgGetOpcoes === 'function') {
+      const lista = cfgGetOpcoes('pessoas_comissao');
+      if (Array.isArray(lista)) lista.forEach(n => { if (n && String(n).trim()) set.add(String(n).trim()); });
+    }
+  } catch(_){}
+
+  // 2) Representantes cadastrados (aba Contatos → Representantes)
+  try {
+    if (typeof CONTATOS !== 'undefined' && Array.isArray(CONTATOS.representantes)) {
+      CONTATOS.representantes.forEach(c => {
+        if (c?.nome) set.add(String(c.nome).trim());
+        if (c?.pessoa) set.add(String(c.pessoa).trim());
+      });
+    }
+  } catch(_){}
+
+  // 3) Projetistas (também recebem comissão eventualmente)
+  try {
+    if (typeof CONTATOS !== 'undefined' && Array.isArray(CONTATOS.projetistas)) {
+      CONTATOS.projetistas.forEach(c => {
+        if (c?.nome) set.add(String(c.nome).trim());
+        if (c?.pessoa) set.add(String(c.pessoa).trim());
+      });
+    }
+  } catch(_){}
+
+  // 4) Equipe (membros internos)
+  try {
+    if (typeof DATA !== 'undefined' && Array.isArray(DATA.equipe)) {
+      DATA.equipe.forEach(m => {
+        const nome = (m?.nome) || (Array.isArray(m) ? m[1] : '');
+        if (nome) set.add(String(nome).trim());
+      });
+    }
+    if (typeof CONFIG !== 'undefined' && Array.isArray(CONFIG.equipe)) {
+      CONFIG.equipe.forEach(m => { if (m?.nome) set.add(String(m.nome).trim()); });
+    }
+  } catch(_){}
+
+  // 5) Direto da planilha — aba 📞 CONTATOS (DATA.contatos)
+  // CT.NOME = 3, CT.SUB = 1 (subtipo: 'representantes', 'projetistas', etc.)
+  try {
+    if (typeof DATA !== 'undefined' && Array.isArray(DATA.contatos)) {
+      DATA.contatos.forEach(r => {
+        if (!Array.isArray(r)) return;
+        const nome = r[3] /* CT.NOME */;
+        if (nome && String(nome).trim()) set.add(String(nome).trim());
+      });
+    }
+  } catch(_){}
+
+  // 6) Defaults só se realmente nada foi encontrado
+  if (!set.size) {
+    ['Anderson Oliveira', 'Edson Matte', 'Juares Araujo', 'Silvio'].forEach(n => set.add(n));
   }
-  return ['Anderson Oliveira', 'Edson Matte', 'Juares Araujo', 'Silvio'];
+
+  return [...set].filter(Boolean).sort();
 }
 
 function npRenderItensOcultos() {
@@ -24597,7 +24770,7 @@ window.addEventListener('load', () => {
   };
 
   // ── CHAVES EXTRAS — prefixos e chaves exatas que viram linhas em dados_extras_propostas ──
-  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_', 'obs_atividades_', 'link_rota_', 'custos_ocultos_proposta_', 'calc_meta_', 'rev_info_'];
+  const PREFIXOS_EXTRAS = ['calc_blocos_', 'prev_itens_', 'fora_escopo_', 'obs_atividades_', 'link_rota_', 'custos_ocultos_proposta_', 'calc_meta_', 'rev_info_', 'np_itens_ocultos_'];
   const CHAVES_EXTRAS_EXATAS = ['pagto_padrao'];
 
   function _ehChaveExtra(key) {
@@ -25134,7 +25307,16 @@ window.addEventListener('load', () => {
      ═══════════════════════════════════════════════════════════ -->
 <script>
 (function aplicaPatchesBugs() {
-  'use strict';
+  // 'use strict' REMOVIDO — alguns hooks reatribuem variáveis globais
+  // (nav, syncData, _saveItensOcultos, etc.) declaradas via function
+  // declaration em outros script tags. Em strict mode isso pode falhar
+  // silenciosamente em alguns browsers, derrubando o patch block todo.
+
+  // Helper para hooks defensivos — qualquer erro fica isolado
+  function _safe(label, fn) {
+    try { return fn(); }
+    catch(e) { console.warn('[aplica-patches][' + label + '] falhou:', e.message); return null; }
+  }
 
   // ─────────────────────────────────────────────────────────
   // FIX issue 2 (revisado): Botão "Ver" agora mostra os DADOS
@@ -26105,46 +26287,609 @@ window.addEventListener('load', () => {
     };
   }
 
-  // Hook em npDuplicarProposta: ao duplicar, copiar meta da original
-  // para a nova proposta (mesma técnica usada para calc_blocos)
-  if (typeof npDuplicarProposta === 'function') {
-    const _origDuplicar = npDuplicarProposta;
-    window.npDuplicarProposta = function(idx) {
-      // Capturar meta da proposta original ANTES da duplicação
-      let metaOriginalJSON = null;
-      let idOriginal = '';
-      try {
-        const r = (typeof DATA !== 'undefined' && DATA.crm) ? DATA.crm[idx] : null;
-        idOriginal = r ? String(r[CRM_COL.ID] || '') : '';
-        if (idOriginal) {
-          metaOriginalJSON = localStorage.getItem('calc_meta_' + idOriginal);
-        }
-      } catch(_){}
-
-      const ret = _origDuplicar.apply(this, arguments);
-
-      // Após a duplicação, copiar a meta para o novo ID
-      if (metaOriginalJSON) {
-        setTimeout(() => {
-          const novoId = (document.getElementById('np-id-prop')?.value || '').trim();
-          if (novoId && novoId !== idOriginal) {
-            try {
-              localStorage.setItem('calc_meta_' + novoId, metaOriginalJSON);
-              _calcMetaCarregar(novoId);
-              console.log('[calc-meta] copiado de #' + idOriginal + ' → #' + novoId);
-            } catch(e) { console.warn('[calc-meta] erro ao copiar:', e); }
-          }
-        }, 800);
-      }
-      return ret;
-    };
-  }
+  // Hook em npDuplicarProposta: AGORA CONSOLIDADO
+  // (movido para baixo — ver "HOOK CONSOLIDADO npDuplicarProposta")
 
   // Comando manual no console para debug
   window.aplicaCalcMetaSalvar = _calcMetaSalvar;
   window.aplicaCalcMetaCarregar = _calcMetaCarregar;
 
   console.log('[aplica-patches] persistência de meta-campos da Calculadora instalada');
+
+  // ─────────────────────────────────────────────────────────
+  // CARREGAR HISTÓRICO DE REVISÕES da aba 📜 PROPOSTAS_HISTORICO
+  // O sync padrão não traz essa aba, igual aconteceu com DADOS_EXTRAS.
+  // ─────────────────────────────────────────────────────────
+  async function _carregarHistoricoRevisoes() {
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (!url) return 0;
+
+    const tentativas = [
+      url + '?action=get&sheet=' + encodeURIComponent('📜 PROPOSTAS_HISTORICO'),
+      url + '?action=get&sheet=' + encodeURIComponent('📜 PROPOSTAS_HISTORICO') + '&range=A2:H5000',
+      url + '?action=get&sheet=' + encodeURIComponent('PROPOSTAS_HISTORICO') + '&range=A2:H5000',
+    ];
+
+    let rows = null, lastErr = null;
+    for (const u of tentativas) {
+      try {
+        const r = await fetch(u, { redirect: 'follow' });
+        const j = await r.json();
+        if (j && j.error) { lastErr = j.error; continue; }
+        if (Array.isArray(j)) { rows = j; break; }
+      } catch(e) { lastErr = e.message; }
+    }
+    if (!rows) {
+      console.warn('[historico] não consegui buscar PROPOSTAS_HISTORICO:', lastErr);
+      return 0;
+    }
+
+    // Estrutura esperada: [data, proposta, cliente, num, status, val_ant, val_novo, motivo]
+    const validas = rows.filter(r => Array.isArray(r) && r[1] && String(r[1]).trim() !== '' && String(r[1]).trim() !== 'proposta');
+
+    const _parseFlt = (v) => parseFloat(String(v || '0').replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
+    const _parseDt  = (v) => {
+      if (!v) return '';
+      if (v instanceof Date) {
+        if (isNaN(v.getTime())) return '';
+        return v.toLocaleDateString('pt-BR');
+      }
+      const s = String(v).trim();
+      // Já no formato BR
+      if (/^\d{2}\/\d{2}\/\d{4}/.test(s)) return s.slice(0,10);
+      // ISO
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const [y,m,d] = s.slice(0,10).split('-');
+        return `${d}/${m}/${y}`;
+      }
+      return s;
+    };
+
+    if (typeof DATA_revisoes !== 'undefined') {
+      DATA_revisoes.length = 0;
+      validas.forEach(r => {
+        DATA_revisoes.push({
+          data:     _parseDt(r[0]),
+          proposta: String(r[1] || '').trim(),
+          cliente:  String(r[2] || '').trim(),
+          num:      String(r[3] || '').trim(),
+          status:   String(r[4] || 'Pendente').trim(),
+          val_ant:  _parseFlt(r[5]),
+          val_novo: _parseFlt(r[6]),
+          motivo:   String(r[7] || '').trim(),
+        });
+      });
+      console.log('[historico] ' + DATA_revisoes.length + ' revisões carregadas da planilha');
+
+      // Re-renderizar se a página estiver aberta
+      if (typeof renderRevisoes === 'function') {
+        try { renderRevisoes(); } catch(_){}
+      }
+    }
+
+    return validas.length;
+  }
+
+  // Hook em syncData: depois do sync também busca o histórico
+  if (typeof syncData === 'function') {
+    const _origSyncDataHist = syncData;
+    syncData = async function() {
+      const ret = await _origSyncDataHist.apply(this, arguments);
+      setTimeout(() => {
+        _carregarHistoricoRevisoes().catch(_=>{});
+      }, 200);
+      return ret;
+    };
+  }
+
+  // Disparar uma vez no boot
+  setTimeout(() => {
+    _carregarHistoricoRevisoes().catch(_=>{});
+  }, 5000);
+
+  window.aplicaCarregarHistorico = _carregarHistoricoRevisoes;
+  console.log('[aplica-patches] carregador de histórico de revisões instalado');
+
+  // ─────────────────────────────────────────────────────────
+  // INFERÊNCIA INTELIGENTE de calc_meta para propostas antigas
+  //
+  // Propostas que vieram da planilha não têm calc_meta_<id> ainda
+  // (porque essa feature é nova). Para essas propostas, INFERIMOS
+  // o vh (valor hora) a partir do valor total + horas dos blocos.
+  // ─────────────────────────────────────────────────────────
+  function _inferirCalcMeta(idProp) {
+    if (!idProp) return null;
+
+    // Já existe meta? não infere.
+    let metaExistente = null;
+    try {
+      const raw = localStorage.getItem('calc_meta_' + idProp);
+      if (raw) metaExistente = JSON.parse(raw);
+    } catch(_){}
+    if (metaExistente && metaExistente.vh) return metaExistente;
+
+    // Pegar calc_blocos da proposta
+    let blocos = null;
+    try {
+      const raw = localStorage.getItem('calc_blocos_' + idProp);
+      if (raw) blocos = JSON.parse(raw);
+    } catch(_){}
+    if (!Array.isArray(blocos) || !blocos.length) return null;
+
+    // Total de horas em todos os blocos
+    let totalHoras = 0;
+    blocos.forEach(b => {
+      (b.itens || []).forEach(it => {
+        totalHoras += (parseFloat(it.horas) || 0) * (parseFloat(it.qtd) || 1);
+      });
+    });
+    if (totalHoras <= 0) return null;
+
+    // Pegar valor total da proposta no CRM
+    let valorTotal = 0;
+    try {
+      const idx = (DATA.crm || []).findIndex(r => String(r[CRM_COL.ID]) === String(idProp));
+      if (idx >= 0) {
+        valorTotal = parseFloat(String(DATA.crm[idx][CRM_COL.VALOR] || '0').replace(',','.')) || 0;
+      }
+    } catch(_){}
+
+    if (valorTotal <= 0) return null;
+
+    // Estimar vh: (total - art_default) / horas, com mínimo razoável
+    const artDef = 1000;
+    const valorServ = Math.max(0, valorTotal - artDef);
+    const vhEstimado = Math.round(valorServ / totalHoras);
+
+    const meta = {
+      vh:       Math.max(50, vhEstimado),
+      art:      artDef,
+      desc:     5,
+      imp:      6,
+      km:       0,
+      rkm:      0.8,
+      vis:      1,
+      extras:   0,
+      linkRota: '',
+      _inferido: true,  // marca que foi inferência (debug)
+    };
+
+    // Salvar para não inferir de novo
+    try { localStorage.setItem('calc_meta_' + idProp, JSON.stringify(meta)); } catch(_){}
+    console.log('[calc-meta] inferido para #' + idProp + ': vh=' + meta.vh + ' (total=' + valorTotal + ', horas=' + totalHoras + ')');
+    return meta;
+  }
+
+  // Substituir _calcMetaCarregar para tentar inferir se não existe
+  const _carregarOriginal = _calcMetaCarregar;
+  _calcMetaCarregar = function(idProp) {
+    const id = String(idProp || _calcMetaIdAtivo() || '').trim();
+    if (!id) return false;
+
+    // Tenta carregar normal
+    let raw = null;
+    try { raw = localStorage.getItem('calc_meta_' + id); } catch(_){}
+
+    // Se não tem, tenta inferir
+    if (!raw) {
+      const inferido = _inferirCalcMeta(id);
+      if (inferido) {
+        try { raw = JSON.stringify(inferido); } catch(_){}
+      }
+    }
+
+    if (!raw) return false;
+    let meta = null;
+    try { meta = JSON.parse(raw); } catch(_){}
+    if (!meta || typeof meta !== 'object') return false;
+
+    CALC_META_FIELDS.forEach(f => {
+      const el = document.getElementById(f.id);
+      if (!el) return;
+      const v = meta[f.key];
+      if (v === undefined || v === null) return;
+      el.value = (f.isText ? String(v) : v);
+    });
+    if (typeof calcRecalcular === 'function') calcRecalcular();
+    if (typeof prevAtualizar === 'function') setTimeout(prevAtualizar, 100);
+    return true;
+  };
+  // Re-expor pública (caso alguém tenha pegado a referência)
+  window.aplicaCalcMetaCarregar = _calcMetaCarregar;
+  window.aplicaInferirCalcMeta = _inferirCalcMeta;
+
+  // (Hook em npDuplicarProposta consolidado abaixo — ver "HOOK CONSOLIDADO")
+  console.log('[aplica-patches] inferência inteligente de calc_meta instalada');
+
+  // ─────────────────────────────────────────────────────────
+  // PERSISTÊNCIA DE CUSTOS OCULTOS + COMISSÕES POR PROPOSTA
+  //
+  // NP_ITENS_OCULTOS era uma chave global no localStorage. Resultado:
+  // ao abrir uma proposta diferente, os custos/comissões da proposta
+  // anterior continuavam "no lugar" e não eram trazidos da proposta
+  // que estava sendo editada/duplicada.
+  //
+  // Solução: salvar como np_itens_ocultos_<idProp> e carregar quando
+  // abrir/duplicar uma proposta.
+  // ─────────────────────────────────────────────────────────
+  function _ocultosIdAtivo() {
+    const calcId = (document.getElementById('calc-id-proposta')?.value || '').trim();
+    if (calcId) return calcId;
+    const npId = (document.getElementById('np-id-prop')?.value || '').trim();
+    return npId;
+  }
+
+  function _ocultosSalvarPorProposta() {
+    const id = _ocultosIdAtivo();
+    if (!id) return; // sem id, mantém na chave global (modo legacy)
+    if (typeof NP_ITENS_OCULTOS === 'undefined') return;
+    try {
+      // Bypass para evitar loop com auto-push para Sheets
+      if (typeof Storage !== 'undefined') Storage.prototype.__bypass = true;
+      localStorage.setItem('np_itens_ocultos_' + id, JSON.stringify(NP_ITENS_OCULTOS));
+      if (typeof Storage !== 'undefined') Storage.prototype.__bypass = false;
+    } catch(_){}
+  }
+
+  function _ocultosCarregarPorProposta(idProp) {
+    const id = String(idProp || _ocultosIdAtivo() || '').trim();
+    if (!id) return false;
+    let raw = null;
+    try { raw = localStorage.getItem('np_itens_ocultos_' + id); } catch(_){}
+    if (!raw) {
+      // Sem dados específicos da proposta — verificar se é uma proposta nova
+      // ou se simplesmente nunca tivemos dados por-proposta para ela.
+      // FIX: NÃO limpar a lista se ainda há itens em NP_ITENS_OCULTOS — o
+      // usuário pode estar trabalhando neles e ainda não ter sido salvo
+      // (race condition entre cadastrar e mudar de tela).
+      // Em vez disso, MIGRAR os custos atuais para a chave por-proposta.
+      if (typeof NP_ITENS_OCULTOS !== 'undefined' && NP_ITENS_OCULTOS.length > 0) {
+        try {
+          localStorage.setItem('np_itens_ocultos_' + id, JSON.stringify(NP_ITENS_OCULTOS));
+          console.log('[ocultos] migrado #' + id + ': ' + NP_ITENS_OCULTOS.length + ' item(ns) (de chave global)');
+          return true;
+        } catch(_){}
+      }
+      return false;
+    }
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && typeof NP_ITENS_OCULTOS !== 'undefined') {
+        NP_ITENS_OCULTOS.length = 0;
+        arr.forEach(it => NP_ITENS_OCULTOS.push(it));
+        if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+        console.log('[ocultos] carregado #' + id + ': ' + arr.length + ' item(ns)');
+        return true;
+      }
+    } catch(e) { console.warn('[ocultos] erro carregar:', e); }
+    return false;
+  }
+
+  // Hook em _saveItensOcultos:
+  // CRÍTICO — `_saveItensOcultos` é uma function declaration. Substituir
+  // só `window._saveItensOcultos` NÃO afeta as chamadas internas JS que
+  // usam a binding lexical. Por isso reatribuímos DIRETAMENTE (sem var/window),
+  // o que em modo não-strict atualiza a variável global.
+  if (typeof _saveItensOcultos === 'function') {
+    const _origSaveOcultos = _saveItensOcultos;
+    const _newSaveOcultos = function() {
+      _origSaveOcultos.apply(this, arguments);
+      _ocultosSalvarPorProposta();
+    };
+    try {
+      _saveItensOcultos = _newSaveOcultos;          // reatribui binding global
+    } catch(e) { console.warn('[ocultos] não consegui reatribuir _saveItensOcultos:', e); }
+    window._saveItensOcultos = _newSaveOcultos;     // garante via window também
+  }
+
+  // Camada 2 de proteção — POLLING que monitora NP_ITENS_OCULTOS e salva
+  // por proposta sempre que muda. Funciona como rede de segurança caso
+  // algum caminho de modificação não dispare _saveItensOcultos.
+  let _ocultosLastHash = '';
+  setInterval(() => {
+    if (typeof NP_ITENS_OCULTOS === 'undefined') return;
+    const id = _ocultosIdAtivo();
+    if (!id) return;
+    let hash = '';
+    try { hash = JSON.stringify(NP_ITENS_OCULTOS); } catch(_){ return; }
+    if (hash === _ocultosLastHash) return;
+    _ocultosLastHash = hash;
+    try {
+      if (typeof Storage !== 'undefined') Storage.prototype.__bypass = true;
+      localStorage.setItem('np_itens_ocultos_' + id, hash);
+      if (typeof Storage !== 'undefined') Storage.prototype.__bypass = false;
+    } catch(_){}
+  }, 1500);
+
+  // Hook em npAbrirEdicaoProposta: ao editar, carregar custos da proposta
+  if (typeof npAbrirEdicaoProposta === 'function') {
+    const _origAbrirEdic = window.npAbrirEdicaoProposta || npAbrirEdicaoProposta;
+    window.npAbrirEdicaoProposta = function(idx) {
+      const ret = _origAbrirEdic.apply(this, arguments);
+      try {
+        const r = (DATA.crm || [])[idx];
+        const idProp = r ? String(r[CRM_COL.ID] || '') : '';
+        if (idProp) {
+          setTimeout(() => _ocultosCarregarPorProposta(idProp), 700);
+          setTimeout(() => _ocultosCarregarPorProposta(idProp), 1700);
+        }
+      } catch(e) { console.warn('[ocultos] erro:', e); }
+      return ret;
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // HOOK CONSOLIDADO npDuplicarProposta
+  //
+  // Antes tínhamos 3 hooks separados em npDuplicarProposta, mas devido
+  // a como function declarations interagem com window.x = ..., um deles
+  // ficava "órfão" (nunca era chamado). Agora é UM único hook que faz
+  // tudo de uma vez, em ordem garantida:
+  //   1. captura idOriginal, calc_meta (inferindo se faltar) e
+  //      np_itens_ocultos da proposta original ANTES de duplicar
+  //   2. chama a função original (que copia calc_blocos)
+  //   3. em retry (800ms + 1800ms), aplica calc_meta + ocultos no novo ID
+  //
+  // FIX importante: ao copiar custos para a nova proposta, RE-MARCAR
+  // todos como somaProposta=true para que o usuário possa decidir
+  // novamente se quer aplicar/ocultar. Também resetar calc-extras se
+  // o valor herdado for de "Aplicar" anterior, evitando dupla contagem.
+  // ─────────────────────────────────────────────────────────
+  if (typeof npDuplicarProposta === 'function') {
+    const _origDupFinal = window.npDuplicarProposta || npDuplicarProposta;
+    window.npDuplicarProposta = function(idx) {
+      let idOriginal = '', metaJSON = null, ocultosJSON = null;
+      try {
+        const r = (DATA.crm || [])[idx];
+        idOriginal = r ? String(r[CRM_COL.ID] || '') : '';
+        if (idOriginal) {
+          // Força inferência de calc_meta se não existir (propostas antigas)
+          if (typeof _inferirCalcMeta === 'function') _inferirCalcMeta(idOriginal);
+          metaJSON    = localStorage.getItem('calc_meta_'        + idOriginal);
+          ocultosJSON = localStorage.getItem('np_itens_ocultos_' + idOriginal);
+          console.log('[duplicar] capturado #' + idOriginal +
+            '  calc_meta:' + (metaJSON ? 'sim' : 'NÃO') +
+            '  ocultos:'   + (ocultosJSON ? 'sim' : 'NÃO'));
+        }
+      } catch(e) { console.warn('[duplicar] erro captura:', e); }
+
+      const ret = _origDupFinal.apply(this, arguments);
+
+      // Aplicar tudo no novo ID — duas tentativas (800ms + 1800ms)
+      const aplicarTudo = (delay) => setTimeout(() => {
+        const novoId = (document.getElementById('np-id-prop')?.value || '').trim();
+        if (!novoId || novoId === idOriginal) {
+          console.log('[duplicar] delay ' + delay + 'ms: novoId ainda não disponível');
+          return;
+        }
+        try {
+          if (metaJSON) {
+            // Antes de copiar calc_meta para a nova proposta, RESETAR calc-extras
+            // (campo "Pedágio + Alim + Hosp"): se na proposta original esse campo
+            // continha valor de "Aplicar custos" anterior, ele já está embutido
+            // nos custos. Levar adiante causaria dupla contagem.
+            try {
+              const meta = JSON.parse(metaJSON);
+              if (meta && typeof meta === 'object') {
+                meta.extras = 0;
+                localStorage.setItem('calc_meta_' + novoId, JSON.stringify(meta));
+              } else {
+                localStorage.setItem('calc_meta_' + novoId, metaJSON);
+              }
+            } catch(_){
+              localStorage.setItem('calc_meta_' + novoId, metaJSON);
+            }
+            if (typeof _calcMetaCarregar === 'function') _calcMetaCarregar(novoId);
+            console.log('[duplicar][' + delay + 'ms] calc_meta aplicada #' + idOriginal + ' → #' + novoId);
+          }
+          if (ocultosJSON) {
+            // RE-MARCAR todos como somaProposta=true — ao duplicar, o usuário
+            // deve decidir novamente se quer aplicar/ocultar os custos
+            let ocultosLimpos = ocultosJSON;
+            try {
+              const arr = JSON.parse(ocultosJSON);
+              if (Array.isArray(arr)) {
+                arr.forEach(it => { if (it && typeof it === 'object') it.somaProposta = true; });
+                ocultosLimpos = JSON.stringify(arr);
+              }
+            } catch(_){}
+            localStorage.setItem('np_itens_ocultos_' + novoId, ocultosLimpos);
+            if (typeof _ocultosCarregarPorProposta === 'function') _ocultosCarregarPorProposta(novoId);
+            console.log('[duplicar][' + delay + 'ms] ocultos aplicados #' + idOriginal + ' → #' + novoId + ' (somaProposta restaurado)');
+          }
+        } catch(e) { console.warn('[duplicar] erro aplicar:', e); }
+      }, delay);
+      aplicarTudo(800);
+      aplicarTudo(1800);
+
+      return ret;
+    };
+    console.log('[aplica-patches] HOOK CONSOLIDADO npDuplicarProposta instalado');
+  }
+
+  // Hook em nav: ao entrar em nova-proposta-page, carregar custos da proposta atual
+  if (typeof nav === 'function') {
+    const _navOcultos = nav;
+    nav = function(id) {
+      const ret = _navOcultos(id);
+      if (id === 'nova-proposta-page') {
+        setTimeout(() => {
+          const idAtivo = _ocultosIdAtivo();
+          if (idAtivo) _ocultosCarregarPorProposta(idAtivo);
+        }, 400);
+      }
+      return ret;
+    };
+  }
+
+  // Comandos de debug
+  window.aplicaOcultosCarregar = _ocultosCarregarPorProposta;
+  window.aplicaOcultosSalvar = _ocultosSalvarPorProposta;
+
+  // Migra os custos da chave global LEGADA para a chave por-proposta da
+  // proposta atualmente aberta. Útil quando o usuário cadastrou custos
+  // antes do fix de persistência por proposta entrar em vigor.
+  window.aplicaOcultosMigrar = function() {
+    const id = _ocultosIdAtivo();
+    if (!id) { console.log('Nenhuma proposta aberta — abra uma proposta primeiro'); return false; }
+    if (typeof NP_ITENS_OCULTOS === 'undefined' || !NP_ITENS_OCULTOS.length) {
+      console.log('Lista de custos está vazia — nada para migrar'); return false;
+    }
+    try {
+      localStorage.setItem('np_itens_ocultos_' + id, JSON.stringify(NP_ITENS_OCULTOS));
+      console.log('✅ ' + NP_ITENS_OCULTOS.length + ' item(ns) migrados para proposta #' + id);
+      return true;
+    } catch(e) { console.error('❌', e); return false; }
+  };
+
+  console.log('[aplica-patches] persistência de custos ocultos por proposta instalada');
+
+  // ─────────────────────────────────────────────────────────
+  // DIAGNÓSTICO COMPLETO — aplicaCheckup()
+  //
+  // Um único comando que verifica tudo que pode estar errado:
+  // dados em memória, hooks instalados, planilha, render, etc.
+  // ─────────────────────────────────────────────────────────
+  window.aplicaCheckup = async function() {
+    console.group('🩺 APLICA — CHECKUP COMPLETO DO SISTEMA');
+    const problemas = [];
+    const ok = [];
+
+    // 1. URL e config
+    const url = (typeof CONFIG !== 'undefined') ? CONFIG.APPS_SCRIPT_URL : null;
+    if (url) ok.push('✓ URL do Apps Script configurada');
+    else problemas.push('❌ URL do Apps Script NÃO configurada (Configurações → URL)');
+
+    // 2. DATA.crm
+    let nCrm = 0;
+    try { nCrm = (DATA.crm || []).length; } catch(_){}
+    if (nCrm > 0) ok.push('✓ ' + nCrm + ' propostas em DATA.crm');
+    else problemas.push('❌ DATA.crm está VAZIO ou indefinido');
+
+    // 3. Sync
+    if (url) {
+      try {
+        const r = await fetch(url + '?action=sync', { redirect: 'follow' });
+        const j = await r.json();
+        if (j && j.error) problemas.push('❌ sync: ' + j.error);
+        else if (j && j.crm) {
+          const sCrm = j.crm.length;
+          if (sCrm > 0) {
+            ok.push('✓ Planilha retorna ' + sCrm + ' propostas via sync');
+            if (sCrm !== nCrm) problemas.push('⚠️ Planilha tem ' + sCrm + ' mas app tem ' + nCrm + ' — re-sync pode ajudar');
+          } else {
+            problemas.push('❌ Planilha retorna CRM vazio');
+          }
+        } else {
+          problemas.push('❌ Resposta inesperada de sync');
+        }
+      } catch(e) {
+        problemas.push('❌ Erro ao sincronizar: ' + e.message);
+      }
+    }
+
+    // 4. Funções críticas
+    const fnsCriticas = ['syncData','_appsGet','loadDataLocal','saveDataLocal','renderAllPages','renderCRMTable','renderDashboardCRM','setSyncStatus','filterCRM','nav'];
+    fnsCriticas.forEach(fn => {
+      if (typeof window[fn] === 'function') ok.push('✓ ' + fn + ' definido');
+      else problemas.push('❌ ' + fn + ' NÃO definido — bug grave!');
+    });
+
+    // 5. Hooks instalados (do patch block)
+    const hooksInstalados = [
+      'aplicaSyncDiag','aplicaForcarSync','aplicaTestarPlanilha',
+      'aplicaProcurarDados','aplicaHidratarExtras','aplicaCarregarHistorico',
+      'aplicaCalcMetaSalvar','aplicaInferirCalcMeta','aplicaOcultosCarregar',
+    ];
+    let hooksOk = 0;
+    hooksInstalados.forEach(h => { if (typeof window[h] === 'function') hooksOk++; });
+    if (hooksOk === hooksInstalados.length) ok.push('✓ Todos os ' + hooksOk + ' hooks do patch block carregaram');
+    else problemas.push('⚠️ Apenas ' + hooksOk + '/' + hooksInstalados.length + ' hooks carregaram — patch block pode ter erro de sintaxe');
+
+    // 6. Tabela CRM
+    const tbody = document.getElementById('crm-table-body');
+    if (tbody) {
+      const linhasNaTela = tbody.querySelectorAll('tr').length;
+      ok.push('✓ Tabela CRM tem ' + linhasNaTela + ' linha(s) renderizada(s)');
+      if (nCrm > 0 && linhasNaTela === 0) {
+        problemas.push('❌ Tem ' + nCrm + ' propostas em memória mas 0 na tela — renderCRMTable falhou');
+      }
+    } else {
+      problemas.push('⚠️ #crm-table-body não encontrado no DOM (página CRM aberta?)');
+    }
+
+    // 7. Filtros
+    try {
+      const filtros = ['crm-search','crm-filter-status','crm-filter-servico','crm-filter-retorno','crm-filter-mes','crm-filter-ano'];
+      const ativos = filtros.filter(id => {
+        const el = document.getElementById(id);
+        return el && el.value && el.value.trim() !== '';
+      });
+      if (ativos.length) {
+        problemas.push('⚠️ Filtros ATIVOS no CRM: ' + ativos.join(', ') + ' — limpe-os para ver tudo');
+      } else {
+        ok.push('✓ Sem filtros aplicados no CRM');
+      }
+    } catch(_){}
+
+    console.log('═══ TUDO BEM ═══');
+    ok.forEach(s => console.log('  ' + s));
+    if (problemas.length) {
+      console.log('');
+      console.log('═══ PROBLEMAS ENCONTRADOS ═══');
+      problemas.forEach(p => console.log('  ' + p));
+    } else {
+      console.log('');
+      console.log('🟢 NENHUM PROBLEMA DETECTADO');
+    }
+    console.groupEnd();
+
+    return { ok, problemas };
+  };
+
+  console.log('[aplica-patches] aplicaCheckup() disponível');
+
+  // Diagnóstico: mostra o estado atual das Normas/Descrições/Obs/Premissas
+  // de cada subserviço cadastrado. Útil para depurar quando obs não aparecem.
+  window.aplicaListarObsServicos = function() {
+    if (typeof NORMAS_CUSTOM === 'undefined') {
+      console.error('NORMAS_CUSTOM não está definido');
+      return;
+    }
+    const keys = Object.keys(NORMAS_CUSTOM);
+    if (!keys.length) {
+      console.log('⚠️ NORMAS_CUSTOM está VAZIO — nenhum subserviço foi editado ainda.');
+      console.log('Cadastre obs em: Configurações → Serviços → editar subserviço → aba Observações');
+      return;
+    }
+    console.group('📋 Subserviços cadastrados (' + keys.length + ')');
+    keys.forEach(k => {
+      const v = NORMAS_CUSTOM[k] || {};
+      console.log('• ' + k);
+      if (v.normas)    console.log('    📌 normas:    ' + v.normas);
+      if (v.descricao) console.log('    📝 descrição: ' + String(v.descricao).slice(0, 60) + '...');
+      if (v.obs)       console.log('    💬 obs:       ' + String(v.obs).slice(0, 100));
+      if (v.premissas) console.log('    ⚓ premissas: ' + String(v.premissas).slice(0, 60));
+      if (!v.normas && !v.descricao && !v.obs && !v.premissas) console.log('    (sem dados)');
+    });
+    console.groupEnd();
+
+    // Listar também os blocos da proposta atual
+    if (typeof calcBlocos !== 'undefined' && Array.isArray(calcBlocos)) {
+      const itens = calcBlocos.flatMap(b => (b.itens||[]).map(it => it.desc)).filter(Boolean);
+      if (itens.length) {
+        console.log('');
+        console.log('🧱 Blocos da proposta atual:');
+        itens.forEach(nome => {
+          const v = NORMAS_CUSTOM[nome];
+          const tem = v && (v.obs || v.premissas);
+          console.log('  ' + (tem ? '✓' : '⚠️') + ' "' + nome + '"' + (v?.obs ? ' (obs OK)' : ' (sem obs)'));
+        });
+        console.log('');
+        console.log('Se um bloco tem nome diferente do cadastrado em "Subserviços cadastrados", a obs não aparece.');
+      }
+    }
+  };
 
 })();
 </script>
