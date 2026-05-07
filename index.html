@@ -16064,12 +16064,34 @@ function npNovaPropostaNova() {
   localStorage.removeItem('proposta_ctx');
   npContatos = [{ tipo: 'WhatsApp', nome: '', cargo: '', area: 'Geral', telefone: '', email: '', valor: '' }];
   npServicos = [{ servico: '', subcats: [] }];
-  // Limpar campos
+  // Limpar campos da página de Dados do Cliente
   ['np-id-prop','np-cnpj','np-razao','np-fantasia','np-endereco','np-municipio',
    'np-valor','np-validade','np-followup','np-obs','np-nome-proposta','np-local-obra','np-campo-especial'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Limpar/resetar campos da Calculadora — antes ficavam preservados de propostas
+  // anteriores, fazendo com que link-rota, KM, etc. "vazassem" para propostas novas
+  const _calcDefaults = {
+    'calc-vh': 200, 'calc-art': 1000, 'calc-desc': 5, 'calc-imp': 6,
+    'calc-km': 0, 'calc-rkm': 0.8, 'calc-vis': 1, 'calc-extras': 0,
+    'calc-link-rota': '', 'calc-cliente': '', 'calc-servico': '',
+  };
+  Object.keys(_calcDefaults).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = _calcDefaults[id];
+  });
+  // Limpar blocos da Calculadora
+  if (typeof calcBlocos !== 'undefined') {
+    calcBlocos = [{ id: 1, nome: '', servico: 'ATERRAMENTO ELÉTRICO', itens: [] }];
+    if (typeof calcRenderBlocos === 'function') calcRenderBlocos();
+    if (typeof calcRecalcularBlocos === 'function') calcRecalcularBlocos();
+  }
+  // Limpar custos ocultos / comissões
+  if (typeof NP_ITENS_OCULTOS !== 'undefined') {
+    NP_ITENS_OCULTOS.length = 0;
+    if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+  }
   npSetProximoId();
   npRenderContatos();
   npRenderServicos();
@@ -26478,7 +26500,18 @@ window.addEventListener('load', () => {
       }
     }
 
-    if (!raw) return false;
+    // Se ainda não tem (proposta NOVA, sem blocos cadastrados), aplica defaults
+    // para evitar "vazamento" de valores da proposta anterior
+    if (!raw) {
+      CALC_META_FIELDS.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (!el) return;
+        el.value = f.isText ? '' : f.def;
+      });
+      if (typeof calcRecalcular === 'function') calcRecalcular();
+      return false;
+    }
+
     let meta = null;
     try { meta = JSON.parse(raw); } catch(_){}
     if (!meta || typeof meta !== 'object') return false;
@@ -26487,7 +26520,11 @@ window.addEventListener('load', () => {
       const el = document.getElementById(f.id);
       if (!el) return;
       const v = meta[f.key];
-      if (v === undefined || v === null) return;
+      if (v === undefined || v === null) {
+        // Campo não está no meta → aplicar default (evita vazamento)
+        el.value = f.isText ? '' : f.def;
+        return;
+      }
       el.value = (f.isText ? String(v) : v);
     });
     if (typeof calcRecalcular === 'function') calcRecalcular();
