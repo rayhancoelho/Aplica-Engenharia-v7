@@ -5444,6 +5444,12 @@ Os valores desta proposta já consideram a incidência fiscal correspondente a e
                     placeholder="Texto que aparece no início da seção 'Produtos e Serviços'. Ex.: visão geral do escopo, premissas gerais..."
                     oninput="prevSalvarEscopoIntro();setTimeout(prevAtualizar,150)"></textarea>
                 </div>
+                <!-- FIX issue 2 (parte 2): descrição por planilha/bloco do escopo -->
+                <div id="prev-blocos-desc-box" style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;display:none">
+                  <label class="form-label" style="font-size:11px">📝 Descrição entre as planilhas do escopo</label>
+                  <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Um texto por serviço principal — aparece logo abaixo do título de cada planilha no escopo.</div>
+                  <div id="prev-blocos-desc-wrap"></div>
+                </div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
                   <input type="checkbox" id="prev-show-normas" checked onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
                   Mostrar Normas Técnicas
@@ -9164,6 +9170,66 @@ function prevSalvarEscopoIntro() {
   } catch(_){}
 }
 
+// ── FIX issue 2 (parte 2) — DESCRIÇÃO POR PLANILHA / BLOCO DO ESCOPO ──
+// Permite um texto livre por serviço principal (bloco), exibido entre as
+// planilhas do escopo. Útil sobretudo no modo "Valor como Produto Principal".
+function _prevPropIdAtivo() {
+  return (document.getElementById('prev-id')?.value
+    || (typeof prevIdxCRM !== 'undefined' && prevIdxCRM !== null ? (DATA.crm[prevIdxCRM]?.[CRM_COL.ID]||'') : '')
+    || document.getElementById('calc-id-proposta')?.value || '').toString().trim();
+}
+// Lista ordenada dos nomes de blocos (planilhas) da proposta atual.
+function prevGetBlocoNomes() {
+  const nomes = [];
+  const calcPropId = document.getElementById('calc-id-proposta')?.value || '';
+  const prevPropId = _prevPropIdAtivo();
+  if (typeof calcBlocos !== 'undefined' && calcBlocos.length && calcPropId && calcPropId === prevPropId) {
+    calcBlocos.forEach(b => { if (b.itens?.some(it => it.desc)) { const n = b.nome || b.servico || ''; if (n && !nomes.includes(n)) nomes.push(n); } });
+  }
+  if (!nomes.length) {
+    (prevItens || []).forEach(it => { const n = it.bloco; if (n && n !== 'ART' && n !== 'FORA DO ESCOPO' && !nomes.includes(n)) nomes.push(n); });
+  }
+  return nomes;
+}
+function prevGetBlocoDescs(propId) {
+  const id = String(propId || _prevPropIdAtivo() || '').trim();
+  if (!id) return {};
+  try { return JSON.parse(localStorage.getItem('escopo_bloco_desc_' + id) || '{}') || {}; } catch(_){ return {}; }
+}
+function prevSetBlocoDesc(nome, texto) {
+  const id = _prevPropIdAtivo();
+  if (!id) return;
+  const map = prevGetBlocoDescs(id);
+  if (texto && texto.trim()) map[nome] = texto;
+  else delete map[nome];
+  try { localStorage.setItem('escopo_bloco_desc_' + id, JSON.stringify(map)); } catch(_){}
+}
+// Renderiza um textarea por bloco no painel de opções (fora do preview, para
+// não perder o foco enquanto digita).
+function prevRenderBlocoDescs() {
+  const box  = document.getElementById('prev-blocos-desc-box');
+  const wrap = document.getElementById('prev-blocos-desc-wrap');
+  if (!box || !wrap) return;
+  const nomes = prevGetBlocoNomes();
+  if (nomes.length < 1) { box.style.display = 'none'; wrap.innerHTML = ''; window._blocoDescSig = ''; return; }
+  box.style.display = 'block';
+  // Só reconstrói se a lista de blocos (ou a proposta) mudou — evita perder o
+  // foco enquanto o usuário digita (prevAtualizar roda a cada tecla).
+  const sig = _prevPropIdAtivo() + '|' + nomes.join('¦');
+  if (window._blocoDescSig === sig) return;
+  window._blocoDescSig = sig;
+  const map = prevGetBlocoDescs();
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  wrap.innerHTML = nomes.map((n, i) => `
+    <div style="margin-bottom:8px">
+      <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:2px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">${esc(n)}</label>
+      <textarea class="form-control" rows="2" style="font-size:12px;resize:vertical"
+        data-bloco-nome="${esc(n)}"
+        placeholder="Descrição desta planilha (opcional)"
+        oninput="prevSetBlocoDesc(this.getAttribute('data-bloco-nome'), this.value);clearTimeout(window._blocoDescT);window._blocoDescT=setTimeout(prevAtualizar,200)">${esc(map[n]||'')}</textarea>
+    </div>`).join('');
+}
+
 function prevCarregarItens(r) {
   // Limpar SEMPRE ao carregar nova proposta
   prevItens = [];
@@ -9422,6 +9488,12 @@ function prevAtualizar() {
   const separarServico = document.getElementById('prev-separar-servico')?.checked ?? true;
   // FIX issue 2 — texto livre de introdução, no início da seção de escopo
   const escopoIntro    = (document.getElementById('prev-escopo-intro')?.value || '').trim();
+  // FIX issue 2 (parte 2) — descrições por planilha/bloco (ordenadas)
+  const _blocoDescMap  = (typeof prevGetBlocoDescs === 'function') ? prevGetBlocoDescs() : {};
+  const _blocoDescNomes= (typeof prevGetBlocoNomes === 'function') ? prevGetBlocoNomes() : [];
+  const blocoDescsList = _blocoDescNomes
+    .filter(n => (_blocoDescMap[n] || '').trim())
+    .map(n => ({ nome: n, texto: _blocoDescMap[n] }));
 
   // — Dados empresa —
   const crea    = document.getElementById('prev-crea')?.value       || 'CREA/SC 000000-0';
@@ -9909,9 +9981,14 @@ function prevAtualizar() {
         </div>` : ''}
 
         <!-- 4. ESCOPO DOS SERVIÇOS / OBSERVAÇÕES -->
-        ${(descricoesSecs.length || escopoIntro) ? `<div style="margin-bottom:16px">
+        ${(descricoesSecs.length || escopoIntro || blocoDescsList.length) ? `<div style="margin-bottom:16px">
           <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Produtos e Serviços</div>
           ${escopoIntro ? `<div style="font-size:11px;color:#374151;line-height:1.8;text-align:justify;margin-bottom:12px">${escopoIntro.replace(/</g,'&lt;').replace(/\n{2,}/g,'</p><p style="margin:6px 0">').replace(/\n/g,'<br>').replace(/^/,'<p style="margin:0">').replace(/$/,'</p>')}</div>` : ''}
+          ${blocoDescsList.map(b => `
+            <div style="margin-bottom:10px">
+              <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${String(b.nome).replace(/</g,'&lt;')}</div>
+              <div style="font-size:10px;color:#374151;line-height:1.8;text-align:justify">${String(b.texto).replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+            </div>`).join('')}
           ${descricoesSecs.map(d => `
             <div style="margin-bottom:10px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
@@ -10083,6 +10160,8 @@ function prevAtualizar() {
   if (normasCard && normasLista.length) {
     normasCard.innerHTML = normasLista.map(n => `<div style="margin-bottom:2px">▸ ${n}</div>`).join('');
   }
+  // FIX issue 2 (parte 2) — manter o editor de descrição por planilha em dia
+  try { if (typeof prevRenderBlocoDescs === 'function') prevRenderBlocoDescs(); } catch(_){}
 }
 
 // Event delegation for preview controls — catches all changes reliably
@@ -17166,6 +17245,10 @@ function _prevExportarWordDocxLegacy() {
   const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? false;
   const separarServico = document.getElementById('prev-separar-servico')?.checked ?? true;
   const escopoIntro    = (document.getElementById('prev-escopo-intro')?.value || '').trim();
+  // FIX issue 2 (parte 2) — descrições por planilha/bloco para o Word
+  const _wBlocoMap   = (typeof prevGetBlocoDescs === 'function') ? prevGetBlocoDescs() : {};
+  const _wBlocoNomes = (typeof prevGetBlocoNomes === 'function') ? prevGetBlocoNomes() : [];
+  const blocoDescsList = _wBlocoNomes.filter(n => (_wBlocoMap[n]||'').trim()).map(n => ({ nome:n, texto:_wBlocoMap[n] }));
 
   let subtotalItens = 0;
   prevItens.forEach(it => { subtotalItens += (it.qtd||0)*(it.unit||0); });
@@ -17344,7 +17427,7 @@ function _prevExportarWordDocxLegacy() {
   // ── 3c. Escopo / Descrições / Observações ──
   // Renderiza se há QUALQUER serviço com descricao OU obs.
   // showDesc só controla se a descricao aparece — obs sempre aparece.
-  if (descritivos.length || escopoIntro) {
+  if (descritivos.length || escopoIntro || blocoDescsList.length) {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
     // FIX issue 2 — texto livre de introdução no início do escopo
     if (escopoIntro) {
@@ -17352,6 +17435,13 @@ function _prevExportarWordDocxLegacy() {
         .forEach(linha => bodyParts.push(para(linha, { size: 18, color: '374151', spacing: 80 })));
       bodyParts.push(para('', { spacing: 40 }));
     }
+    // FIX issue 2 (parte 2) — descrição por planilha/bloco, entre os serviços
+    blocoDescsList.forEach(b => {
+      bodyParts.push(para(b.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
+      String(b.texto).replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean)
+        .forEach(linha => bodyParts.push(para(linha, { size: 18, color: '374151', spacing: 60 })));
+      bodyParts.push(para('', { spacing: 40 }));
+    });
     descritivos.forEach(d => {
       bodyParts.push(para(d.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
       if (showDesc && d.texto) {
