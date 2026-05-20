@@ -5435,6 +5435,16 @@ Os valores desta proposta já consideram a incidência fiscal correspondente a e
                   </select>
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="prev-separar-servico" checked onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
+                  Separar tabelas por serviço principal
+                </label>
+                <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px">
+                  <label class="form-label" style="font-size:11px">📝 Introdução do Escopo (opcional)</label>
+                  <textarea class="form-control" id="prev-escopo-intro" rows="3" style="font-size:12px;resize:vertical"
+                    placeholder="Texto que aparece no início da seção 'Produtos e Serviços'. Ex.: visão geral do escopo, premissas gerais..."
+                    oninput="prevSalvarEscopoIntro();setTimeout(prevAtualizar,150)"></textarea>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
                   <input type="checkbox" id="prev-show-normas" checked onchange="prevAtualizar()" onclick="setTimeout(prevAtualizar,50)">
                   Mostrar Normas Técnicas
                 </label>
@@ -9141,9 +9151,28 @@ function prevVincular() {
   if (typeof carregarPropostaDetalhes === 'function') carregarPropostaDetalhes(id);
 }
 
+// FIX issue 2 — salvar a introdução do escopo vinculada à proposta atual.
+function prevSalvarEscopoIntro() {
+  try {
+    const id = (document.getElementById('prev-id')?.value
+      || (prevIdxCRM !== null ? (DATA.crm[prevIdxCRM]?.[CRM_COL.ID]||'') : '')
+      || document.getElementById('calc-id-proposta')?.value || '').toString().trim();
+    if (!id) return;
+    const v = document.getElementById('prev-escopo-intro')?.value || '';
+    if (v) localStorage.setItem('escopo_intro_' + id, v);
+    else   localStorage.removeItem('escopo_intro_' + id);
+  } catch(_){}
+}
+
 function prevCarregarItens(r) {
   // Limpar SEMPRE ao carregar nova proposta
   prevItens = [];
+  // FIX issue 2 — carregar introdução do escopo salva para esta proposta
+  try {
+    const _iid = String(r[CRM_COL.ID]||'');
+    const _ti = document.getElementById('prev-escopo-intro');
+    if (_ti) _ti.value = (_iid && localStorage.getItem('escopo_intro_' + _iid)) || '';
+  } catch(_){}
   const vh = parseFloat(document.getElementById('calc-vh')?.value || '100') || 100;
   const propId = String(r[CRM_COL.ID]||'');
   
@@ -9389,6 +9418,10 @@ function prevAtualizar() {
   const showArt      = document.getElementById('prev-show-art')?.checked      ?? false;
   const modoPreco    = document.getElementById('prev-modo-preco')?.value       || 'por-item';
   const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? false;
+  // FIX issue 1 — separar tabelas por serviço principal (ON) ou tabela única (OFF)
+  const separarServico = document.getElementById('prev-separar-servico')?.checked ?? true;
+  // FIX issue 2 — texto livre de introdução, no início da seção de escopo
+  const escopoIntro    = (document.getElementById('prev-escopo-intro')?.value || '').trim();
 
   // — Dados empresa —
   const crea    = document.getElementById('prev-crea')?.value       || 'CREA/SC 000000-0';
@@ -9422,6 +9455,21 @@ function prevAtualizar() {
   };
   const dataHoje = _toPtBR(r?.[CRM_COL.DATA_ABER]) || new Date().toLocaleDateString('pt-BR');
   const dataVal  = _toPtBR(r?.[CRM_COL.VALIDADE])  || new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  // FIX issue 5 — DATA DA PRIMEIRA EMISSÃO (fica no topo, sempre preservada).
+  // Usa Data de Abertura (preservada em edições/revisões); cai para um valor
+  // gravado em prop_emissao_<id> e, por fim, para hoje.
+  const _propId5 = r ? String(r[CRM_COL.ID] || '') : '';
+  let dataEmissao = dataHoje;
+  try {
+    const _sal = _propId5 ? localStorage.getItem('prop_emissao_' + _propId5) : null;
+    if (_sal) dataEmissao = _sal;
+    else if (_propId5 && dataHoje) localStorage.setItem('prop_emissao_' + _propId5, dataHoje);
+  } catch(_){}
+  // Data da revisão (do registro rev_info_<id>), exibida ABAIXO da emissão.
+  let revDataTopo = '';
+  if (r && r[CRM_COL.REVISAO]) {
+    try { const _rv = JSON.parse(localStorage.getItem('rev_info_' + _propId5) || 'null'); revDataTopo = _rv?.data || ''; } catch(_){}
+  }
 
   // — Cálculo de totais —
   let subtotalItens = 0;
@@ -9565,7 +9613,7 @@ function prevAtualizar() {
         else subToSvc[nome] = nome;
       });
       prevItens.forEach(it => {
-        const svc = subToSvc[it.desc] || servicos[0] || 'Geral';
+        const svc = it.bloco || subToSvc[it.desc] || servicos[0] || 'Geral';
         if (!grupos[svc]) grupos[svc] = { itens: [], total: 0 };
         grupos[svc].itens.push(it);
         grupos[svc].total += (it.qtd||0) * (it.unit||0);
@@ -9607,7 +9655,7 @@ function prevAtualizar() {
       calcBlocos.forEach(b => { if (b.itens?.some(it => it.desc)) _blocoNames.push(b.nome || b.servico || ''); });
     }
 
-    const multiServico = _servicos.length > 1 || _blocoNames.filter(Boolean).length > 1 || new Set(prevItens.map(it => it.bloco).filter(Boolean)).size > 1;
+    const multiServico = separarServico && (_servicos.length > 1 || _blocoNames.filter(Boolean).length > 1 || new Set(prevItens.map(it => it.bloco).filter(Boolean)).size > 1);
     
     if (multiServico && (modoPreco === 'por-item' || modoPreco === 'global')) {
       // Agrupar prevItens por serviço principal
@@ -9797,7 +9845,10 @@ function prevAtualizar() {
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:800;color:#1a3c5e;letter-spacing:1px">PROPOSTA TÉCNICA</div>
           <div style="font-size:20px;font-weight:800;color:#f0a500;margin:2px 0">Nº ${numProp}/SC/${new Date().getFullYear()}</div>
-          <div style="font-size:10px;color:#6b7280">Data: ${dataHoje} · Validade: ${dataVal}${(r && r[CRM_COL.REVISAO]) ? ` · <strong style="color:#1a3c5e">Revisão: ${r[CRM_COL.REVISAO]}</strong>` : ''}</div>
+          <div style="font-size:10px;color:#6b7280">Data de Emissão: ${dataEmissao}</div>
+          ${(r && r[CRM_COL.REVISAO])
+            ? `<div style="font-size:10px;color:#1a3c5e;font-weight:600;margin-top:1px">Revisão: ${r[CRM_COL.REVISAO]}${revDataTopo ? ' · ' + revDataTopo : ''} · Validade: ${dataVal}</div>`
+            : `<div style="font-size:10px;color:#6b7280;margin-top:1px">Validade: ${dataVal}</div>`}
         </div>
       </div>
 
@@ -9858,8 +9909,9 @@ function prevAtualizar() {
         </div>` : ''}
 
         <!-- 4. ESCOPO DOS SERVIÇOS / OBSERVAÇÕES -->
-        ${descricoesSecs.length ? `<div style="margin-bottom:16px">
+        ${(descricoesSecs.length || escopoIntro) ? `<div style="margin-bottom:16px">
           <div style="font-size:13px;font-weight:800;color:#1a3c5e;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">Produtos e Serviços</div>
+          ${escopoIntro ? `<div style="font-size:11px;color:#374151;line-height:1.8;text-align:justify;margin-bottom:12px">${escopoIntro.replace(/</g,'&lt;').replace(/\n{2,}/g,'</p><p style="margin:6px 0">').replace(/\n/g,'<br>').replace(/^/,'<p style="margin:0">').replace(/$/,'</p>')}</div>` : ''}
           ${descricoesSecs.map(d => `
             <div style="margin-bottom:10px">
               <div style="font-size:11px;font-weight:700;color:#1a3c5e;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
@@ -17081,8 +17133,27 @@ function _prevExportarWordDocxLegacy() {
   const endCli  = r ? (r[CRM_COL.ENDERECO]||'—') : '—';
   const localObra     = document.getElementById('np-local-obra')?.value || '';
   const campoEspecial = document.getElementById('np-campo-especial')?.value || '';
-  const dataHoje = new Date().toLocaleDateString('pt-BR');
-  const dataVal  = new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  // FIX issue 5 — Word: usar a DATA DA PRIMEIRA EMISSÃO (Data de Abertura),
+  // não a data de hoje, e a validade salva na proposta. Mantém consistência
+  // com o preview na tela.
+  const _fmtPt5 = (v) => {
+    if (!v) return '';
+    const s = String(v);
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toLocaleDateString('pt-BR');
+  };
+  const _propIdW = r ? String(r[CRM_COL.ID] || '') : '';
+  let dataHoje = _fmtPt5(r?.[CRM_COL.DATA_ABER]) || new Date().toLocaleDateString('pt-BR');
+  try {
+    const _sal = _propIdW ? localStorage.getItem('prop_emissao_' + _propIdW) : null;
+    if (_sal) dataHoje = _sal;
+  } catch(_){}
+  const dataVal  = _fmtPt5(r?.[CRM_COL.VALIDADE]) || new Date(Date.now() + valDias*86400000).toLocaleDateString('pt-BR');
+  let _revDataW = '';
+  if (r && r[CRM_COL.REVISAO]) {
+    try { const _rv = JSON.parse(localStorage.getItem('rev_info_' + _propIdW) || 'null'); _revDataW = _rv?.data || ''; } catch(_){}
+  }
 
   const showNormas = document.getElementById('prev-show-normas')?.checked ?? true;
   const showDesc   = document.getElementById('prev-show-descricao')?.checked ?? true;
@@ -17093,6 +17164,8 @@ function _prevExportarWordDocxLegacy() {
   const showRubrica= document.getElementById('prev-show-assinatura')?.checked ?? true;
   const modPreco   = document.getElementById('prev-modo-preco')?.value || 'por-item';
   const showDeslocamento = document.getElementById('prev-show-deslocamento')?.checked ?? false;
+  const separarServico = document.getElementById('prev-separar-servico')?.checked ?? true;
+  const escopoIntro    = (document.getElementById('prev-escopo-intro')?.value || '').trim();
 
   let subtotalItens = 0;
   prevItens.forEach(it => { subtotalItens += (it.qtd||0)*(it.unit||0); });
@@ -17225,7 +17298,10 @@ function _prevExportarWordDocxLegacy() {
   const headerRightLines = [
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="1a3c5e"/></w:rPr><w:t>PROPOSTA TÉCNICA</w:t></w:r></w:p>`,
     `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/><w:color w:val="f0a500"/></w:rPr><w:t xml:space="preserve">Nº ${esc(numProp)}/SC/${new Date().getFullYear()}</w:t></w:r></w:p>`,
-    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data: ${esc(dataHoje)} · Validade: ${esc(dataVal)}${(r && r[CRM_COL.REVISAO]) ? ' · Revisão: ' + esc(r[CRM_COL.REVISAO]) : ''}</w:t></w:r></w:p>`,
+    `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Data de Emissão: ${esc(dataHoje)}</w:t></w:r></w:p>`,
+    (r && r[CRM_COL.REVISAO])
+      ? `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="16"/><w:color w:val="1a3c5e"/></w:rPr><w:t xml:space="preserve">Revisão: ${esc(r[CRM_COL.REVISAO])}${_revDataW ? ' · ' + esc(_revDataW) : ''} · Validade: ${esc(dataVal)}</w:t></w:r></w:p>`
+      : `<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:sz w:val="16"/><w:color w:val="6b7280"/></w:rPr><w:t xml:space="preserve">Validade: ${esc(dataVal)}</w:t></w:r></w:p>`,
   ].join('');
   bodyParts.push(`<w:tbl>
     <w:tblPr><w:tblW w:w="9072" w:type="dxa"/><w:tblBorders><w:bottom w:val="single" w:sz="12" w:color="f0a500"/></w:tblBorders></w:tblPr>
@@ -17268,8 +17344,14 @@ function _prevExportarWordDocxLegacy() {
   // ── 3c. Escopo / Descrições / Observações ──
   // Renderiza se há QUALQUER serviço com descricao OU obs.
   // showDesc só controla se a descricao aparece — obs sempre aparece.
-  if (descritivos.length) {
+  if (descritivos.length || escopoIntro) {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
+    // FIX issue 2 — texto livre de introdução no início do escopo
+    if (escopoIntro) {
+      escopoIntro.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean)
+        .forEach(linha => bodyParts.push(para(linha, { size: 18, color: '374151', spacing: 80 })));
+      bodyParts.push(para('', { spacing: 40 }));
+    }
     descritivos.forEach(d => {
       bodyParts.push(para(d.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
       if (showDesc && d.texto) {
@@ -17344,7 +17426,7 @@ function _prevExportarWordDocxLegacy() {
         ? calcBlocos.filter(b => b.itens?.some(it => it.desc)).map(b => b.nome || b.servico || '').filter(Boolean)
         : [];
       const _gBlocosUnicos = new Set(prevItens.map(it => it.bloco).filter(Boolean));
-      const _gMulti = _gServicos.length > 1 || _gBlocoNomes.length > 1 || _gBlocosUnicos.size > 1;
+      const _gMulti = separarServico && (_gServicos.length > 1 || _gBlocoNomes.length > 1 || _gBlocosUnicos.size > 1);
       const _gSubToSvc = {};
       _gSvcRaw.split(' | ').forEach(parte => {
         const nome = parte.split('(')[0].trim();
@@ -17388,7 +17470,12 @@ function _prevExportarWordDocxLegacy() {
       });
       const grupos = {};
       prevItens.forEach(it => {
-        const svc = subToSvc[it.desc] || it.bloco || servicos[0] || 'Geral';
+        // FIX issue 4 — agrupar PELO BLOCO (serviço principal) primeiro.
+        // Antes usava subToSvc[it.desc], que colidia quando o mesmo subserviço
+        // (ex.: "Projeto de SPDA") aparecia em vários serviços principais,
+        // jogando tudo num bloco só no Word. it.bloco identifica a tabela de
+        // origem corretamente.
+        const svc = it.bloco || subToSvc[it.desc] || servicos[0] || 'Geral';
         if (!grupos[svc]) grupos[svc] = { itens: [], total: 0 };
         grupos[svc].itens.push(it);
         grupos[svc].total += (it.qtd||0) * (it.unit||0);
@@ -17419,7 +17506,7 @@ function _prevExportarWordDocxLegacy() {
         if (sm) sm[1].split(',').forEach(s => { _dSubToSvc[s.trim()] = nome; });
         else _dSubToSvc[nome] = nome;
       });
-      const _dMulti = _dServicos.length > 1 || _dBlocoNomes.length > 1 || _dBlocosUnicos.size > 1;
+      const _dMulti = separarServico && (_dServicos.length > 1 || _dBlocoNomes.length > 1 || _dBlocosUnicos.size > 1);
       
       if (_dMulti && modPreco === 'por-item') {
         // Agrupar por serviço principal
@@ -19625,6 +19712,28 @@ function notifTabSwitch(tab) {
 }
 
 // ═══ ABA AGENDA — Follow-ups e reuniões agendadas ═══
+// FIX issue 3 — marcação de follow-up como "OK / resolvido".
+// Persistido por dia (mesma lógica das notificações lidas). Itens marcados
+// somem da lista e deixam de contar no sino.
+function _agendaOkKey() { return 'agenda_ok_' + new Date().toISOString().split('T')[0]; }
+let _agendaOk = (() => { try { return JSON.parse(localStorage.getItem(_agendaOkKey()) || '[]'); } catch(_){ return []; } })();
+function _agendaItemKey(id, data) { return String(id||'') + '|' + String(data||''); }
+function notifAgendaMarcarOk(id, data) {
+  const k = _agendaItemKey(id, data);
+  if (!_agendaOk.includes(k)) {
+    _agendaOk.push(k);
+    try { localStorage.setItem(_agendaOkKey(), JSON.stringify(_agendaOk)); } catch(_){}
+  }
+  if (typeof notifRenderAgenda === 'function') notifRenderAgenda();
+  if (typeof notifAtualizarBadge === 'function') setTimeout(notifAtualizarBadge, 50);
+  if (typeof toast === 'function') toast('✅ Follow-up marcado como OK', 'success');
+}
+function notifAgendaDesfazerOk(id, data) {
+  const k = _agendaItemKey(id, data);
+  _agendaOk = _agendaOk.filter(x => x !== k);
+  try { localStorage.setItem(_agendaOkKey(), JSON.stringify(_agendaOk)); } catch(_){}
+  if (typeof notifRenderAgenda === 'function') notifRenderAgenda();
+}
 function notifRenderAgenda() {
   const wrap = document.getElementById('notif-agenda');
   if (!wrap) return;
@@ -19653,12 +19762,33 @@ function notifRenderAgenda() {
 
   items.sort((a, b) => a.diff - b.diff);
 
-  if (!items.length) {
+  // FIX issue 3 — separar concluídos (marcados como OK hoje)
+  const _isOk = it => _agendaOk.includes(_agendaItemKey(it.id, it.data));
+  const pendentes  = items.filter(it => !_isOk(it));
+  const concluidos = items.filter(_isOk);
+
+  if (!pendentes.length && !concluidos.length) {
     wrap.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:12px">📅 Nenhum follow-up agendado nos próximos 14 dias</div>';
     return;
   }
 
-  wrap.innerHTML = items.map(it => `
+  const _esc = s => String(s||'').replace(/'/g,"\\'");
+  const linhaConcluidos = concluidos.length ? `
+    <div style="margin-top:8px;padding:8px 10px;border-radius:7px;background:var(--s2);border:1px dashed var(--border)">
+      <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">✅ Concluídos hoje (${concluidos.length})</div>
+      ${concluidos.map(it => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--text3);padding:2px 0">
+          <span style="text-decoration:line-through">${it.cliente} · ${it.data}</span>
+          <button onclick="notifAgendaDesfazerOk('${_esc(it.id)}','${_esc(it.data)}')" class="btn btn-ghost" style="padding:1px 6px;font-size:10px;color:var(--steel);border:1px solid var(--steel)">↩ Desfazer</button>
+        </div>`).join('')}
+    </div>` : '';
+
+  if (!pendentes.length) {
+    wrap.innerHTML = '<div style="padding:14px;text-align:center;color:var(--teal);font-size:12px;font-weight:600">✅ Todos os follow-ups do período foram resolvidos</div>' + linhaConcluidos;
+    return;
+  }
+
+  wrap.innerHTML = pendentes.map(it => `
     <div style="padding:8px 10px;margin-bottom:4px;border-radius:7px;background:var(--s3);border-left:3px solid var(--${it.cor})">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
@@ -19667,12 +19797,13 @@ function notifRenderAgenda() {
         </div>
         <span style="font-size:10px;color:var(--text3)">#${it.id||''}</span>
       </div>
-      <div style="display:flex;gap:4px;margin-top:6px">
-        ${it.email ? `<button onclick="notifEnviarFollowUp('${it.email.replace(/'/g,"\\'")}','${it.cliente.replace(/'/g,"\\'")}','${(it.contato||'').replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--teal);border:1px solid var(--teal)">📧 E-mail</button>` : ''}
+      <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+        ${it.email ? `<button onclick="notifEnviarFollowUp('${_esc(it.email)}','${_esc(it.cliente)}','${_esc(it.contato)}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--teal);border:1px solid var(--teal)">📧 E-mail</button>` : ''}
         <button onclick="window.open('https://wa.me/55${(it.canal||'').replace(/\D/g,'')}','_blank')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--green);border:1px solid var(--green)">💬 WhatsApp</button>
-        <button onclick="notifAgendarCalendar('${it.data}','Follow-up: ${it.cliente.replace(/'/g,"\\'")}','${it.email.replace(/'/g,"\\'")}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--steel);border:1px solid var(--steel)">📅 Calendar</button>
+        <button onclick="notifAgendarCalendar('${_esc(it.data)}','Follow-up: ${_esc(it.cliente)}','${_esc(it.email)}')" class="btn btn-ghost" style="padding:2px 6px;font-size:10px;color:var(--steel);border:1px solid var(--steel)">📅 Calendar</button>
+        <button onclick="notifAgendaMarcarOk('${_esc(it.id)}','${_esc(it.data)}')" class="btn btn-ghost" style="padding:2px 8px;font-size:10px;color:var(--green);border:1px solid var(--green);font-weight:700;margin-left:auto">✓ OK</button>
       </div>
-    </div>`).join('');
+    </div>`).join('') + linhaConcluidos;
 }
 
 // ═══ ABA PAGAMENTOS — Despesas a pagar ═══
@@ -23071,6 +23202,15 @@ function npDuplicarProposta(idx) {
   calcBlocos = [];
   npContatos = [];
   npServicos = [];
+  // FIX issue 7 — limpar custos ocultos/comissões em memória ao duplicar.
+  // O hook consolidado re-injeta apenas os custos operacionais da proposta
+  // original (sem comissões) já com a chave da NOVA proposta.
+  try {
+    if (typeof NP_ITENS_OCULTOS !== 'undefined') NP_ITENS_OCULTOS.length = 0;
+    window._ocultosOwnerId = null;
+    if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+    if (typeof _npOcultosAtualizarResumo === 'function') _npOcultosAtualizarResumo();
+  } catch(_){}
 
   // FIX issue 1: voltar para o Step 1 e limpar campos das outras steps
   if (typeof _npCurrentStep !== 'undefined') _npCurrentStep = 1;
@@ -23125,9 +23265,31 @@ function npDuplicarProposta(idx) {
     if (el('np-fantasia')) el('np-fantasia').value = rSnap[CRM_COL.FANTASIA] || '';
     if (el('np-endereco')) el('np-endereco').value = rSnap[CRM_COL.ENDERECO] || '';
     if (el('np-cep')) el('np-cep').value = rSnap[CRM_COL.CEP] || '';
-    // Tentar extrair município do endereço
-    const endParts = (rSnap[CRM_COL.ENDERECO]||'').split(' - ');
-    if (el('np-municipio') && endParts.length > 1) el('np-municipio').value = endParts[endParts.length-1].trim();
+    // FIX issue 6 — MUNICÍPIO ao duplicar:
+    // O município não tem coluna própria no CRM; ele fica embutido no "nome
+    // composto" (coluna 5 = id _ nomePadrao _ razao _ MUNICIPIO _ pessoa) e
+    // no endereço (Cidade / UF). Tentamos recuperar de várias fontes; se nada
+    // funcionar, o lookup de CNPJ no final preenche automaticamente.
+    if (el('np-municipio')) {
+      let _mun = '';
+      // 1) endereço no formato "... - Cidade / UF" ou "Cidade / UF"
+      const _end = (rSnap[CRM_COL.ENDERECO] || '').toString();
+      const _mEnd = _end.match(/([A-Za-zÀ-ÿ' .]+\/\s*[A-Z]{2})\s*$/);
+      if (_mEnd) _mun = _mEnd[1].trim();
+      // 2) nome composto (coluna 5): pega o trecho que parece "Cidade / UF"
+      if (!_mun) {
+        const _partes = (rSnap[5] || '').toString().split(' _ ').map(s => s.trim());
+        const _cand = _partes.find(p => /\/\s*[A-Z]{2}$/.test(p)) ||
+                      _partes.find(p => /^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ' ]+$/.test(p) && p.length <= 40 && p !== (rSnap[CRM_COL.RAZAO]||'').toUpperCase());
+        if (_cand) _mun = _cand;
+      }
+      // 3) fallback antigo: último trecho após " - "
+      if (!_mun) {
+        const endParts = _end.split(' - ');
+        if (endParts.length > 1) _mun = endParts[endParts.length - 1].trim();
+      }
+      if (_mun) el('np-municipio').value = _mun;
+    }
 
     // Copiar serviços e subserviços
     const servicoRaw = rSnap[CRM_COL.SERVICO] || '';
@@ -23180,7 +23342,30 @@ function npDuplicarProposta(idx) {
       const email2 = rSnap[CRM_COL.EMAIL2] || '';
       if (cont2) npContatos.push({ nome: cont2, email: email2, telefone: '', cargo: '', area: '', whatsapp: '' });
     }
+    // FIX issue 6 — garantir e-mail do contato principal mesmo quando a aba
+    // CONTATOS não tinha e-mail salvo: puxa do CRM (EMAIL / EMAIL2).
+    if (!npContatos.length) npContatos = [{ nome:'', email:'', telefone:'', cargo:'', area:'Geral', whatsapp:'' }];
+    if (!npContatos[0].email) {
+      npContatos[0].email = rSnap[CRM_COL.EMAIL] || rSnap[CRM_COL.EMAIL2] || '';
+    }
     if (typeof npRenderContatos === 'function') npRenderContatos();
+
+    // FIX issue 6 — ENDEREÇO + MUNICÍPIO: se ficaram vazios após a cópia e há
+    // CNPJ válido, dispara o lookup na Receita para autopreencher (sem
+    // sobrescrever razão/fantasia que o usuário possa ter ajustado).
+    try {
+      const _cnpjDig = (rSnap[CRM_COL.CNPJ] || '').toString().replace(/\D/g, '');
+      if (_cnpjDig.length === 14 && typeof _fetchCNPJData === 'function') {
+        const _camposLookup = {};
+        if (el('np-endereco')  && !el('np-endereco').value.trim())  _camposLookup.endereco  = 'np-endereco';
+        if (el('np-municipio') && !el('np-municipio').value.trim()) _camposLookup.municipio = 'np-municipio';
+        if (Object.keys(_camposLookup).length) {
+          _fetchCNPJData(_cnpjDig, _camposLookup, null)
+            .then(() => { if (typeof npAtualizarNomeComposto === 'function') npAtualizarNomeComposto(); })
+            .catch(() => {});
+        }
+      }
+    } catch(_){}
 
     // Copiar canal
     if (el('np-canal')) {
@@ -23944,6 +24129,21 @@ function npAddComissaoOculta() {
   _saveItensOcultos();
 }
 
+// FIX issue 7 — Remover item oculto/comissão de forma DEFINITIVA.
+// O onclick antigo só dava splice + render, sem persistir. Resultado: o
+// polling/recarregamento ressuscitava o item apagado (ex.: comissão R$ 600).
+// Aqui apagamos, persistimos imediatamente (memória + chave por-proposta) e
+// recalculamos o resumo financeiro.
+function npRemoverItemOculto(i) {
+  if (i < 0 || i >= NP_ITENS_OCULTOS.length) return;
+  NP_ITENS_OCULTOS.splice(i, 1);
+  // Persistir já — garante que reload/polling não traga o item de volta
+  if (typeof _saveItensOcultos === 'function') _saveItensOcultos();
+  try { if (typeof window.aplicaOcultosSalvar === 'function') window.aplicaOcultosSalvar(); } catch(_){}
+  npRenderItensOcultos();
+  if (typeof _npOcultosAtualizarResumo === 'function') _npOcultosAtualizarResumo();
+}
+
 // Backfill default somaProposta=true em itens antigos
 (function _migraSomaProposta(){
   if (typeof NP_ITENS_OCULTOS === 'undefined' || !Array.isArray(NP_ITENS_OCULTOS)) return;
@@ -24105,7 +24305,7 @@ function npRenderItensOcultos() {
               oninput="NP_ITENS_OCULTOS[${i}].valor=parseFloat(this.value)||0;_saveItensOcultos();_npOcultosAtualizarResumo()"
               style="width:110px;background:${cor}15;border:2px solid ${cor}55;border-radius:5px;color:${cor};font-family:monospace;font-size:14px;font-weight:800;padding:5px 8px 5px 30px;text-align:right">
           </div>
-          <button onclick="NP_ITENS_OCULTOS.splice(${i},1);npRenderItensOcultos()" style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:16px;padding:2px 6px;font-weight:700">✕</button>
+          <button onclick="npRemoverItemOculto(${i})" style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:16px;padding:2px 6px;font-weight:700">✕</button>
         </div>`;
       }).join('');
     }
@@ -24142,7 +24342,7 @@ function npRenderItensOcultos() {
               oninput="NP_ITENS_OCULTOS[${i}].valor=parseFloat(this.value)||0;_saveItensOcultos();_npOcultosAtualizarResumo()"
               style="width:110px;background:rgba(240,165,0,0.1);border:2px solid rgba(240,165,0,0.4);border-radius:5px;color:var(--gold);font-family:monospace;font-size:14px;font-weight:800;padding:5px 8px 5px 30px;text-align:right">
           </div>
-          <button onclick="NP_ITENS_OCULTOS.splice(${i},1);npRenderItensOcultos()" style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:16px;padding:2px 6px;font-weight:700">✕</button>
+          <button onclick="npRemoverItemOculto(${i})" style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:16px;padding:2px 6px;font-weight:700">✕</button>
         </div>`;
       }).join('');
     }
@@ -26556,6 +26756,12 @@ window.addEventListener('load', () => {
     return npId;
   }
 
+  // FIX issue 7 — "dono" atual da lista NP_ITENS_OCULTOS em memória.
+  // Sem isso, ao trocar de proposta (abrir/duplicar/revisar), os itens da
+  // proposta anterior que ainda estavam na memória eram "migrados" para a
+  // nova proposta, contaminando o resumo (ex.: comissão R$ 600 reaparecendo).
+  window._ocultosOwnerId = window._ocultosOwnerId || null;
+
   function _ocultosSalvarPorProposta() {
     const id = _ocultosIdAtivo();
     if (!id) return; // sem id, mantém na chave global (modo legacy)
@@ -26565,6 +26771,7 @@ window.addEventListener('load', () => {
       if (typeof Storage !== 'undefined') Storage.prototype.__bypass = true;
       localStorage.setItem('np_itens_ocultos_' + id, JSON.stringify(NP_ITENS_OCULTOS));
       if (typeof Storage !== 'undefined') Storage.prototype.__bypass = false;
+      window._ocultosOwnerId = id; // a lista em memória passa a pertencer a esta proposta
     } catch(_){}
   }
 
@@ -26574,18 +26781,29 @@ window.addEventListener('load', () => {
     let raw = null;
     try { raw = localStorage.getItem('np_itens_ocultos_' + id); } catch(_){}
     if (!raw) {
-      // Sem dados específicos da proposta — verificar se é uma proposta nova
-      // ou se simplesmente nunca tivemos dados por-proposta para ela.
-      // FIX: NÃO limpar a lista se ainda há itens em NP_ITENS_OCULTOS — o
-      // usuário pode estar trabalhando neles e ainda não ter sido salvo
-      // (race condition entre cadastrar e mudar de tela).
-      // Em vez disso, MIGRAR os custos atuais para a chave por-proposta.
+      // Não há dados salvos para ESTA proposta.
       if (typeof NP_ITENS_OCULTOS !== 'undefined' && NP_ITENS_OCULTOS.length > 0) {
-        try {
-          localStorage.setItem('np_itens_ocultos_' + id, JSON.stringify(NP_ITENS_OCULTOS));
-          console.log('[ocultos] migrado #' + id + ': ' + NP_ITENS_OCULTOS.length + ' item(ns) (de chave global)');
+        if (window._ocultosOwnerId === id || window._ocultosOwnerId === null) {
+          // A lista em memória pertence a esta proposta (acabou de ser
+          // cadastrada e ainda não foi persistida) → migrar para a chave dela.
+          try {
+            localStorage.setItem('np_itens_ocultos_' + id, JSON.stringify(NP_ITENS_OCULTOS));
+            window._ocultosOwnerId = id;
+            console.log('[ocultos] migrado #' + id + ': ' + NP_ITENS_OCULTOS.length + ' item(ns) (de chave global)');
+            return true;
+          } catch(_){}
+        } else {
+          // A lista pertence a OUTRA proposta → limpar para não contaminar.
+          NP_ITENS_OCULTOS.length = 0;
+          window._ocultosOwnerId = id;
+          if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+          if (typeof _npOcultosAtualizarResumo === 'function') _npOcultosAtualizarResumo();
+          console.log('[ocultos] proposta #' + id + ' sem custos salvos → lista limpa (era da #' + window._ocultosOwnerId + ')');
           return true;
-        } catch(_){}
+        }
+      } else {
+        // Memória já vazia → apenas marca o dono.
+        window._ocultosOwnerId = id;
       }
       return false;
     }
@@ -26594,7 +26812,9 @@ window.addEventListener('load', () => {
       if (Array.isArray(arr) && typeof NP_ITENS_OCULTOS !== 'undefined') {
         NP_ITENS_OCULTOS.length = 0;
         arr.forEach(it => NP_ITENS_OCULTOS.push(it));
+        window._ocultosOwnerId = id;
         if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+        if (typeof _npOcultosAtualizarResumo === 'function') _npOcultosAtualizarResumo();
         console.log('[ocultos] carregado #' + id + ': ' + arr.length + ' item(ns)');
         return true;
       }
@@ -26720,19 +26940,36 @@ window.addEventListener('load', () => {
             console.log('[duplicar][' + delay + 'ms] calc_meta aplicada #' + idOriginal + ' → #' + novoId);
           }
           if (ocultosJSON) {
-            // RE-MARCAR todos como somaProposta=true — ao duplicar, o usuário
-            // deve decidir novamente se quer aplicar/ocultar os custos
-            let ocultosLimpos = ocultosJSON;
+            // FIX issue 7 — Ao DUPLICAR (proposta nova, normalmente outro
+            // cliente) NÃO arrastar comissões: elas são específicas do negócio
+            // original (ex.: "Elcione R$ 600"). Mantemos apenas custos
+            // operacionais (deslocamento, material, etc.), que costumam ser
+            // reaproveitáveis, e re-marcamos somaProposta=true para o usuário
+            // decidir de novo. Comissões devem ser recadastradas na nova proposta.
+            let ocultosLimpos = '[]';
+            let nCarregados = 0;
             try {
               const arr = JSON.parse(ocultosJSON);
               if (Array.isArray(arr)) {
-                arr.forEach(it => { if (it && typeof it === 'object') it.somaProposta = true; });
-                ocultosLimpos = JSON.stringify(arr);
+                const filtrados = arr.filter(it =>
+                  it && typeof it === 'object' &&
+                  it.tipo !== 'Comissão' && it.tipo !== 'Representante');
+                filtrados.forEach(it => { it.somaProposta = true; });
+                nCarregados = filtrados.length;
+                ocultosLimpos = JSON.stringify(filtrados);
               }
             } catch(_){}
-            localStorage.setItem('np_itens_ocultos_' + novoId, ocultosLimpos);
+            if (nCarregados > 0) {
+              localStorage.setItem('np_itens_ocultos_' + novoId, ocultosLimpos);
+            } else {
+              // Nada a herdar (só havia comissões) → garante chave vazia
+              try { localStorage.removeItem('np_itens_ocultos_' + novoId); } catch(_){}
+              if (typeof NP_ITENS_OCULTOS !== 'undefined') NP_ITENS_OCULTOS.length = 0;
+            }
+            window._ocultosOwnerId = novoId;
             if (typeof _ocultosCarregarPorProposta === 'function') _ocultosCarregarPorProposta(novoId);
-            console.log('[duplicar][' + delay + 'ms] ocultos aplicados #' + idOriginal + ' → #' + novoId + ' (somaProposta restaurado)');
+            if (typeof _npOcultosAtualizarResumo === 'function') _npOcultosAtualizarResumo();
+            console.log('[duplicar][' + delay + 'ms] ocultos: ' + nCarregados + ' custo(s) operacional(is) herdado(s), comissões descartadas #' + idOriginal + ' → #' + novoId);
           }
         } catch(e) { console.warn('[duplicar] erro aplicar:', e); }
       }, delay);
