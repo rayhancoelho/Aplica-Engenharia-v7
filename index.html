@@ -6197,8 +6197,21 @@ window.addEventListener('load', () => {
 
 // Callback do GSI definido no final do documento junto ao script src
 
+function ensureTokenClient() {
+  if (tokenClient) return tokenClient;
+  if (!CONFIG.CLIENT_ID || !window.google?.accounts?.oauth2) return null;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CONFIG.CLIENT_ID,
+    scope: CONFIG.SCOPES,
+    callback: () => {} // sobrescrito por quem chamar requestAccessToken
+  });
+  return tokenClient;
+}
+
 function maybeInit() {
   if (!gapiInited || !gisInited) return;
+
+  ensureTokenClient();
 
   // Verificar se já tem token salvo
   const saved = sessionStorage.getItem('gtoken');
@@ -6250,27 +6263,69 @@ function signIn() {
   }
 
   try {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CONFIG.CLIENT_ID,
-      scope: CONFIG.SCOPES,
-      callback: (resp) => {
-        if (resp.error) {
-          toast('Erro no login: ' + resp.error, 'error');
-          return;
-        }
-        accessToken = resp.access_token;
-        sessionStorage.setItem('gtoken', accessToken);
-        gapi.client.setToken({ access_token: accessToken });
-        fetchUserInfo();
-        showApp();
-        syncData();
+    const tc = ensureTokenClient();
+    if (!tc) { toast('Falha ao iniciar OAuth', 'error'); return; }
+    tc.callback = (resp) => {
+      if (resp.error) {
+        toast('Erro no login: ' + resp.error, 'error');
+        return;
       }
-    });
-    tokenClient.requestAccessToken({ prompt: '' });
+      accessToken = resp.access_token;
+      sessionStorage.setItem('gtoken', accessToken);
+      gapi.client.setToken({ access_token: accessToken });
+      fetchUserInfo();
+      showApp();
+      syncData();
+    };
+    tc.requestAccessToken({ prompt: '' });
   } catch(e) {
     toast('Erro ao iniciar login: ' + e.message, 'error');
     console.error('signIn error:', e);
   }
+}
+
+// Renova o access token silenciosamente (sem popup) usando o tokenClient já inicializado.
+// Promise resolve com novo token, rejeita se não for possível (ex: precisa re-login).
+function refreshAccessToken() {
+  return new Promise((resolve, reject) => {
+    const tc = ensureTokenClient();
+    if (!tc) { reject(new Error('OAuth não inicializado — faça login')); return; }
+    tc.callback = (resp) => {
+      if (resp.error) { reject(new Error(resp.error)); return; }
+      accessToken = resp.access_token;
+      sessionStorage.setItem('gtoken', accessToken);
+      try { gapi.client.setToken({ access_token: accessToken }); } catch(_) {}
+      resolve(accessToken);
+    };
+    try { tc.requestAccessToken({ prompt: '' }); } catch(e) { reject(e); }
+  });
+}
+
+// Wrapper de fetch que adiciona Authorization e, em 401, renova o token e retenta 1x.
+async function authedFetch(url, options = {}, _retried = false) {
+  if (!accessToken) {
+    try { await refreshAccessToken(); } catch(e) { throw new Error('Sessão expirada — faça login novamente'); }
+  }
+  const headers = Object.assign({}, options.headers || {}, {
+    Authorization: 'Bearer ' + accessToken
+  });
+  const resp = await fetch(url, { ...options, headers });
+  if (resp.status === 401 && !_retried) {
+    sessionStorage.removeItem('gtoken');
+    accessToken = null;
+    try {
+      await refreshAccessToken();
+    } catch(e) {
+      // Não conseguiu renovar silenciosamente — forçar login manual
+      const loginEl = document.getElementById('login-screen');
+      if (loginEl) loginEl.style.display = 'flex';
+      const appEl = document.getElementById('app');
+      if (appEl) appEl.style.display = 'none';
+      throw new Error('Sessão expirada — faça login novamente');
+    }
+    return authedFetch(url, options, true);
+  }
+  return resp;
 }
 
 function signOut() {
@@ -6286,9 +6341,7 @@ function signOut() {
 
 async function fetchUserInfo() {
   try {
-    const resp = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: 'Bearer ' + accessToken }
-    });
+    const resp = await authedFetch('https://www.googleapis.com/oauth2/v2/userinfo');
     const info = await resp.json();
     document.getElementById('user-name').textContent = info.given_name || info.name || 'Gerson';
     if (info.picture) {
@@ -6427,9 +6480,7 @@ async function syncData() {
 
 async function sheetsGet(sheetName, range) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(sheetName + '!' + range)}`;
-  const resp = await fetch(url, {
-    headers: { Authorization: 'Bearer ' + accessToken }
-  });
+  const resp = await authedFetch(url);
   if (!resp.ok) throw new Error(`Sheets API ${resp.status}: ${sheetName}`);
   const data = await resp.json();
   return data.values || [];
@@ -6437,26 +6488,23 @@ async function sheetsGet(sheetName, range) {
 
 async function sheetsAppend(sheetName, values) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(sheetName + '!A:A')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const resp = await fetch(url, {
+  const resp = await authedFetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + accessToken,
-      'Content-Type': 'application/json'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values })
   });
   if (!resp.ok) {
-    const err = await resp.json();
-    throw new Error(err.error?.message || 'Erro ao salvar');
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || ('Erro ao salvar (' + resp.status + ')'));
   }
   return await resp.json();
 }
 
 async function sheetsPut(sheetName, range, values) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(sheetName + '!' + range)}?valueInputOption=USER_ENTERED`;
-  const resp = await fetch(url, {
+  const resp = await authedFetch(url, {
     method: 'PUT',
-    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ range: sheetName + '!' + range, majorDimension: 'ROWS', values })
   });
   if (!resp.ok) throw new Error(`sheetsPut ${resp.status}: ${sheetName}`);
@@ -6764,11 +6812,12 @@ async function updateStatus(idx, novoStatus) {
     const rowReal = idx + 2;
     const range = `${CONFIG.SHEETS.CRM}!M${rowReal}`;
     const url   = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
-    await fetch(url, {
+    const r = await authedFetch(url, {
       method: 'PUT',
-      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ values: [[novoStatus]] })
     });
+    if (!r.ok) throw new Error('Sheets API ' + r.status);
     if (DATA.crm[idx]) DATA.crm[idx][CRM_COL.STATUS] = novoStatus;
     renderDashboardCRM();
     renderCRMTable();
@@ -7380,9 +7429,8 @@ async function loadCalendar() {
     const future = new Date(Date.now() + 30*24*60*60*1000).toISOString();
     const calId  = encodeURIComponent(CONFIG.CALENDAR_ID);
 
-    const resp = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${now}&timeMax=${future}&orderBy=startTime&singleEvents=true&maxResults=15`,
-      { headers: { Authorization: 'Bearer ' + accessToken } }
+    const resp = await authedFetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${calId}/events?timeMin=${now}&timeMax=${future}&orderBy=startTime&singleEvents=true&maxResults=15`
     );
 
     if (!resp.ok) throw new Error('Calendar API: ' + resp.status);
@@ -7447,9 +7495,9 @@ async function createCalendarEvent() {
     const end   = new Date(start.getTime() + 60*60*1000); // 1h
 
     const calId = encodeURIComponent(CONFIG.CALENDAR_ID);
-    const resp  = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
+    const resp  = await authedFetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         summary:     title,
         description: desc,
@@ -7916,11 +7964,12 @@ async function pipeDrop(e, targetStatus) {
       const rowReal = idx + 2;
       const range = `${CONFIG.SHEETS.CRM}!M${rowReal}`;
       const url   = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
-      await fetch(url, {
+      const r = await authedFetch(url, {
         method: 'PUT',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [[novoStatus]] })
       });
+      if (!r.ok) throw new Error('Sheets API ' + r.status);
       toast(`✅ Movido para "${novoStatus}"`, 'success');
     } catch(err) {
       toast('Erro ao salvar status: ' + err.message, 'error');
@@ -8071,11 +8120,12 @@ async function salvarEdicao() {
       ];
 
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values:batchUpdate`;
-      await fetch(url, {
+      const r = await authedFetch(url, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates })
       });
+      if (!r.ok) throw new Error('Sheets API ' + r.status);
 
       // Transferência automática CRM → FINANCEIRO ao marcar Ganha
       if (editStatusSelected === 'Ganha' && statusAnterior !== 'Ganha') {
@@ -8351,11 +8401,12 @@ async function calcSalvarNoSheets() {
     try {
       const rowReal = idx + 2;
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEETS.CRM + '!H' + rowReal)}?valueInputOption=USER_ENTERED`;
-      await fetch(url, {
+      const r = await authedFetch(url, {
         method: 'PUT',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [[liq.toFixed(2)]] })
       });
+      if (!r.ok) throw new Error('Sheets API ' + r.status);
       toast(`✅ Valor R$ ${liq.toFixed(2)} salvo na proposta #${idProp}`, 'success');
     } catch(e) {
       toast('Erro: ' + e.message, 'error');
@@ -9110,7 +9161,7 @@ async function salvarRevisao() {
       if (CONFIG.SHEET_ID && accessToken) {
         try {
           const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEETS.CRM+'!H'+(idx+2))}?valueInputOption=USER_ENTERED`;
-          await fetch(url, { method:'PUT', headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'}, body:JSON.stringify({values:[[valNovo]]}) });
+          await authedFetch(url, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({values:[[valNovo]]}) });
         } catch(e) {}
       }
       renderDashboardCRM(); renderCRMTable(); renderPipeline();
@@ -13587,9 +13638,9 @@ async function prevMarcarEnviada() {
     try {
       const rowReal = prevIdxCRM + 2;
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEETS.CRM + '!M' + rowReal)}?valueInputOption=USER_ENTERED`;
-      await fetch(url, {
+      await authedFetch(url, {
         method: 'PUT',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [['Enviada']] })
       });
     } catch(e) { console.warn('Erro ao salvar status:', e); }
