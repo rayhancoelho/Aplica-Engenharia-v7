@@ -6151,13 +6151,13 @@ const CRM_COL = {
   CONTATO:   30,   // AE
   EMAIL:     31,   // AF
   FONE:      32,   // AG
-  OBS:       35,   // AJ
-  REVISAO:   36,   // AK
-  FANTASIA:  37,   // AL
-  ENDERECO:  38,   // AM
-  CEP:       39,   // AN
-  EMAIL2:    40,   // AO
-  CONTATO2:  42,   // AQ
+  OBS:       36,   // AK
+  REVISAO:   37,   // AL
+  FANTASIA:  38,   // AM
+  ENDERECO:  39,   // AN
+  CEP:       40,   // AO
+  EMAIL2:    41,   // AP
+  CONTATO2:  43,   // AR
 };
 
 // Cache de dados
@@ -8116,7 +8116,7 @@ async function salvarEdicao() {
         { range: `${CONFIG.SHEETS.CRM}!L${rowReal}`,  values: [[r[CRM_COL.FOLLOWUP]]] },
         { range: `${CONFIG.SHEETS.CRM}!M${rowReal}`,  values: [[r[CRM_COL.STATUS]]]   },
         { range: `${CONFIG.SHEETS.CRM}!AC${rowReal}`, values: [[r[CRM_COL.RETORNO]]]  },
-        { range: `${CONFIG.SHEETS.CRM}!AJ${rowReal}`, values: [[r[CRM_COL.OBS]]]      },
+        { range: `${CONFIG.SHEETS.CRM}!AK${rowReal}`, values: [[r[CRM_COL.OBS]]]      },
       ];
 
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values:batchUpdate`;
