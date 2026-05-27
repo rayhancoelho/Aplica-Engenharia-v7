@@ -6091,9 +6091,9 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
 ═══════════════════════════════════════════ */
 const CONFIG = {
   // Hardcoded — não precisa mais configurar via UI
-  SHEET_ID:    localStorage.getItem('sheet_id')    || '102NFCEWMUY_VMxRVwUJYYmrrRedDv4GqiZFZ9YgPwoQ',
-  CLIENT_ID:   localStorage.getItem('client_id')   || '608889217139-gc5dmnea8o7n59b8hg48bieu1cg01udi.apps.googleusercontent.com',
-  CALENDAR_ID: localStorage.getItem('cal_id')      || 'primary',
+  SHEET_ID:    (localStorage.getItem('sheet_id')   || '102NFCEWMUY_VMxRVwUJYYmrrRedDv4GqiZFZ9YgPwoQ').trim(),
+  CLIENT_ID:   (localStorage.getItem('client_id')  || '608889217139-gc5dmnea8o7n59b8hg48bieu1cg01udi.apps.googleusercontent.com').trim(),
+  CALENDAR_ID: (localStorage.getItem('cal_id')     || 'primary').trim(),
 
   // Escopos necessários
   SCOPES: [
