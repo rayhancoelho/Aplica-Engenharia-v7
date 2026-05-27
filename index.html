@@ -7506,9 +7506,14 @@ async function agendarVisita() {
    CONFIG
 ═══════════════════════════════════════════ */
 function loadConfigFromStorage() {
-  const sheetId  = localStorage.getItem('sheet_id')  || '';
-  const clientId = localStorage.getItem('client_id') || '';
-  const calId    = localStorage.getItem('cal_id')    || 'primary';
+  const DEFAULTS = {
+    sheet_id:  '102NFCEWMUY_VMxRVwUJYYmrrRedDv4GqiZFZ9YgPwoQ',
+    client_id: '608889217139-gc5dmnea8o7n59b8hg48bieu1cg01udi.apps.googleusercontent.com',
+    cal_id:    'primary',
+  };
+  const sheetId  = ((localStorage.getItem('sheet_id')  || '').trim()) || DEFAULTS.sheet_id;
+  const clientId = ((localStorage.getItem('client_id') || '').trim()) || DEFAULTS.client_id;
+  const calId    = ((localStorage.getItem('cal_id')    || '').trim()) || DEFAULTS.cal_id;
 
   CONFIG.SHEET_ID    = sheetId;
   CONFIG.CLIENT_ID   = clientId;
