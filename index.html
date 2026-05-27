@@ -6114,18 +6114,18 @@ const CONFIG = {
     'https://www.googleapis.com/auth/userinfo.email'
   ].join(' '),
 
-  // Abas da planilha (nomes exatos)
+  // Abas da planilha (nomes exatos — Aplica Engenharia v2026 usa prefixos com emoji)
   SHEETS: {
-    CRM:                 'CRM',
-    FINANCEIRO:          'FINANCEIRO',
-    CLIENTES:            'CLIENTES',
-    PROJETOS:            'PROJETOS',
-    DESPESAS:            'DESPESAS',
-    MARKETING:           'MARKETING',
-    LISTAS:              'LISTAS',
+    CRM:                 '📋 CRM',
+    FINANCEIRO:          '💰 FINANCEIRO',
+    CLIENTES:            '🤝 CLIENTES',
+    PROJETOS:            '📁 PROJETOS',
+    DESPESAS:            '💸 DESPESAS',
+    MARKETING:           '📣 MARKETING',
+    LISTAS:              '📃 CONFIG_LISTAS',
     HISTORICO_PROPOSTAS: 'HISTORICO_PROPOSTAS',
-    HISTORICO_NF:        'HISTORICO_NF',
-    TIMER:               'TIMER',
+    HISTORICO_NF:        '🧾 NOTAS_FISCAIS',
+    TIMER:               '⏱️ TIMER',
     CADASTRO:            'CADASTRO',
   }
 };
@@ -6399,11 +6399,11 @@ async function syncData() {
   try {
     const [crm, fin, cli, proj, desp, mkt] = await Promise.all([
       sheetsGet(CONFIG.SHEETS.CRM,        'A2:AR1000'),
-      sheetsGet(CONFIG.SHEETS.FINANCEIRO,  'A6:P500'),
-      sheetsGet(CONFIG.SHEETS.CLIENTES,    'A5:K200'),
-      sheetsGet(CONFIG.SHEETS.PROJETOS,    'A4:P300'),
-      sheetsGet(CONFIG.SHEETS.DESPESAS,    'A4:L300'),
-      sheetsGet(CONFIG.SHEETS.MARKETING,   'A4:N200'),
+      sheetsGet(CONFIG.SHEETS.FINANCEIRO,  'A2:P500'),
+      sheetsGet(CONFIG.SHEETS.CLIENTES,    'A2:K200'),
+      sheetsGet(CONFIG.SHEETS.PROJETOS,    'A2:P300'),
+      sheetsGet(CONFIG.SHEETS.DESPESAS,    'A2:L300'),
+      sheetsGet(CONFIG.SHEETS.MARKETING,   'A2:N200'),
     ]);
 
     DATA.crm        = crm        || [];
@@ -9093,7 +9093,7 @@ async function salvarRevisao() {
   if (CONFIG.SHEET_ID && accessToken) {
     try {
       const row = [rev.data, rev.proposta, rev.cliente, rev.num, rev.status, rev.val_ant, rev.val_novo, rev.motivo];
-      await sheetsAppend('HISTORICO_PROPOSTAS', [row]);
+      await sheetsAppend(CONFIG.SHEETS.HISTORICO_PROPOSTAS, [row]);
       toast('✅ Revisão salva no Sheets!', 'success');
     } catch(e) {
       toast('Revisão salva localmente (erro Sheets: ' + e.message + ')', 'warning');
@@ -9109,7 +9109,7 @@ async function salvarRevisao() {
       DATA.crm[idx][CRM_COL.VALOR] = valNovo.toString();
       if (CONFIG.SHEET_ID && accessToken) {
         try {
-          const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent('CRM!H'+(idx+2))}?valueInputOption=USER_ENTERED`;
+          const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEETS.CRM+'!H'+(idx+2))}?valueInputOption=USER_ENTERED`;
           await fetch(url, { method:'PUT', headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'}, body:JSON.stringify({values:[[valNovo]]}) });
         } catch(e) {}
       }
@@ -9324,7 +9324,7 @@ async function salvarNF() {
   if (CONFIG.SHEET_ID && accessToken) {
     try {
       const row = [nf.data, nf.num, nf.cliente, nf.servico, nf.valor, nf.status, nf.obs];
-      await sheetsAppend('HISTORICO_NF', [row]);
+      await sheetsAppend(CONFIG.SHEETS.HISTORICO_NF, [row]);
       toast('✅ NF registrada no Sheets!', 'success');
     } catch(e) {
       toast('NF salva localmente', 'warning');
@@ -10165,8 +10165,8 @@ async function timerExportarSheets() {
     const rows = TIMER_LOG.slice(-200).map(e => [
       e.data, e.hora_ini, e.hora_fim, e.duracao_h, e.projeto, e.tipo, e.desc
     ]);
-    await sheetsAppend('TIMER', rows);
-    toast(`✅ ${rows.length} registros exportados para a aba TIMER`, 'success');
+    await sheetsAppend(CONFIG.SHEETS.TIMER, rows);
+    toast(`✅ ${rows.length} registros exportados para a aba ${CONFIG.SHEETS.TIMER}`, 'success');
   } catch(e) {
     toast('Erro: ' + e.message, 'error');
   }
@@ -10805,7 +10805,7 @@ async function f4LancarReceita() {
   // Salvar Sheets
   if (CONFIG.SHEET_ID && accessToken) {
     try {
-      await sheetsAppend(CONFIG.SHEETS.FINANCEIRO || 'FINANCEIRO', [novaRow]);
+      await sheetsAppend(CONFIG.SHEETS.FINANCEIRO, [novaRow]);
       toast('✅ Receita lançada no Sheets!', 'success');
     } catch(e) {
       toast('Salvo localmente (erro Sheets: ' + e.message + ')', 'warning');
@@ -11125,7 +11125,7 @@ async function d4LancarDespesa() {
 
   if (CONFIG.SHEET_ID && accessToken) {
     try {
-      await sheetsAppend(CONFIG.SHEETS.DESPESAS || 'DESPESAS', [novaRow]);
+      await sheetsAppend(CONFIG.SHEETS.DESPESAS, [novaRow]);
       toast('✅ Despesa lançada no Sheets!', 'success');
     } catch(e) {
       toast('Salvo localmente', 'warning');
@@ -11454,7 +11454,7 @@ async function salvarCampanha() {
 
   if (CONFIG.SHEET_ID && accessToken) {
     try {
-      await sheetsAppend('MARKETING', [[camp.data, nome, canal, inv, leads, props, rec, obs]]);
+      await sheetsAppend(CONFIG.SHEETS.MARKETING, [[camp.data, nome, canal, inv, leads, props, rec, obs]]);
       toast('✅ Campanha salva no Sheets!', 'success');
     } catch(e) { toast('Campanha salva localmente', 'warning'); }
   } else {
@@ -11604,7 +11604,7 @@ async function salvarLead() {
 
   if (CONFIG.SHEET_ID && accessToken) {
     try {
-      await sheetsAppend('MARKETING', [[lead.data, empresa, canal, '', '', '', '', `Lead:${temp} - ${cidade}/${uf} - ${obs}`]]);
+      await sheetsAppend(CONFIG.SHEETS.MARKETING, [[lead.data, empresa, canal, '', '', '', '', `Lead:${temp} - ${cidade}/${uf} - ${obs}`]]);
     } catch(e) {}
   }
 
@@ -11769,7 +11769,7 @@ function salvarCadastro() {
 
   // Salvar no Sheets aba CADASTRO (opcional)
   if (CONFIG.SHEET_ID && accessToken) {
-    sheetsAppend('CADASTRO', [Object.values(cadastro)])
+    sheetsAppend(CONFIG.SHEETS.CADASTRO, [Object.values(cadastro)])
       .then(() => toast('✅ Cadastro salvo no Sheets!', 'success'))
       .catch(() => toast('Cadastro salvo localmente (Sheets indisponível)', 'warning'));
   } else {
@@ -16308,7 +16308,7 @@ function comissaoAdicionar() {
     ];
     DATA.despesas.push(despRow);
     if (typeof CONFIG !== 'undefined' && CONFIG.SHEET_ID && typeof accessToken !== 'undefined' && accessToken) {
-      sheetsAppend(CONFIG.SHEETS?.DESPESAS || 'DESPESAS', [despRow]).catch(e => {});
+      sheetsAppend(CONFIG.SHEETS?.DESPESAS, [despRow]).catch(e => {});
     }
   }
 
