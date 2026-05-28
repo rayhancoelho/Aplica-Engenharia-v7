@@ -4424,7 +4424,10 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
         <div class="card" style="margin-bottom:14px">
           <div class="card-header">
             <div class="card-title">📋 Gestão de Serviços, Normas e Textos</div>
-            <button class="btn btn-ghost btn-sm" onclick="cfgAddServico()">+ Novo Serviço</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="cfgExportarTodosParaPlanilha(this)">⬆️ Exportar todos p/ planilha</button>
+              <button class="btn btn-ghost btn-sm" onclick="cfgAddServico()">+ Novo Serviço</button>
+            </div>
           </div>
           <div class="card-body">
             <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
@@ -11815,6 +11818,75 @@ function normaSalvar(item, normas, descricao) {
   localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
 }
 
+// Exporta TODOS os subserviços da tela (normas + textos) para a aba "📐 NORMAS"
+// de uma vez. Não duplica: pula os subserviços que já existem na planilha.
+async function cfgExportarTodosParaPlanilha(btn) {
+  if (!CONFIG.SHEET_ID) { toast('Planilha não configurada.', 'error'); return; }
+  const txtOrig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Exportando...'; }
+  try {
+    // 1) Reúne todos os subserviços (padrão + custom)
+    const todos = { ...SUBCATEGORIAS, ...SERVICOS_CUSTOM };
+    const subservicos = [];
+    Object.values(todos).forEach(arr => (arr || []).forEach(s => {
+      if (s && !subservicos.includes(s)) subservicos.push(s);
+    }));
+
+    // 2) Lê o que já está na planilha para não duplicar
+    const existentes = await sheetsGet('📐 NORMAS', 'A2:A1000');
+    const jaTem = new Set(existentes.map(r => (r[0] || '').trim()));
+
+    // 3) Monta as linhas que faltam
+    const novas = [];
+    subservicos.forEach(sub => {
+      if (jaTem.has(sub.trim())) return;
+      const nd = normaDe(sub); // pega norma+texto atuais (custom ou padrão)
+      novas.push([ sub, nd.normas || '', nd.descricao || '', 'TRUE', '' ]);
+    });
+
+    if (!novas.length) {
+      toast('Tudo já estava na planilha — nada novo para exportar.', 'info');
+      if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; }
+      return;
+    }
+
+    // 4) Grava todas de uma vez (uma única chamada)
+    await sheetsAppend('📐 NORMAS', novas);
+
+    // 5) Atualiza o cache local
+    novas.forEach(l => { NORMAS_CUSTOM[l[0]] = { normas: l[1], descricao: l[2] }; });
+    localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
+
+    toast(`${novas.length} subserviço(s) exportado(s) para a planilha ✅`, 'success');
+  } catch (e) {
+    console.error('Erro ao exportar para a planilha:', e);
+    toast('❌ Falha ao exportar: ' + (e.message || 'erro desconhecido'), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; }
+  }
+}
+
+// Grava (ou atualiza) o subserviço na aba "📐 NORMAS" da planilha.
+// Colunas: A=servico(subserviço)  B=norma  C=descricao  D=custom  E=obs
+async function normaSalvarNaPlanilha(item, normas, descricao) {
+  if (!CONFIG.SHEET_ID) throw new Error('Planilha não configurada (SHEET_ID vazio).');
+  // 1) Ler a aba inteira para descobrir se o subserviço já tem linha
+  const rows = await sheetsGet('📐 NORMAS', 'A2:E1000'); // dados começam na linha 2 (linha 1 = cabeçalho)
+  let foundIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i][0] || '').trim() === item.trim()) { foundIdx = i; break; }
+  }
+  const linha = [[ item, normas, descricao, 'TRUE', '' ]];
+  if (foundIdx >= 0) {
+    // Atualiza a linha existente (a linha real na planilha = foundIdx + 2)
+    const linhaReal = foundIdx + 2;
+    await sheetsPut('📐 NORMAS', `A${linhaReal}:E${linhaReal}`, linha);
+  } else {
+    // Não existe ainda → adiciona uma nova linha
+    await sheetsAppend('📐 NORMAS', linha);
+  }
+}
+
 // ═══ GESTÃO DE SERVIÇOS E NORMAS (Configurações) ═══
 let SERVICOS_CUSTOM = JSON.parse(localStorage.getItem('servicos_custom') || '{}');
 
@@ -11880,13 +11952,25 @@ function cfgEditarSubservico(servico, subservico) {
   document.body.appendChild(overlay);
 }
 
-function cfgSalvarSubservico(subservico, overlay) {
+async function cfgSalvarSubservico(subservico, overlay) {
   const normas = document.getElementById('_cfg-normas')?.value || '';
   const desc = document.getElementById('_cfg-desc')?.value || '';
-  normaSalvar(subservico, normas, desc);
-  overlay.remove();
-  cfgRenderServicos();
-  toast(`"${subservico}" atualizado ✅`, 'success');
+  const btn = overlay.querySelector('.btn-primary');
+  const btnTxtOrig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Salvando...'; }
+  try {
+    // 1) Grava na planilha (obrigatório)
+    await normaSalvarNaPlanilha(subservico, normas, desc);
+    // 2) Atualiza o cache local só depois que a planilha confirmou
+    normaSalvar(subservico, normas, desc);
+    overlay.remove();
+    cfgRenderServicos();
+    toast(`"${subservico}" salvo na planilha ✅`, 'success');
+  } catch (e) {
+    console.error('Erro ao salvar norma na planilha:', e);
+    if (btn) { btn.disabled = false; btn.innerHTML = btnTxtOrig; }
+    toast('❌ Não consegui salvar na planilha: ' + (e.message || 'erro desconhecido'), 'error');
+  }
 }
 
 function cfgAddSubservico(servico) {
