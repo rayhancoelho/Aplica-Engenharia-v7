@@ -11925,6 +11925,47 @@ function cfgRemoverServico(servico) {
   toast('Serviço removido', 'info');
 }
 
+// ── CARREGAR SERVIÇOS E NORMAS DA PLANILHA ────────────────
+// Lê as abas "🔧 SERVICOS" e "📐 NORMAS" e popula SERVICOS_CUSTOM / NORMAS_CUSTOM
+async function cfgCarregarServicosDaPlanilha() {
+  if (!CONFIG.SHEET_ID) return;
+  try {
+    // Aba SERVICOS: colunas A=categoria, B=indice, C=subitens_json (nome entre aspas), D=custom, E=oculto
+    const rowsServ = await sheetsGet('🔧 SERVICOS', 'A2:F500');
+    const agrupado = {};
+    rowsServ.forEach(r => {
+      const categoria = (r[0] || '').trim();
+      let sub = (r[2] || '').trim();
+      const oculto = String(r[4] || '').toUpperCase() === 'TRUE';
+      if (!categoria || categoria === '(oculto)' || oculto) return;
+      // subitens_json vem como texto entre aspas, ex: "Laudo de Aterramento"
+      try { const p = JSON.parse(sub); if (typeof p === 'string') sub = p; } catch (e) {}
+      sub = sub.replace(/^"+|"+$/g, '').trim();
+      if (!sub) return;
+      (agrupado[categoria] = agrupado[categoria] || []).push(sub);
+    });
+    if (Object.keys(agrupado).length) {
+      SERVICOS_CUSTOM = agrupado;
+      localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+    }
+
+    // Aba NORMAS: colunas A=servico(subserviço), B=norma, C=descricao
+    const rowsNorm = await sheetsGet('📐 NORMAS', 'A2:E500');
+    rowsNorm.forEach(r => {
+      const item = (r[0] || '').trim();
+      const norma = (r[1] || '').trim();
+      const desc = (r[2] || '').trim();
+      if (!item) return;
+      NORMAS_CUSTOM[item] = { normas: norma, descricao: desc };
+    });
+    localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
+  } catch (e) {
+    console.warn('Não foi possível carregar Serviços/Normas da planilha:', e);
+    if (typeof toast === 'function') toast('Não consegui ler Serviços da planilha — exibindo dados locais', 'warning');
+  }
+  cfgRenderServicos();
+}
+
 // Renderizar ao abrir config
 setTimeout(cfgRenderServicos, 2000);
 
@@ -16346,6 +16387,7 @@ nav = function(id) {
     setTimeout(() => {
       permissoesRender();
       comissoesRender();
+      cfgCarregarServicosDaPlanilha();
     }, 200);
   }
   if (id === 'equipe') {
