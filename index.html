@@ -4425,6 +4425,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           <div class="card-header">
             <div class="card-title">📋 Gestão de Serviços, Normas e Textos</div>
             <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="cfgBaixarBackup()">💾 Baixar backup</button>
               <button class="btn btn-ghost btn-sm" onclick="cfgExportarTodosParaPlanilha(this)">⬆️ Exportar todos p/ planilha</button>
               <button class="btn btn-ghost btn-sm" onclick="cfgAddServico()">+ Novo Serviço</button>
             </div>
@@ -11868,6 +11869,45 @@ async function cfgExportarTodosParaPlanilha(btn) {
     toast('❌ Falha ao exportar: ' + (e.message || 'erro desconhecido'), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = txtOrig; }
+  }
+}
+
+// Baixa um backup completo (normas + textos + obs + serviços custom) em JSON.
+// Use para guardar uma cópia local de segurança no PC.
+function cfgBaixarBackup() {
+  try {
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    const empresa = (typeof CADASTRO !== 'undefined' && CADASTRO?.fantasia) ? CADASTRO.fantasia.replace(/[^A-Za-z0-9_-]+/g,'_') : 'sistema';
+
+    const backup = {
+      tipo: 'backup_servicos_normas',
+      versao: 1,
+      gerado_em: now.toISOString(),
+      empresa: empresa,
+      contagens: {
+        normas:   Object.keys(NORMAS_CUSTOM || {}).length,
+        servicos: Object.keys(SERVICOS_CUSTOM || {}).length,
+      },
+      NORMAS_CUSTOM:   NORMAS_CUSTOM   || {},
+      SERVICOS_CUSTOM: SERVICOS_CUSTOM || {},
+    };
+
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_${empresa}_normas_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    toast(`Backup salvo (${backup.contagens.normas} normas, ${backup.contagens.servicos} categorias) ✅`, 'success');
+  } catch (e) {
+    console.error('Erro ao gerar backup:', e);
+    toast('❌ Falha ao gerar backup: ' + (e.message || 'erro desconhecido'), 'error');
   }
 }
 
