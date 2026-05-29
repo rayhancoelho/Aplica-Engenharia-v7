@@ -4425,7 +4425,7 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
           <div class="card-header">
             <div class="card-title">📋 Gestão de Serviços, Normas e Textos</div>
             <div style="display:flex;gap:6px">
-              <button class="btn btn-ghost btn-sm" onclick="cfgBaixarBackup()">💾 Baixar backup</button>
+              <button class="btn btn-ghost btn-sm" onclick="cfgBaixarBackup()">💾 Backup completo</button>
               <button class="btn btn-ghost btn-sm" onclick="cfgExportarTodosParaPlanilha(this)">⬆️ Exportar todos p/ planilha</button>
               <button class="btn btn-ghost btn-sm" onclick="cfgAddServico()">+ Novo Serviço</button>
             </div>
@@ -11872,39 +11872,60 @@ async function cfgExportarTodosParaPlanilha(btn) {
   }
 }
 
-// Baixa um backup completo (normas + textos + obs + serviços custom) em JSON.
-// Use para guardar uma cópia local de segurança no PC.
+// BACKUP COMPLETO DO SISTEMA
+// 1) Baixa a planilha inteira (todas as 45 abas) como XLSX, via export do Google.
+// 2) Baixa um JSON com TODO o localStorage (caches: normas, serviços, rascunhos, config, etc).
+// Recomendado fazer periodicamente — é a rede de segurança contra perda de dados.
 function cfgBaixarBackup() {
   try {
+    const SHEET_ID = CONFIG?.SHEET_ID;
+    if (!SHEET_ID) { toast('Planilha não configurada (SHEET_ID vazio).', 'error'); return; }
+
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
     const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}`;
-    const empresa = (typeof CADASTRO !== 'undefined' && CADASTRO?.fantasia) ? CADASTRO.fantasia.replace(/[^A-Za-z0-9_-]+/g,'_') : 'sistema';
+    const empresa = (typeof CADASTRO !== 'undefined' && CADASTRO?.fantasia)
+      ? CADASTRO.fantasia.replace(/[^A-Za-z0-9_-]+/g,'_')
+      : 'sistema';
 
+    // 1) Baixa a planilha completa como XLSX (todas as abas)
+    const xlsxUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=xlsx`;
+    const a1 = document.createElement('a');
+    a1.href = xlsxUrl;
+    a1.download = `backup_${empresa}_planilha_${stamp}.xlsx`;
+    a1.target = '_blank';
+    document.body.appendChild(a1);
+    a1.click();
+    document.body.removeChild(a1);
+
+    // 2) Coleta tudo do localStorage (cache local do navegador)
+    const localData = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      try { localData[k] = localStorage.getItem(k); } catch (e) {}
+    }
     const backup = {
-      tipo: 'backup_servicos_normas',
+      tipo: 'backup_local_completo',
       versao: 1,
       gerado_em: now.toISOString(),
       empresa: empresa,
-      contagens: {
-        normas:   Object.keys(NORMAS_CUSTOM || {}).length,
-        servicos: Object.keys(SERVICOS_CUSTOM || {}).length,
-      },
-      NORMAS_CUSTOM:   NORMAS_CUSTOM   || {},
-      SERVICOS_CUSTOM: SERVICOS_CUSTOM || {},
+      sheet_id: SHEET_ID,
+      total_chaves: Object.keys(localData).length,
+      localStorage: localData,
     };
 
+    // 3) Baixa o JSON do cache local
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `backup_${empresa}_normas_${stamp}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const a2 = document.createElement('a');
+    a2.href = url;
+    a2.download = `backup_${empresa}_local_${stamp}.json`;
+    document.body.appendChild(a2);
+    a2.click();
+    document.body.removeChild(a2);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 
-    toast(`Backup salvo (${backup.contagens.normas} normas, ${backup.contagens.servicos} categorias) ✅`, 'success');
+    toast(`Backup completo: planilha (XLSX) + ${backup.total_chaves} itens locais (JSON) ✅`, 'success');
   } catch (e) {
     console.error('Erro ao gerar backup:', e);
     toast('❌ Falha ao gerar backup: ' + (e.message || 'erro desconhecido'), 'error');
