@@ -8531,7 +8531,7 @@ function prevAtualizar() {
     const nd = normaDe(bi.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
     if (nd.descricao && showDesc) {
-      descricoesSecs.push({ titulo: bi.desc, texto: nd.descricao });
+      descricoesSecs.push({ titulo: bi.desc, texto: nd.descricao, obs: nd.obs || '' });
     }
   });
   // Também checar prevItens
@@ -8539,7 +8539,7 @@ function prevAtualizar() {
     const nd = normaDe(it.desc);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
     if (nd.descricao && showDesc && !descricoesSecs.find(d => d.titulo === it.desc)) {
-      descricoesSecs.push({ titulo: it.desc, texto: nd.descricao });
+      descricoesSecs.push({ titulo: it.desc, texto: nd.descricao, obs: nd.obs || '' });
     }
   });
 
@@ -8566,6 +8566,10 @@ function prevAtualizar() {
         <div style="margin-bottom:12px">
           <div style="font-size:11px;font-weight:700;color:#111827;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">${d.titulo}</div>
           <div style="font-size:11px;color:#374151;line-height:1.7;text-align:justify">${d.texto}</div>
+          ${d.obs && d.obs.trim() ? `
+          <div style="margin-top:6px;padding:8px 12px;background:#fffbeb;border-left:3px solid #f0a500;border-radius:4px;font-size:11px;color:#374151;line-height:1.6;white-space:pre-wrap">
+            <strong style="color:#92400e">Observação:</strong> ${esc(d.obs)}
+          </div>` : ''}
         </div>`).join('')}
     </div>` : '';
 
@@ -11811,10 +11815,11 @@ function normaDe(item) {
   return {
     normas:   (custom?.normas    !== undefined ? custom.normas    : def?.normas    || ''),
     descricao:(custom?.descricao !== undefined ? custom.descricao : def?.descricao || ''),
+    obs:      (custom?.obs       !== undefined ? custom.obs       : ''),
   };
 }
-function normaSalvar(item, normas, descricao) {
-  NORMAS_CUSTOM[item] = { normas, descricao };
+function normaSalvar(item, normas, descricao, obs) {
+  NORMAS_CUSTOM[item] = { normas, descricao, obs: obs || '' };
   localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
 }
 
@@ -11868,7 +11873,7 @@ async function cfgExportarTodosParaPlanilha(btn) {
 
 // Grava (ou atualiza) o subserviço na aba "📐 NORMAS" da planilha.
 // Colunas: A=servico(subserviço)  B=norma  C=descricao  D=custom  E=obs
-async function normaSalvarNaPlanilha(item, normas, descricao) {
+async function normaSalvarNaPlanilha(item, normas, descricao, obs) {
   if (!CONFIG.SHEET_ID) throw new Error('Planilha não configurada (SHEET_ID vazio).');
   // 1) Ler a aba inteira para descobrir se o subserviço já tem linha
   const rows = await sheetsGet('📐 NORMAS', 'A2:E1000'); // dados começam na linha 2 (linha 1 = cabeçalho)
@@ -11876,7 +11881,7 @@ async function normaSalvarNaPlanilha(item, normas, descricao) {
   for (let i = 0; i < rows.length; i++) {
     if ((rows[i][0] || '').trim() === item.trim()) { foundIdx = i; break; }
   }
-  const linha = [[ item, normas, descricao, 'TRUE', '' ]];
+  const linha = [[ item, normas, descricao, 'TRUE', obs || '' ]];
   if (foundIdx >= 0) {
     // Atualiza a linha existente (a linha real na planilha = foundIdx + 2)
     const linhaReal = foundIdx + 2;
@@ -11943,6 +11948,10 @@ function cfgEditarSubservico(servico, subservico) {
         <label class="form-label">Texto Descritivo (aparece no PDF)</label>
         <textarea class="form-control" id="_cfg-desc" rows="5" placeholder="Descrição técnica do serviço...">${nd.descricao||''}</textarea>
       </div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Observações (aparece no PDF, em destaque após o texto)</label>
+        <textarea class="form-control" id="_cfg-obs" rows="2" placeholder="Ex: condicionado a disponibilidade de acesso, escopo mínimo de XX horas, prazo sujeito a aprovação...">${nd.obs||''}</textarea>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button>
@@ -11955,14 +11964,15 @@ function cfgEditarSubservico(servico, subservico) {
 async function cfgSalvarSubservico(subservico, overlay) {
   const normas = document.getElementById('_cfg-normas')?.value || '';
   const desc = document.getElementById('_cfg-desc')?.value || '';
+  const obs  = document.getElementById('_cfg-obs')?.value || '';
   const btn = overlay.querySelector('.btn-primary');
   const btnTxtOrig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Salvando...'; }
   try {
     // 1) Grava na planilha (obrigatório)
-    await normaSalvarNaPlanilha(subservico, normas, desc);
+    await normaSalvarNaPlanilha(subservico, normas, desc, obs);
     // 2) Atualiza o cache local só depois que a planilha confirmou
-    normaSalvar(subservico, normas, desc);
+    normaSalvar(subservico, normas, desc, obs);
     overlay.remove();
     cfgRenderServicos();
     toast(`"${subservico}" salvo na planilha ✅`, 'success');
@@ -12033,14 +12043,15 @@ async function cfgCarregarServicosDaPlanilha() {
       localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
     }
 
-    // Aba NORMAS: colunas A=servico(subserviço), B=norma, C=descricao
+    // Aba NORMAS: colunas A=servico(subserviço), B=norma, C=descricao, E=obs
     const rowsNorm = await sheetsGet('📐 NORMAS', 'A2:E500');
     rowsNorm.forEach(r => {
       const item = (r[0] || '').trim();
       const norma = (r[1] || '').trim();
       const desc = (r[2] || '').trim();
+      const obs  = (r[4] || '').trim();
       if (!item) return;
-      NORMAS_CUSTOM[item] = { normas: norma, descricao: desc };
+      NORMAS_CUSTOM[item] = { normas: norma, descricao: desc, obs: obs };
     });
     localStorage.setItem('normas_custom', JSON.stringify(NORMAS_CUSTOM));
   } catch (e) {
@@ -13954,7 +13965,7 @@ function prevExportarWord() {
   uniqueItens.forEach(nome => {
     const nd = normaDe(nome);
     if (nd.normas) nd.normas.split(',').forEach(n => normasSet.add(n.trim()));
-    if (nd.descricao) descritivos.push({ nome, texto: nd.descricao });
+    if (nd.descricao) descritivos.push({ nome, texto: nd.descricao, obs: nd.obs || '' });
   });
   const normasLista = [...normasSet].filter(Boolean);
 
@@ -14069,7 +14080,20 @@ function prevExportarWord() {
     bodyParts.push(heading('ESCOPO DOS SERVIÇOS'));
     descritivos.forEach(d => {
       bodyParts.push(para(d.nome, { bold: true, size: 20, color: '1a3c5e', spacing: 40 }));
-      bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: 80 }));
+      bodyParts.push(para(d.texto, { size: 18, color: '374151', spacing: d.obs && d.obs.trim() ? 40 : 80 }));
+      if (d.obs && d.obs.trim()) {
+        // Observação destacada (mesmo padrão dourado/âmbar da pré-visualização)
+        bodyParts.push(`<w:p>
+          <w:pPr>
+            <w:spacing w:after="80"/>
+            <w:ind w:left="200"/>
+            <w:shd w:val="clear" w:fill="fffbeb"/>
+            <w:pBdr><w:left w:val="single" w:sz="18" w:space="4" w:color="f0a500"/></w:pBdr>
+          </w:pPr>
+          <w:r><w:rPr><w:b/><w:sz w:val="18"/><w:szCs w:val="18"/><w:color w:val="92400e"/></w:rPr><w:t xml:space="preserve">Observação: </w:t></w:r>
+          <w:r><w:rPr><w:sz w:val="18"/><w:szCs w:val="18"/><w:color w:val="374151"/></w:rPr><w:t xml:space="preserve">${esc(d.obs)}</w:t></w:r>
+        </w:p>`);
+      }
     });
   }
 
