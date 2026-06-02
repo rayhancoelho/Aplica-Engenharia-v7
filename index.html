@@ -13351,28 +13351,19 @@ function propostaContextoCarregar() {
 
 // Ir para calculadora mantendo contexto
 function npAbrirCalculadora() {
+  // Salva o estado atual do Step 1 (inclui npServicos com serviços/subserviços)
   propostaContextoSalvar();
 
-  // Pré-vincular e pré-carregar blocos conforme serviços selecionados
+  // Pré-vincular proposta na calculadora, se houver ID
   const id = PROPOSTA_CONTEXTO.idProp;
   if (id) {
     const elCalc = document.getElementById('calc-id-proposta');
-    if (elCalc) { elCalc.value = id; calcVincularProposta(); }
+    if (elCalc) { elCalc.value = id; calcVincularProposta(true); }
   }
 
-  // Criar blocos a partir dos serviços escolhidos
-  if (PROPOSTA_CONTEXTO.servicos?.length) {
-    calcBlocos = PROPOSTA_CONTEXTO.servicos.map((sv, i) => ({
-      id: i+1,
-      nome: '',
-      servico: sv.servico,
-      itens: (sv.subcats||[]).map(s => ({ desc: s, horas: 0, rev: 0 })),
-    }));
-    if (!calcBlocos.length) calcBlocos = [{ id:1, nome:'', servico:'ATERRAMENTO ELÉTRICO', itens:[] }];
-  }
-
-  nav('calculadora');
-  setTimeout(() => { calcRenderBlocos(); calcRenderPagto(); calcRecalcularBlocos(); }, 100);
+  // A construção/merge dos blocos da calculadora é feita por npGoStep(2),
+  // que sempre sincroniza serviços e subserviços do Step 1 (preservando horas).
+  npGoStep(2);
 }
 
 // ── EDITAR PROPOSTA EXISTENTE DO CRM ─────────────────────
@@ -15798,20 +15789,48 @@ function npGoStep(step) {
         if (typeof calcVincularProposta === 'function') calcVincularProposta();
       }
     }
-    // Copiar serviços e subserviços do Step 1 para blocos da calculadora
+    // Copiar serviços e subserviços do Step 1 para blocos da calculadora.
+    // MERGE em vez de "só se vazio": sempre sincroniza serviços/subserviços
+    // adicionados no Step 1, preservando horas/revisões já digitadas na calculadora.
     if (typeof npServicos !== 'undefined' && npServicos.length && npServicos.some(sv => sv.servico)) {
-      // Só popular se calculadora estiver vazia
-      const calcVazia = !calcBlocos || !calcBlocos.length || (calcBlocos.length === 1 && (!calcBlocos[0].itens || !calcBlocos[0].itens.length));
-      if (calcVazia) {
-        calcBlocos = npServicos.filter(sv => sv.servico).map((sv, i) => ({
-          id: i + 1,
-          nome: sv.servico,
-          servico: sv.servico,
-          itens: sv.subcats && sv.subcats.length
-            ? sv.subcats.map(sub => ({ desc: sub, horas: 0, rev: 0, qtd: 1 }))
-            : [{ desc: sv.servico, horas: 0, rev: 0, qtd: 1 }]
-        }));
-      }
+      const servicosStep1 = npServicos.filter(sv => sv.servico);
+
+      // Descartar bloco padrão vazio ("ATERRAMENTO ELÉTRICO" sem itens preenchidos)
+      // que tenha sido criado automaticamente, para não duplicar.
+      const blocosAtuais = (calcBlocos || []).filter(b => {
+        const ehPadraoVazio = b && b.servico === 'ATERRAMENTO ELÉTRICO'
+          && (!b.itens || !b.itens.length || b.itens.every(it => !it.horas && !it.rev && (!it.desc || it.desc === b.servico)))
+          && !servicosStep1.some(sv => sv.servico === 'ATERRAMENTO ELÉTRICO');
+        return !ehPadraoVazio;
+      });
+
+      let nextId = blocosAtuais.reduce((m, b) => Math.max(m, b.id || 0), 0);
+
+      servicosStep1.forEach(sv => {
+        // Localizar bloco existente para este serviço (preserva o que já foi digitado)
+        let bloco = blocosAtuais.find(b => b.servico === sv.servico);
+        if (!bloco) {
+          bloco = { id: ++nextId, nome: sv.servico, servico: sv.servico, itens: [] };
+          blocosAtuais.push(bloco);
+        }
+        if (!Array.isArray(bloco.itens)) bloco.itens = [];
+
+        const subs = (sv.subcats && sv.subcats.length) ? sv.subcats : [sv.servico];
+        subs.forEach(sub => {
+          // Adicionar subserviço apenas se ainda não existir no bloco
+          if (!bloco.itens.some(it => it.desc === sub)) {
+            bloco.itens.push({ desc: sub, horas: 0, rev: 0, qtd: 1 });
+          }
+        });
+        // Se o serviço passou a ter subcats, remover o item placeholder antigo (nome do serviço)
+        if (sv.subcats && sv.subcats.length && bloco.itens.length > sv.subcats.length) {
+          bloco.itens = bloco.itens.filter(it =>
+            sv.subcats.includes(it.desc) || it.horas || it.rev
+          );
+        }
+      });
+
+      calcBlocos = blocosAtuais;
     }
     // Copiar serviço no select legado
     const servico = typeof npServicos !== 'undefined' && npServicos[0]?.servico;
