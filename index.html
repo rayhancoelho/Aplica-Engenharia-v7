@@ -12987,7 +12987,7 @@ function calcRenderBlocos() {
         <input class="calc-bloco-nome" placeholder="Local / Escopo (ex: Casa da Rua X)"
           value="${bloco.nome||''}" oninput="calcBlocos[${bi}].nome=this.value">
         <select class="calc-bloco-servico" onchange="calcBlocos[${bi}].servico=this.value;calcBlocoCarregarSubs(${bi},true)">
-          ${Object.keys(SUBCATEGORIAS).map(s =>
+          ${Object.keys({ ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) }).map(s =>
             `<option ${bloco.servico===s?'selected':''}>${s}</option>`
           ).join('')}
         </select>
@@ -13030,10 +13030,13 @@ function calcBlocoCarregarSubs(bi, onlyIfEmpty) {
   const bloco = calcBlocos[bi];
   if (!bloco) return;
   if (onlyIfEmpty && bloco.itens.length) return; // só carrega se vazio
-  const subs = SUBCATEGORIAS[bloco.servico] || [];
+  // Usar a MESMA fonte do cadastro (Configurações) e do Step 1:
+  // mescla os subserviços padrão com os personalizados / vindos da planilha.
+  const todos = { ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
+  const subs = todos[bloco.servico] || [];
   const existentes = bloco.itens.map(i => i.desc);
   subs.forEach(sub => {
-    if (!existentes.includes(sub)) bloco.itens.push({ desc: sub, horas: 0, rev: 0 });
+    if (!existentes.includes(sub)) bloco.itens.push({ desc: sub, horas: 0, rev: 0, qtd: 1 });
   });
   calcRenderBlocos();
   calcRecalcularBlocos();
@@ -14378,7 +14381,7 @@ function prevExportarWord() {
 
 function prevAbrirCadNormas() {
   // Construir lista de todos os itens disponíveis
-  const todos = Object.values(SUBCATEGORIAS).flat();
+  const todos = Object.values({ ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== "undefined" ? SERVICOS_CUSTOM : {}) }).flat();
 
   const html = `
   <div id="cad-normas-overlay" onclick="if(event.target===this)prevFecharCadNormas()"
@@ -14438,7 +14441,7 @@ function cadNormasFiltrar(q) {
 }
 
 function cadNormasSalvarTudo() {
-  const todos = Object.values(SUBCATEGORIAS).flat();
+  const todos = Object.values({ ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== "undefined" ? SERVICOS_CUSTOM : {}) }).flat();
   todos.forEach(item => {
     const idSafe = item.replace(/[^a-zA-Z0-9]/g,'_');
     const norma = document.getElementById(`cn-norma-${idSafe}`)?.value || '';
