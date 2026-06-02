@@ -8053,7 +8053,7 @@ function calcInit() {
   calcRecalcularBlocos();
 }
 
-function calcVincularProposta(silencioso) {
+function calcVincularProposta(silencioso, naoCarregarSubs) {
   const id = parseInt(document.getElementById('calc-id-proposta')?.value || '0');
   if (!id) return;
 
@@ -8072,7 +8072,9 @@ function calcVincularProposta(silencioso) {
       [...el3.options].forEach(o => { o.selected = o.value === servico; });
     }
     if (!silencioso) toast('Proposta #' + id + ' vinculada ✅', 'success');
-    calcCarregarSubcategorias?.();
+    // Só auto-carrega os subserviços do serviço inteiro quando NÃO há controle
+    // pelo Step 1 (Nova Proposta). Caso contrário, o Step 1 manda nos itens.
+    if (!naoCarregarSubs) calcCarregarSubcategorias?.();
   } else {
     if (!silencioso) toast('Proposta #' + id + ' não encontrada. Salve primeiro em Nova Proposta.', 'warning');
   }
@@ -12694,14 +12696,14 @@ async function npSalvarECalcular() {
     if (elCli)  { elCli.value = clienteNm; }
     if (elNum)  { elNum.value = document.getElementById('np-nome-proposta')?.value || ''; }
 
-    // Setar serviço
+    // Setar serviço (sem injetar a lista genérica de subserviços do serviço —
+    // os itens da tabela são definidos pelo Step 1 em npGoStep(2)).
     if (elServ) {
       [...elServ.options].forEach(o => { o.selected = o.value === servico; });
-      calcCarregarSubcategorias?.();
     }
 
-    // Vincular (busca no DATA.crm)
-    calcVincularProposta?.();
+    // Vincular (busca no DATA.crm), sem carregar subserviços do serviço inteiro
+    calcVincularProposta?.(false, true);
 
     nav('calculadora');
     toast(`✅ Proposta #${idProp} salva! Calculadora vinculada.`, 'success');
@@ -13361,7 +13363,7 @@ function npAbrirCalculadora() {
   const id = PROPOSTA_CONTEXTO.idProp;
   if (id) {
     const elCalc = document.getElementById('calc-id-proposta');
-    if (elCalc) { elCalc.value = id; calcVincularProposta(true); }
+    if (elCalc) { elCalc.value = id; calcVincularProposta(true, true); }
   }
 
   // A construção/merge dos blocos da calculadora é feita por npGoStep(2),
@@ -15789,51 +15791,40 @@ function npGoStep(step) {
       const elCalcId = document.getElementById('calc-id-proposta');
       if (elCalcId && !elCalcId.value) {
         elCalcId.value = idProp;
-        if (typeof calcVincularProposta === 'function') calcVincularProposta();
+        // Não deixar o vínculo injetar os subserviços do serviço inteiro:
+        // os itens são controlados pelo Step 1 (npServicos) logo abaixo.
+        const step1TemServicos = typeof npServicos !== 'undefined' && npServicos.some(sv => sv.servico);
+        if (typeof calcVincularProposta === 'function') calcVincularProposta(false, step1TemServicos);
       }
     }
-    // Copiar serviços e subserviços do Step 1 para blocos da calculadora.
-    // MERGE em vez de "só se vazio": sempre sincroniza serviços/subserviços
-    // adicionados no Step 1, preservando horas/revisões já digitadas na calculadora.
+    // Sincronizar serviços e subserviços do Step 1 para os blocos da calculadora.
+    // O Step 1 (npServicos) é a FONTE DA VERDADE: a tabela deve refletir
+    // exatamente os subserviços marcados, sem subserviços extras do serviço inteiro.
+    // Preservamos horas/revisões já digitadas, casando pelo nome do subserviço.
     if (typeof npServicos !== 'undefined' && npServicos.length && npServicos.some(sv => sv.servico)) {
       const servicosStep1 = npServicos.filter(sv => sv.servico);
 
-      // Descartar bloco padrão vazio ("ATERRAMENTO ELÉTRICO" sem itens preenchidos)
-      // que tenha sido criado automaticamente, para não duplicar.
-      const blocosAtuais = (calcBlocos || []).filter(b => {
-        const ehPadraoVazio = b && b.servico === 'ATERRAMENTO ELÉTRICO'
-          && (!b.itens || !b.itens.length || b.itens.every(it => !it.horas && !it.rev && (!it.desc || it.desc === b.servico)))
-          && !servicosStep1.some(sv => sv.servico === 'ATERRAMENTO ELÉTRICO');
-        return !ehPadraoVazio;
-      });
-
-      let nextId = blocosAtuais.reduce((m, b) => Math.max(m, b.id || 0), 0);
-
-      servicosStep1.forEach(sv => {
-        // Localizar bloco existente para este serviço (preserva o que já foi digitado)
-        let bloco = blocosAtuais.find(b => b.servico === sv.servico);
-        if (!bloco) {
-          bloco = { id: ++nextId, nome: sv.servico, servico: sv.servico, itens: [] };
-          blocosAtuais.push(bloco);
-        }
-        if (!Array.isArray(bloco.itens)) bloco.itens = [];
-
-        const subs = (sv.subcats && sv.subcats.length) ? sv.subcats : [sv.servico];
-        subs.forEach(sub => {
-          // Adicionar subserviço apenas se ainda não existir no bloco
-          if (!bloco.itens.some(it => it.desc === sub)) {
-            bloco.itens.push({ desc: sub, horas: 0, rev: 0, qtd: 1 });
+      // Índice de horas/rev já digitadas, por "serviço|subserviço", para preservar.
+      const digitados = {};
+      (calcBlocos || []).forEach(b => {
+        (b.itens || []).forEach(it => {
+          if (it && it.desc && (it.horas || it.rev)) {
+            digitados[(b.servico || '') + '|' + it.desc] = { horas: it.horas || 0, rev: it.rev || 0, qtd: it.qtd || 1 };
           }
         });
-        // Se o serviço passou a ter subcats, remover o item placeholder antigo (nome do serviço)
-        if (sv.subcats && sv.subcats.length && bloco.itens.length > sv.subcats.length) {
-          bloco.itens = bloco.itens.filter(it =>
-            sv.subcats.includes(it.desc) || it.horas || it.rev
-          );
-        }
       });
 
-      calcBlocos = blocosAtuais;
+      let nextId = 0;
+      const novosBlocos = servicosStep1.map(sv => {
+        const subs = (sv.subcats && sv.subcats.length) ? sv.subcats : [sv.servico];
+        const itens = subs.map(sub => {
+          const prev = digitados[sv.servico + '|' + sub];
+          return { desc: sub, horas: prev ? prev.horas : 0, rev: prev ? prev.rev : 0, qtd: prev ? prev.qtd : 1 };
+        });
+        return { id: ++nextId, nome: sv.servico, servico: sv.servico, itens };
+      });
+
+      calcBlocos = novosBlocos;
     }
     // Copiar serviço no select legado
     const servico = typeof npServicos !== 'undefined' && npServicos[0]?.servico;
