@@ -4642,6 +4642,55 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
             <button class="btn btn-ghost" style="width:100%;margin-top:8px;border-style:dashed" onclick="calcAddBloco()">
               + Adicionar Local / Escopo
             </button>
+
+            <!-- ════════ CUSTOS OCULTOS DA PROPOSTA (controle interno) ════════ -->
+            <div class="card" style="margin-top:16px;border:1.5px solid var(--coral)">
+              <div class="card-header">
+                <div class="card-title" style="color:var(--coral)">🔒 CUSTOS OCULTOS DA PROPOSTA</div>
+              </div>
+              <div class="card-body">
+                <div style="display:flex;gap:8px;align-items:flex-start;padding:10px 12px;margin-bottom:14px;background:rgba(232,90,79,0.08);border-left:3px solid var(--coral);border-radius:6px;font-size:12px;color:var(--text2)">
+                  <span>⚠️</span>
+                  <span><b>Controle interno</b> — não aparece no PDF. Ao marcar como <span style="color:var(--gold)">Ganha</span>, tudo é lançado em <span style="color:var(--coral)">Despesas + Financeiro</span> automaticamente.</span>
+                </div>
+
+                <!-- Custos Operacionais -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <div style="font-weight:700;color:#5b8def;font-size:13px">📦 Custos Operacionais</div>
+                  <button class="btn btn-ghost btn-sm" style="border:1px solid #5b8def;color:#5b8def" onclick="npAddCustoOculto('custo')">+ Custo</button>
+                </div>
+                <div id="np-custos-oper-wrap" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px"></div>
+
+                <div style="border-top:1px solid var(--border);margin:14px 0"></div>
+
+                <!-- Comissões -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <div style="font-weight:700;color:var(--gold);font-size:13px">💰 Comissões</div>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-ghost btn-sm" style="border:1px solid var(--gold);color:var(--gold)" onclick="cliContatoAbrirNovo('representantes')" title="Cadastrar novo representante/comissionado">+ Cadastrar Pessoa</button>
+                    <button class="btn btn-ghost btn-sm" style="border:1px solid var(--gold);color:var(--gold)" onclick="npAddCustoOculto('comissao')">+ Comissão</button>
+                  </div>
+                </div>
+                <div id="np-comissoes-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
+
+                <!-- Resumo Financeiro Interno -->
+                <div id="np-resumo-financeiro-interno" style="margin-top:16px;padding:12px 14px;background:rgba(46,196,160,0.06);border:1px solid rgba(46,196,160,0.25);border-radius:8px;font-size:12px">
+                  <div style="font-weight:700;color:var(--teal);margin-bottom:8px;font-size:11px;letter-spacing:0.5px">📊 RESUMO FINANCEIRO INTERNO</div>
+                  <div style="display:flex;justify-content:space-between;padding:3px 0">
+                    <span>Valor base da proposta</span><strong id="resint-base" style="color:var(--text)">R$ 0,00</strong>
+                  </div>
+                  <div id="resint-comissoes" style="display:none;justify-content:space-between;padding:3px 0;color:var(--coral)">
+                    <span>− Comissões</span><strong id="resint-comissoes-val">R$ 0,00</strong>
+                  </div>
+                  <div id="resint-custos" style="display:none;justify-content:space-between;padding:3px 0;color:var(--coral)">
+                    <span>− Custos operacionais</span><strong id="resint-custos-val">R$ 0,00</strong>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;padding:8px 0 2px;margin-top:6px;border-top:1px solid rgba(46,196,160,0.25);font-weight:700;font-size:14px">
+                    <span>= Margem Líquida</span><strong id="resint-liq" style="color:var(--teal)">R$ 0,00</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Coluna direita: resumo -->
@@ -13111,6 +13160,8 @@ function calcRecalcularBlocos() {
 
   // Recalcular parcelas de pagamento quando valor muda
   if (typeof calcPagtoRecalcular === 'function') setTimeout(calcPagtoRecalcular, 50);
+  // Atualizar o Resumo Financeiro Interno (custos ocultos) com o novo valor base
+  if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
 }
 
 // ── PAGAMENTO DINÂMICO COM CÁLCULO AUTOMÁTICO ───────────
@@ -15835,6 +15886,11 @@ function npGoStep(step) {
     // Inicializar e renderizar
     if (typeof calcInitBlocos === 'function') calcInitBlocos();
     if (typeof calcRecalcularBlocos === 'function') setTimeout(calcRecalcularBlocos, 200);
+    // Renderizar a seção "Custos Ocultos da Proposta" e atualizar resumo interno
+    setTimeout(() => {
+      if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+      if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
+    }, 250);
     // Mostrar subserviços da proposta no topo da calculadora
     setTimeout(() => {
       const wrap = document.getElementById('calc-subservicos-wrap');
@@ -17938,43 +17994,10 @@ function execExportarDocs() {
 // ══════════════════════════════════════════════════════
 let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[]');
 
-// Injetar seção de itens ocultos na proposta após os serviços
+// Injeção antiga removida — a seção "Custos Ocultos" agora é estática no Step 2
+// (após os blocos da calculadora). Mantemos apenas a renderização.
 setTimeout(() => {
-  const servWrap = document.getElementById('np-servicos-wrap');
-  if (!servWrap) return;
-  const parentGroup = servWrap.closest('.form-group');
-  if (!parentGroup) return;
-
-  const ocultosDiv = document.createElement('div');
-  ocultosDiv.className = 'form-group';
-  ocultosDiv.style.cssText = 'grid-column:1/-1;margin-top:8px';
-  ocultosDiv.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <label class="form-label" style="margin:0">🔒 Itens Ocultos na Proposta <span style="font-size:10px;color:var(--text3)">(comissões/custos — não aparecem no PDF)</span></label>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-ghost btn-sm" onclick="cliContatoAbrirNovo('representantes')" title="Cadastrar novo representante/comissionado">+ Cadastrar Pessoa</button>
-        <button class="btn btn-ghost btn-sm" onclick="npAddItemOculto()">+ Item Oculto</button>
-      </div>
-    </div>
-    <div id="np-itens-ocultos-wrap" style="display:flex;flex-direction:column;gap:6px"></div>
-    <div id="np-resumo-financeiro-interno" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(46,196,160,0.06);border:1px solid rgba(46,196,160,0.2);border-radius:8px;font-size:12px">
-      <div style="font-weight:700;color:var(--teal);margin-bottom:6px;font-size:11px;letter-spacing:0.5px">📊 RESUMO FINANCEIRO INTERNO</div>
-      <div style="display:flex;justify-content:space-between;padding:3px 0">
-        <span>Valor base da proposta</span><strong id="resint-base" style="color:var(--text)">R$ 0,00</strong>
-      </div>
-      <div id="resint-comissoes" style="display:none;justify-content:space-between;padding:3px 0;color:var(--coral)">
-        <span>− Comissões ocultas</span><strong id="resint-comissoes-val">R$ 0,00</strong>
-      </div>
-      <div id="resint-custos" style="display:none;justify-content:space-between;padding:3px 0;color:var(--coral)">
-        <span>− Custos operacionais</span><strong id="resint-custos-val">R$ 0,00</strong>
-      </div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0 2px;margin-top:4px;border-top:1px solid rgba(46,196,160,0.2);font-weight:700">
-        <span>= Margem Líquida</span><strong id="resint-liq" style="color:var(--teal)">R$ 0,00</strong>
-      </div>
-    </div>
-  `;
-  parentGroup.parentNode.insertBefore(ocultosDiv, parentGroup.nextSibling);
-  npRenderItensOcultos();
+  if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
 }, 1500);
 
 function _saveItensOcultos() {
@@ -17988,11 +18011,17 @@ function _saveItensOcultos() {
   if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
 }
 
-function npAddItemOculto() {
-  NP_ITENS_OCULTOS.push({ tipo: 'Comissão', descricao: '', valor: 0, representante: '' });
+function npAddItemOculto() { npAddCustoOculto('comissao'); }
+
+// Adiciona um item oculto já com o tipo correto (custo operacional ou comissão)
+function npAddCustoOculto(qual) {
+  if (qual === 'custo') {
+    NP_ITENS_OCULTOS.push({ tipo: 'Custo Interno', descricao: '', valor: 0, representante: '' });
+  } else {
+    NP_ITENS_OCULTOS.push({ tipo: 'Comissão', descricao: '', valor: 0, representante: '' });
+  }
   npRenderItensOcultos();
-  localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS));
-  npAtualizarResumoInterno();
+  _saveItensOcultos();
 }
 
 // Opções da dropdown de pessoas — APENAS REPRESENTANTES cadastrados
@@ -18013,18 +18042,21 @@ function _npPessoasOptions(selected) {
 }
 
 function npRenderItensOcultos() {
-  const wrap = document.getElementById('np-itens-ocultos-wrap');
-  if (!wrap) return;
+  const wrapCustos = document.getElementById('np-custos-oper-wrap');
+  const wrapComis  = document.getElementById('np-comissoes-wrap');
+  // Compat: se ainda existir o wrap único antigo, usa ele para tudo
+  const wrapUnico  = document.getElementById('np-itens-ocultos-wrap');
+  if (!wrapCustos && !wrapComis && !wrapUnico) return;
+
   localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS));
-  if (!NP_ITENS_OCULTOS.length) {
-    wrap.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px">Nenhum item oculto. Adicione comissões ou custos que não devem aparecer na proposta.</div>';
-    if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
-    return;
-  }
-  wrap.innerHTML = NP_ITENS_OCULTOS.map((item, i) => {
-    const isComissao = item.tipo === 'Comissão' || item.tipo === 'Representante';
+
+  const ehComissao = (it) => it.tipo === 'Comissão' || it.tipo === 'Representante';
+
+  // Monta o HTML de uma linha de item, recebendo o índice real no array
+  const linha = (item, i) => {
+    const isComissao = ehComissao(item);
     return `
-    <div style="display:flex;gap:6px;align-items:center;padding:8px;background:var(--s2);border-radius:7px;border-left:3px solid var(--gold)">
+    <div style="display:flex;gap:6px;align-items:center;padding:8px;background:var(--s2);border-radius:7px;border-left:3px solid ${isComissao ? 'var(--gold)' : '#5b8def'}">
       <select style="background:var(--s3);border:1px solid transparent;border-radius:5px;color:var(--text);font-size:11px;padding:4px 6px;outline:none"
         onchange="NP_ITENS_OCULTOS[${i}].tipo=this.value;npRenderItensOcultos();_saveItensOcultos()">
         <option ${item.tipo==='Comissão'?'selected':''}>Comissão</option>
@@ -18037,18 +18069,30 @@ function npRenderItensOcultos() {
               onchange="NP_ITENS_OCULTOS[${i}].descricao=this.value;_saveItensOcultos()">
               ${_npPessoasOptions(item.descricao)}
            </select>`
-        : `<input type="text" placeholder="Descrição" value="${(item.descricao||'').replace(/"/g,'&quot;')}"
+        : `<input type="text" placeholder="Descrição do custo" value="${(item.descricao||'').replace(/"/g,'&quot;')}"
               oninput="NP_ITENS_OCULTOS[${i}].descricao=this.value;_saveItensOcultos()"
               style="flex:1;background:var(--s3);border:1px solid transparent;border-radius:5px;color:var(--text);font-family:'DM Sans';font-size:12px;padding:5px 7px;outline:none">`
       }
       <input type="number" placeholder="R$" value="${item.valor||''}" step="0.01"
         oninput="NP_ITENS_OCULTOS[${i}].valor=parseFloat(this.value)||0;_saveItensOcultos()"
         style="width:90px;background:var(--s3);border:1px solid transparent;border-radius:5px;color:var(--gold);font-family:monospace;font-size:12px;padding:5px 7px;outline:none">
-      <button onclick="NP_ITENS_OCULTOS.splice(${i},1);npRenderItensOcultos();_saveItensOcultos();npAtualizarResumoInterno()"
+      <button onclick="NP_ITENS_OCULTOS.splice(${i},1);npRenderItensOcultos();_saveItensOcultos()"
         title="Remover item (subtrai do resumo)"
         style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:13px;padding:2px 5px">✕</button>
     </div>`;
-  }).join('');
+  };
+
+  // Listas separadas (preservando o índice real para edição correta)
+  const htmlComis  = NP_ITENS_OCULTOS.map((it,i)=>({it,i})).filter(o=>ehComissao(o.it)).map(o=>linha(o.it,o.i)).join('');
+  const htmlCustos = NP_ITENS_OCULTOS.map((it,i)=>({it,i})).filter(o=>!ehComissao(o.it)).map(o=>linha(o.it,o.i)).join('');
+
+  if (wrapCustos && wrapComis) {
+    wrapCustos.innerHTML = htmlCustos || '<div style="font-size:12px;color:var(--text3);padding:10px;text-align:center">Nenhum custo. Clique <b>+ Custo</b></div>';
+    wrapComis.innerHTML  = htmlComis  || '<div style="font-size:12px;color:var(--text3);padding:10px;text-align:center">Nenhuma comissão. Clique <b>+ Comissão</b></div>';
+  } else if (wrapUnico) {
+    wrapUnico.innerHTML = (htmlCustos + htmlComis) || '<div style="font-size:12px;color:var(--text3);padding:8px">Nenhum item oculto.</div>';
+  }
+
   npAtualizarResumoInterno();
 }
 
@@ -18056,7 +18100,11 @@ function npRenderItensOcultos() {
 function npAtualizarResumoInterno() {
   const wrapResumo = document.getElementById('np-resumo-financeiro-interno');
   if (!wrapResumo) return;
-  const valorBase = parseFloat((document.getElementById('np-valor')?.value || '0').toString().replace(',','.')) || 0;
+  // Valor base: prioriza o líquido calculado na calculadora (r-liq); senão usa np-valor
+  const parseMoney = (s) => parseFloat((s||'0').toString().replace(/[R$\s.]/g,'').replace(',','.')) || 0;
+  const liqCalc = parseMoney(document.getElementById('r-liq')?.textContent);
+  const valNp   = parseFloat((document.getElementById('np-valor')?.value || '0').toString().replace(',','.')) || 0;
+  const valorBase = liqCalc > 0 ? liqCalc : valNp;
   let comissoes = 0, custos = 0;
   (NP_ITENS_OCULTOS || []).forEach(it => {
     const v = parseFloat(it.valor) || 0;
@@ -18068,10 +18116,15 @@ function npAtualizarResumoInterno() {
   document.getElementById('resint-base').textContent     = fmt(valorBase);
   document.getElementById('resint-comissoes-val').textContent = fmt(comissoes);
   document.getElementById('resint-custos-val').textContent    = fmt(custos);
-  document.getElementById('resint-liq').textContent      = fmt(liq);
   document.getElementById('resint-comissoes').style.display = comissoes > 0 ? 'flex' : 'none';
   document.getElementById('resint-custos').style.display    = custos    > 0 ? 'flex' : 'none';
-  wrapResumo.style.display = (valorBase > 0 || comissoes > 0 || custos > 0) ? 'block' : 'none';
+  wrapResumo.style.display = 'block';
+  // % da margem em relação ao valor base
+  const liqEl = document.getElementById('resint-liq');
+  if (liqEl) {
+    const pct = valorBase > 0 ? ((liq / valorBase) * 100) : 0;
+    liqEl.textContent = fmt(liq) + (valorBase > 0 ? `  (${pct.toFixed(1)}%)` : '');
+  }
 }
 
 // Recalcular resumo quando valor base muda
