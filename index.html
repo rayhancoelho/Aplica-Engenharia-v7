@@ -4689,6 +4689,16 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                     <span>= Margem Líquida</span><strong id="resint-liq" style="color:var(--teal)">R$ 0,00</strong>
                   </div>
                 </div>
+
+                <!-- Lançar custos/comissões na proposta (Despesas + Financeiro) -->
+                <button class="btn" style="width:100%;margin-top:14px;background:rgba(232,90,79,0.12);border:1.5px solid var(--coral);color:var(--coral);font-weight:600;padding:10px"
+                  onclick="npLancarCustosOcultosNaProposta()"
+                  title="Registra todos os custos operacionais e comissões como Despesas vinculadas a esta proposta">
+                  📥 Lançar custos e comissões na proposta (Despesas)
+                </button>
+                <div style="font-size:10px;color:var(--text3);margin-top:6px;text-align:center">
+                  Gera uma despesa para cada item acima, vinculada ao cliente desta proposta.
+                </div>
               </div>
             </div>
           </div>
@@ -7340,6 +7350,11 @@ async function salvarProposta() {
     '',          // AQ - URL
     contato,     // AR - Contato
   ];
+
+  // Salvar as atividades da calculadora (calcBlocos) e os custos/comissões
+  // ocultos indexados pelo ID desta proposta, para a REVISÃO trazer tudo de volta.
+  const _idPropSalvar = document.getElementById('np-id-prop')?.value;
+  if (_idPropSalvar && typeof npSalvarBlocosProp === 'function') npSalvarBlocosProp(_idPropSalvar);
 
   await _saveProposta(novaRow, 'np');
 }
@@ -12710,6 +12725,9 @@ salvarProposta = async function() {
     contatoCompleto,       // AR - Contato2
   ];
 
+  // Salvar atividades da calculadora + custos/comissões ocultos por proposta
+  if (idProp && typeof npSalvarBlocosProp === 'function') npSalvarBlocosProp(idProp);
+
   await _saveProposta(novaRow, 'np');
 
   // Limpar rascunho correspondente se existir
@@ -13492,6 +13510,16 @@ function npAbrirEdicaoProposta(idx) {
   // Resetar estado e ir para Nova Proposta
   npContatos = JSON.parse(JSON.stringify(contatosParsed));
   npServicos  = JSON.parse(JSON.stringify(servicosParsed));
+
+  // Restaurar as atividades da calculadora (horas, revisões, blocos de Local/Escopo)
+  // salvas para esta proposta. Se houver, sinalizamos para o Step 2 NÃO reconstruir
+  // os blocos do zero (o que apagaria horas/revisões já preenchidas).
+  const _idPropEdit = String(r[CRM_COL.ID] || idx + 1);
+  if (typeof npCarregarBlocosProp === 'function' && npCarregarBlocosProp(_idPropEdit)) {
+    window._npRestaurarBlocosProp = true;
+  } else {
+    window._npRestaurarBlocosProp = false;
+  }
 
   nav('nova-proposta-page');
   setTimeout(() => {
@@ -15852,7 +15880,31 @@ function npGoStep(step) {
     // O Step 1 (npServicos) é a FONTE DA VERDADE: a tabela deve refletir
     // exatamente os subserviços marcados, sem subserviços extras do serviço inteiro.
     // Preservamos horas/revisões já digitadas, casando pelo nome do subserviço.
-    if (typeof npServicos !== 'undefined' && npServicos.length && npServicos.some(sv => sv.servico)) {
+    //
+    // EXCEÇÃO: numa REVISÃO, se já restauramos as atividades salvas desta proposta
+    // (_npRestaurarBlocosProp), NÃO reconstruímos do zero — apenas garantimos que
+    // todos os subserviços marcados no Step 1 estejam presentes, sem perder horas,
+    // revisões nem blocos extras de Local/Escopo já salvos.
+    if (window._npRestaurarBlocosProp && typeof calcBlocos !== 'undefined' && calcBlocos.length) {
+      // Mesclar: adicionar subserviços novos do Step 1 que ainda não existam nos blocos.
+      if (typeof npServicos !== 'undefined' && npServicos.length) {
+        npServicos.filter(sv => sv.servico).forEach(sv => {
+          let bloco = calcBlocos.find(b => (b.servico || '') === sv.servico);
+          if (!bloco) {
+            const nid = (calcBlocos.length ? Math.max(...calcBlocos.map(b => b.id || 0)) : 0) + 1;
+            bloco = { id: nid, nome: sv.servico, servico: sv.servico, itens: [] };
+            calcBlocos.push(bloco);
+          }
+          (sv.subcats || []).forEach(sub => {
+            if (!bloco.itens.some(it => it.desc === sub)) {
+              bloco.itens.push({ desc: sub, horas: 0, rev: 0, qtd: 1 });
+            }
+          });
+        });
+      }
+      // Consumir o flag para que próximas entradas no Step 2 funcionem normalmente.
+      window._npRestaurarBlocosProp = false;
+    } else if (typeof npServicos !== 'undefined' && npServicos.length && npServicos.some(sv => sv.servico)) {
       const servicosStep1 = npServicos.filter(sv => sv.servico);
 
       // Índice de horas/rev já digitadas, por "serviço|subserviço", para preservar.
@@ -17994,6 +18046,39 @@ function execExportarDocs() {
 // ══════════════════════════════════════════════════════
 let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[]');
 
+// ── PERSISTÊNCIA DAS ATIVIDADES DA CALCULADORA POR PROPOSTA ──
+// As atividades (calcBlocos: horas, revisões, qtd de cada item) não vão para o
+// CRM; só o resumo de serviços. Para que a REVISÃO traga tudo de volta, salvamos
+// calcBlocos + itens ocultos em localStorage indexados pelo ID da proposta.
+function npSalvarBlocosProp(idProp) {
+  if (!idProp) return;
+  try {
+    if (typeof calcBlocos !== 'undefined' && calcBlocos.length) {
+      localStorage.setItem('np_calc_blocos_p' + idProp, JSON.stringify(calcBlocos));
+    }
+    if (typeof NP_ITENS_OCULTOS !== 'undefined') {
+      localStorage.setItem('np_itens_ocultos_p' + idProp, JSON.stringify(NP_ITENS_OCULTOS));
+    }
+  } catch(e) {}
+}
+
+function npCarregarBlocosProp(idProp) {
+  if (!idProp) return false;
+  let carregou = false;
+  try {
+    const salvos = JSON.parse(localStorage.getItem('np_calc_blocos_p' + idProp) || 'null');
+    if (Array.isArray(salvos) && salvos.length) {
+      // Restaurar atividades exatamente como foram salvas
+      if (typeof calcBlocos !== 'undefined') {
+        calcBlocos.length = 0;
+        salvos.forEach(b => calcBlocos.push(b));
+        carregou = true;
+      }
+    }
+  } catch(e) {}
+  return carregou;
+}
+
 // Injeção antiga removida — a seção "Custos Ocultos" agora é estática no Step 2
 // (após os blocos da calculadora). Mantemos apenas a renderização.
 setTimeout(() => {
@@ -18125,6 +18210,64 @@ function npAtualizarResumoInterno() {
     const pct = valorBase > 0 ? ((liq / valorBase) * 100) : 0;
     liqEl.textContent = fmt(liq) + (valorBase > 0 ? `  (${pct.toFixed(1)}%)` : '');
   }
+}
+
+// Lança os custos operacionais e comissões ocultos como DESPESAS reais,
+// vinculadas ao cliente desta proposta (aparecem em Despesas + Financeiro).
+async function npLancarCustosOcultosNaProposta() {
+  if (!Array.isArray(NP_ITENS_OCULTOS) || !NP_ITENS_OCULTOS.length) {
+    toast('Nenhum custo ou comissão para lançar', 'warning');
+    return;
+  }
+  // Itens com valor > 0
+  const itens = NP_ITENS_OCULTOS.filter(it => (parseFloat(it.valor) || 0) > 0);
+  if (!itens.length) { toast('Preencha o valor dos custos/comissões antes de lançar', 'warning'); return; }
+
+  // Cliente da proposta atual
+  const cliente =
+    (typeof PROPOSTA_CONTEXTO !== 'undefined' && (PROPOSTA_CONTEXTO.razao || PROPOSTA_CONTEXTO.fantasia)) ||
+    document.getElementById('np-razao')?.value ||
+    document.getElementById('np-fantasia')?.value || '';
+  const idProp = document.getElementById('np-id-prop')?.value
+              || (typeof PROPOSTA_CONTEXTO !== 'undefined' ? PROPOSTA_CONTEXTO.idProp : '') || '';
+
+  const total = itens.reduce((s, it) => s + (parseFloat(it.valor) || 0), 0);
+  if (!confirm(`Lançar ${itens.length} item(ns) — total ${ 'R$ ' + total.toLocaleString('pt-BR',{minimumFractionDigits:2}) } — como Despesas${cliente ? ' de "' + cliente + '"' : ''}?`)) return;
+
+  const hoje = new Date().toLocaleDateString('pt-BR');
+  const novasRows = itens.map(it => {
+    const ehComissao = it.tipo === 'Comissão' || it.tipo === 'Representante';
+    const categoria = ehComissao ? 'Comissão' : 'Custo Operacional';
+    const pessoa = (it.descricao || '').trim();
+    const desc = (ehComissao ? 'Comissão' : 'Custo') +
+                 (pessoa ? ' — ' + pessoa : '') +
+                 (idProp ? ' (Proposta #' + idProp + ')' : '');
+    const obs = 'Lançado da proposta' + (idProp ? ' #' + idProp : '') + (cliente ? ' — ' + cliente : '');
+    // Formato de despesa: [data, desc, categoria, valor, pagto, pagto, tipo, obs, cliente]
+    return [hoje, desc, categoria, (parseFloat(it.valor) || 0).toString(), '', '', 'Variável', obs, cliente];
+  });
+
+  // Adicionar localmente
+  if (typeof DATA !== 'undefined' && Array.isArray(DATA.despesas)) {
+    novasRows.forEach(r => DATA.despesas.push(r));
+  }
+
+  // Salvar no Sheets
+  if (typeof CONFIG !== 'undefined' && CONFIG.SHEET_ID && typeof accessToken !== 'undefined' && accessToken) {
+    try {
+      await sheetsAppend(CONFIG.SHEETS.DESPESAS, novasRows);
+      toast(`✅ ${novasRows.length} lançamento(s) registrado(s) em Despesas!`, 'success');
+    } catch (e) {
+      toast('Salvo localmente (erro ao gravar no Sheets)', 'warning');
+    }
+  } else {
+    toast(`${novasRows.length} lançamento(s) adicionado(s) localmente. Faça login para salvar no Sheets.`, 'info');
+  }
+
+  // Atualizar telas de despesas/financeiro se existirem
+  if (typeof renderDespesasTable === 'function') try { renderDespesasTable(); } catch(e){}
+  if (typeof d4RenderKPIs === 'function') try { d4RenderKPIs(); } catch(e){}
+  if (typeof renderFinanceiroTable === 'function') try { renderFinanceiroTable(); } catch(e){}
 }
 
 // Recalcular resumo quando valor base muda
