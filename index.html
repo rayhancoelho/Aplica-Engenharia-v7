@@ -6210,6 +6210,7 @@ const CRM_COL = {
   CEP:       40,   // AO
   EMAIL2:    41,   // AP
   CONTATO2:  43,   // AR
+  ATIVIDADES: 44,  // AS — JSON com atividades da calculadora (calcBlocos) + custos/comissões ocultos
 };
 
 // Cache de dados
@@ -6482,7 +6483,7 @@ async function syncData() {
 
   try {
     const [crm, fin, cli, proj, desp, mkt] = await Promise.all([
-      sheetsGet(CONFIG.SHEETS.CRM,        'A2:AR1000'),
+      sheetsGet(CONFIG.SHEETS.CRM,        'A2:AS1000'),
       sheetsGet(CONFIG.SHEETS.FINANCEIRO,  'A2:P500'),
       sheetsGet(CONFIG.SHEETS.CLIENTES,    'A2:K200'),
       sheetsGet(CONFIG.SHEETS.PROJETOS,    'A2:P300'),
@@ -7349,6 +7350,7 @@ async function salvarProposta() {
     email,       // AP - Email
     '',          // AQ - URL
     contato,     // AR - Contato
+    (typeof npMontarAtividadesJSON === 'function' ? npMontarAtividadesJSON() : ''), // AS - Atividades (JSON)
   ];
 
   // Salvar as atividades da calculadora (calcBlocos) e os custos/comissões
@@ -7404,6 +7406,7 @@ async function salvarPropostaModal() {
     '',          // AP=41 - Email2
     '',          // AQ=42
     contato,     // AR=43 - Contato2
+    '',          // AS=44 - Atividades (sem calculadora no modal rápido)
   ];
 
   await _saveProposta(novaRow, 'm');
@@ -12723,9 +12726,10 @@ salvarProposta = async function() {
     email,         // AP - Email2
     '',            // AQ
     contatoCompleto,       // AR - Contato2
+    (typeof npMontarAtividadesJSON === 'function' ? npMontarAtividadesJSON() : ''), // AS - Atividades (JSON)
   ];
 
-  // Salvar atividades da calculadora + custos/comissões ocultos por proposta
+  // Salvar atividades da calculadora + custos/comissões ocultos por proposta (cache local)
   if (idProp && typeof npSalvarBlocosProp === 'function') npSalvarBlocosProp(idProp);
 
   await _saveProposta(novaRow, 'np');
@@ -13512,14 +13516,22 @@ function npAbrirEdicaoProposta(idx) {
   npServicos  = JSON.parse(JSON.stringify(servicosParsed));
 
   // Restaurar as atividades da calculadora (horas, revisões, blocos de Local/Escopo)
-  // salvas para esta proposta. Se houver, sinalizamos para o Step 2 NÃO reconstruir
-  // os blocos do zero (o que apagaria horas/revisões já preenchidas).
+  // e os custos/comissões ocultos. PRIORIDADE: o JSON salvo na PLANILHA (coluna AS).
+  // Se a proposta for antiga (sem AS), tentamos o cache local (localStorage).
+  // Havendo atividades, sinalizamos ao Step 2 para NÃO reconstruir do zero.
   const _idPropEdit = String(r[CRM_COL.ID] || idx + 1);
-  if (typeof npCarregarBlocosProp === 'function' && npCarregarBlocosProp(_idPropEdit)) {
-    window._npRestaurarBlocosProp = true;
-  } else {
-    window._npRestaurarBlocosProp = false;
+  let _restaurou = false;
+  const _ativJSON = r[CRM_COL.ATIVIDADES];
+  if (_ativJSON && typeof npRestaurarAtividadesDeJSON === 'function') {
+    _restaurou = npRestaurarAtividadesDeJSON(_ativJSON);
+    // Atualizar a tela de itens ocultos após restaurar da planilha
+    if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
+    if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
   }
+  if (!_restaurou && typeof npCarregarBlocosProp === 'function') {
+    _restaurou = npCarregarBlocosProp(_idPropEdit); // fallback localStorage
+  }
+  window._npRestaurarBlocosProp = !!_restaurou;
 
   nav('nova-proposta-page');
   setTimeout(() => {
@@ -18047,9 +18059,21 @@ function execExportarDocs() {
 let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[]');
 
 // ── PERSISTÊNCIA DAS ATIVIDADES DA CALCULADORA POR PROPOSTA ──
-// As atividades (calcBlocos: horas, revisões, qtd de cada item) não vão para o
-// CRM; só o resumo de serviços. Para que a REVISÃO traga tudo de volta, salvamos
-// calcBlocos + itens ocultos em localStorage indexados pelo ID da proposta.
+// As atividades (calcBlocos: horas, revisões, qtd de cada item) + os custos/
+// comissões ocultos são salvos na PLANILHA, na coluna AS da aba CRM, como um
+// JSON. Mantemos também uma cópia em localStorage como cache/fallback offline.
+
+// Monta o JSON que vai para a coluna AS da planilha.
+function npMontarAtividadesJSON() {
+  try {
+    const payload = {
+      calcBlocos: (typeof calcBlocos !== 'undefined' && Array.isArray(calcBlocos)) ? calcBlocos : [],
+      itensOcultos: (typeof NP_ITENS_OCULTOS !== 'undefined' && Array.isArray(NP_ITENS_OCULTOS)) ? NP_ITENS_OCULTOS : []
+    };
+    return JSON.stringify(payload);
+  } catch(e) { return ''; }
+}
+
 function npSalvarBlocosProp(idProp) {
   if (!idProp) return;
   try {
@@ -18060,6 +18084,30 @@ function npSalvarBlocosProp(idProp) {
       localStorage.setItem('np_itens_ocultos_p' + idProp, JSON.stringify(NP_ITENS_OCULTOS));
     }
   } catch(e) {}
+}
+
+// Restaura calcBlocos + NP_ITENS_OCULTOS a partir do JSON salvo na coluna AS.
+// Retorna true se restaurou as atividades (calcBlocos) com sucesso.
+function npRestaurarAtividadesDeJSON(jsonStr) {
+  if (!jsonStr || typeof jsonStr !== 'string') return false;
+  let dados;
+  try { dados = JSON.parse(jsonStr); } catch(e) { return false; }
+  if (!dados || typeof dados !== 'object') return false;
+
+  let carregou = false;
+  // Atividades da calculadora
+  if (Array.isArray(dados.calcBlocos) && dados.calcBlocos.length && typeof calcBlocos !== 'undefined') {
+    calcBlocos.length = 0;
+    dados.calcBlocos.forEach(b => calcBlocos.push(b));
+    carregou = true;
+  }
+  // Custos/comissões ocultos
+  if (Array.isArray(dados.itensOcultos) && typeof NP_ITENS_OCULTOS !== 'undefined') {
+    NP_ITENS_OCULTOS.length = 0;
+    dados.itensOcultos.forEach(it => NP_ITENS_OCULTOS.push(it));
+    try { localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS)); } catch(e) {}
+  }
+  return carregou;
 }
 
 function npCarregarBlocosProp(idProp) {
