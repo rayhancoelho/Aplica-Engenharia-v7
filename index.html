@@ -18338,8 +18338,6 @@ function npRenderItensOcultos() {
 // Como recalcula sempre do zero a partir da base, ligar/desligar/remover um item
 // desfaz o efeito automaticamente (nunca empilha).
 function npAtualizarResumoInterno() {
-  const wrapResumo = document.getElementById('np-resumo-financeiro-interno');
-  if (!wrapResumo) return;
   const parseMoney = (s) => parseFloat((s||'0').toString().replace(/[R$\s.]/g,'').replace(',','.')) || 0;
   const liqCalc = parseMoney(document.getElementById('r-liq')?.textContent);
   // Base limpa = líquido da calculadora; se não houver, usa a base memorizada ou o campo.
@@ -18359,33 +18357,35 @@ function npAtualizarResumoInterno() {
   const valorFinal = valorBase + somados;
   const fmt = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2});
 
-  const elBase = document.getElementById('resint-base');
-  const elOc   = document.getElementById('resint-ocultos');
-  const elOcV  = document.getElementById('resint-ocultos-val');
-  const elFnV  = document.getElementById('resint-final-val');
-  if (elBase) elBase.textContent = fmt(valorBase);
-  if (elOcV)  elOcV.textContent  = fmt(somados);
-  if (elFnV)  elFnV.textContent  = fmt(valorFinal);
-  if (elOc)   elOc.style.display  = somados > 0 ? 'flex' : 'none';
-
-  wrapResumo.style.display = 'block';
-
-  // Reflete os itens somados também no RESUMO DA CALCULADORA (linha "+ Comissões/Custos"
-  // e "= Total Final"). A base R$ (Total Líquido) permanece pura; a soma aparece por cima.
+  // (1) RESUMO DA CALCULADORA — linha "+ Comissões/Custos" e "= Total Final".
+  // Atualiza SEMPRE que os elementos existirem (não depende do resumo da Nova Proposta).
   const rOcRow = document.getElementById('r-ocultos-row');
   const rOc    = document.getElementById('r-ocultos');
   const rFnRow = document.getElementById('r-final-row');
   const rFn    = document.getElementById('r-final');
-  const fmtCalc = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2});
-  if (rOc) rOc.textContent = fmtCalc(somados);
-  if (rFn) rFn.textContent = fmtCalc(valorFinal);
+  if (rOc) rOc.textContent = fmt(somados);
+  if (rFn) rFn.textContent = fmt(valorFinal);
   if (rOcRow) rOcRow.style.display = somados > 0 ? 'flex' : 'none';
   if (rFnRow) rFnRow.style.display = somados > 0 ? 'flex' : 'none';
 
-  // Atualiza o VALOR DA PROPOSTA = base + itens somados (sempre recalculado).
+  // (2) VALOR DA PROPOSTA = base + itens somados (sempre recalculado).
   const elValProp = document.getElementById('np-valor');
   if (elValProp && valorBase > 0) {
     elValProp.value = valorFinal.toFixed(2);
+  }
+
+  // (3) RESUMO INTERNO da Nova Proposta (se a seção existir na tela).
+  const wrapResumo = document.getElementById('np-resumo-financeiro-interno');
+  if (wrapResumo) {
+    const elBase = document.getElementById('resint-base');
+    const elOc   = document.getElementById('resint-ocultos');
+    const elOcV  = document.getElementById('resint-ocultos-val');
+    const elFnV  = document.getElementById('resint-final-val');
+    if (elBase) elBase.textContent = fmt(valorBase);
+    if (elOcV)  elOcV.textContent  = fmt(somados);
+    if (elFnV)  elFnV.textContent  = fmt(valorFinal);
+    if (elOc)   elOc.style.display  = somados > 0 ? 'flex' : 'none';
+    wrapResumo.style.display = 'block';
   }
 }
 
