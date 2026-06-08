@@ -13521,6 +13521,7 @@ function npAbrirEdicaoProposta(idx) {
   // Havendo atividades, sinalizamos ao Step 2 para NÃO reconstruir do zero.
   const _idPropEdit = String(r[CRM_COL.ID] || idx + 1);
   let _restaurou = false;
+  let _nItens = 0;
   const _ativJSON = r[CRM_COL.ATIVIDADES];
   if (_ativJSON && typeof npRestaurarAtividadesDeJSON === 'function') {
     const _res = npRestaurarAtividadesDeJSON(_ativJSON);
@@ -13532,14 +13533,33 @@ function npAbrirEdicaoProposta(idx) {
       PROPOSTA_CONTEXTO.servicos = npServicos;
       try { localStorage.setItem('proposta_ctx', JSON.stringify(PROPOSTA_CONTEXTO)); } catch(e) {}
     }
+    // Persistir os blocos restaurados também no cache local por-proposta. Assim,
+    // se a flag se perder antes do Step 2, npGoStep(2) ainda acha os blocos.
+    if (_restaurou && typeof npSalvarBlocosProp === 'function') {
+      try { npSalvarBlocosProp(_idPropEdit); } catch(e) {}
+    }
+    if (typeof calcBlocos !== 'undefined') {
+      _nItens = (calcBlocos || []).reduce((s, b) => s + ((b.itens && b.itens.length) || 0), 0);
+    }
     // Atualizar a tela de itens ocultos após restaurar da planilha
     if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
     if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
   }
   if (!_restaurou && typeof npCarregarBlocosProp === 'function') {
     _restaurou = npCarregarBlocosProp(_idPropEdit); // fallback localStorage
+    if (_restaurou && typeof calcBlocos !== 'undefined') {
+      _nItens = (calcBlocos || []).reduce((s, b) => s + ((b.itens && b.itens.length) || 0), 0);
+    }
   }
   window._npRestaurarBlocosProp = !!_restaurou;
+  // Diagnóstico: avisa quantos itens/atividades foram recuperados (ajuda a depurar).
+  if (typeof toast === 'function') {
+    if (_restaurou && _nItens > 0) {
+      toast('✅ Atividades recuperadas: ' + _nItens + ' item(ns) restaurado(s).', 'success');
+    } else {
+      toast('⚠️ Sem atividades salvas para esta proposta (serão reconstruídas do zero).', 'warning');
+    }
+  }
 
   nav('nova-proposta-page');
   setTimeout(() => {
@@ -15905,7 +15925,27 @@ function npGoStep(step) {
     // (_npRestaurarBlocosProp), NÃO reconstruímos do zero — apenas garantimos que
     // todos os subserviços marcados no Step 1 estejam presentes, sem perder horas,
     // revisões nem blocos extras de Local/Escopo já salvos.
-    if (window._npRestaurarBlocosProp && typeof calcBlocos !== 'undefined' && calcBlocos.length) {
+    // Robustez: se a flag se perdeu mas existe cache de blocos desta proposta
+    // (ou calcBlocos já tem itens com horas/rev), também tratamos como restauração.
+    let _temRestauro = window._npRestaurarBlocosProp;
+    if (!_temRestauro) {
+      try {
+        const _idEdit = (typeof PROPOSTA_CONTEXTO !== 'undefined' && PROPOSTA_CONTEXTO && PROPOSTA_CONTEXTO.modoEdicao) ? PROPOSTA_CONTEXTO.idProp : null;
+        if (_idEdit) {
+          const _cache = JSON.parse(localStorage.getItem('np_calc_blocos_p' + _idEdit) || 'null');
+          if (Array.isArray(_cache) && _cache.length) {
+            // Repor a partir do cache se calcBlocos estiver vazio/menor.
+            const _itensAtuais = (calcBlocos || []).reduce((s,b)=>s+((b.itens&&b.itens.length)||0),0);
+            const _itensCache  = _cache.reduce((s,b)=>s+((b.itens&&b.itens.length)||0),0);
+            if (typeof calcBlocos !== 'undefined' && _itensCache > _itensAtuais) {
+              calcBlocos.length = 0; _cache.forEach(b => calcBlocos.push(b));
+            }
+            _temRestauro = true;
+          }
+        }
+      } catch(e) {}
+    }
+    if (_temRestauro && typeof calcBlocos !== 'undefined' && calcBlocos.length) {
       // Mesclar: adicionar subserviços novos do Step 1 que ainda não existam nos blocos.
       if (typeof npServicos !== 'undefined' && npServicos.length) {
         npServicos.filter(sv => sv.servico).forEach(sv => {
