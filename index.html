@@ -8446,12 +8446,38 @@ function prevCarregarItens(r) {
     ];
   }
 
-  // Ajustar para valor total bater
+  // Somar os CUSTOS/COMISSÕES marcados para somar — mas SEM mostrar ao cliente.
+  // O valor é EMBUTIDO (diluído) nos itens de serviço, proporcional ao peso de cada um.
+  // O cliente só vê os serviços com valor um pouco maior; o total bate com o sistema.
+  // (Itens não marcados para somar são apenas anotação interna e não entram aqui.)
+  let _somaOcultos = 0;
+  if (typeof NP_ITENS_OCULTOS !== 'undefined' && Array.isArray(NP_ITENS_OCULTOS)) {
+    NP_ITENS_OCULTOS.forEach(it => {
+      const v = parseFloat(it && it.valor) || 0;
+      if (it && it.somar !== false && v > 0) _somaOcultos += v;
+    });
+  }
+  if (_somaOcultos > 0 && prevItens.length) {
+    const baseTotal = prevItens.reduce((s, it) => s + (it.qtd||1) * (it.unit||0), 0);
+    if (baseTotal > 0) {
+      // Distribui proporcional ao valor de cada item de serviço.
+      prevItens.forEach(it => {
+        const peso = ((it.qtd||1) * (it.unit||0)) / baseTotal;
+        it.unit = (it.unit||0) + (_somaOcultos * peso) / (it.qtd||1);
+      });
+    } else {
+      // Sem base de valor: distribui igualmente entre os itens.
+      const porItem = _somaOcultos / prevItens.length;
+      prevItens.forEach(it => { it.unit = (it.unit||0) + porItem / (it.qtd||1); });
+    }
+  }
+
+  // Ajustar para o total bater com o valor salvo da proposta (que já inclui os custos).
   const valor = parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0;
   if (prevItens.length && valor > 0) {
     const soma = prevItens.reduce((s, it) => s + (it.qtd * it.unit), 0);
-    if (soma !== valor && prevItens.length) {
-      prevItens[prevItens.length - 1].unit += (valor - soma);
+    if (Math.abs(soma - valor) > 0.005) {
+      prevItens[prevItens.length - 1].unit += (valor - soma) / (prevItens[prevItens.length - 1].qtd || 1);
     }
   }
 
