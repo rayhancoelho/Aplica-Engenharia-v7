@@ -13599,11 +13599,11 @@ async function npAbrirEdicaoProposta(idx) {
 }
 
 // Abre proposta existente direto na Calculadora com todos os serviços herdados
-function npAbrirEdicaoComCalc(idx) {
-  npAbrirEdicaoProposta(idx);
+async function npAbrirEdicaoComCalc(idx) {
+  await npAbrirEdicaoProposta(idx);
   setTimeout(() => {
     npAbrirCalculadora();
-  }, 300);
+  }, 150);
 }
 
 // Limpar modo edição e iniciar nova proposta em branco
@@ -17651,20 +17651,23 @@ window.salvarRevisao = async function() {
   if (idProp) {
     const idx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === parseInt(idProp));
     if (idx >= 0 && typeof npAbrirEdicaoProposta === 'function') {
-      npAbrirEdicaoProposta(idx);
-      // Ir para step 3 (Gerar Proposta)
-      setTimeout(() => { if (typeof npGoStep === 'function') npGoStep(3); }, 300);
+      await npAbrirEdicaoProposta(idx);
+      // Garantir que o Step 2 monte os blocos restaurados ANTES de ir ao Step 3.
+      if (typeof npGoStep === 'function') {
+        npGoStep(2);
+        setTimeout(() => { if (typeof npGoStep === 'function') npGoStep(3); }, 350);
+      }
     }
   }
 };
 
-function revAbrirPropostaCompleta() {
+async function revAbrirPropostaCompleta() {
   const idProp = document.getElementById('rev-id-prop')?.value;
   if (!idProp) { toast('Informe o ID da proposta', 'warning'); return; }
   const idx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === parseInt(idProp));
   if (idx < 0) { toast('Proposta não encontrada', 'error'); return; }
   closeModal('modal-nova-revisao');
-  if (typeof npAbrirEdicaoProposta === 'function') npAbrirEdicaoProposta(idx);
+  if (typeof npAbrirEdicaoProposta === 'function') await npAbrirEdicaoProposta(idx);
   toast('Proposta aberta para edição completa', 'info');
 }
 
