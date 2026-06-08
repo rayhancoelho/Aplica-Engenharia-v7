@@ -4679,6 +4679,12 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                   <div style="display:flex;justify-content:space-between;padding:3px 0">
                     <span>Valor base da proposta</span><strong id="resint-base" style="color:var(--text)">R$ 0,00</strong>
                   </div>
+                  <div id="resint-ocultos" style="display:none;justify-content:space-between;padding:3px 0;color:var(--teal)">
+                    <span>+ Valores ocultos (embutidos no preço)</span><strong id="resint-ocultos-val">R$ 0,00</strong>
+                  </div>
+                  <div id="resint-final" style="display:none;justify-content:space-between;padding:6px 0 3px;margin-top:4px;border-top:1px dashed rgba(46,196,160,0.25);font-weight:700;color:var(--gold)">
+                    <span>= Valor final ao cliente</span><strong id="resint-final-val">R$ 0,00</strong>
+                  </div>
                   <div id="resint-comissoes" style="display:none;justify-content:space-between;padding:3px 0;color:var(--coral)">
                     <span>− Comissões</span><strong id="resint-comissoes-val">R$ 0,00</strong>
                   </div>
@@ -18246,9 +18252,9 @@ function npAddItemOculto() { npAddCustoOculto('comissao'); }
 // Adiciona um item oculto já com o tipo correto (custo operacional ou comissão)
 function npAddCustoOculto(qual) {
   if (qual === 'custo') {
-    NP_ITENS_OCULTOS.push({ tipo: 'Custo Interno', descricao: '', valor: 0, representante: '' });
+    NP_ITENS_OCULTOS.push({ tipo: 'Custo Interno', descricao: '', valor: 0, representante: '', destino: 'despesa' });
   } else {
-    NP_ITENS_OCULTOS.push({ tipo: 'Comissão', descricao: '', valor: 0, representante: '' });
+    NP_ITENS_OCULTOS.push({ tipo: 'Comissão', descricao: '', valor: 0, representante: '', destino: 'despesa' });
   }
   npRenderItensOcultos();
   _saveItensOcultos();
@@ -18306,6 +18312,12 @@ function npRenderItensOcultos() {
       <input type="number" placeholder="R$" value="${item.valor||''}" step="0.01"
         oninput="NP_ITENS_OCULTOS[${i}].valor=parseFloat(this.value)||0;_saveItensOcultos()"
         style="width:90px;background:var(--s3);border:1px solid transparent;border-radius:5px;color:var(--gold);font-family:monospace;font-size:12px;padding:5px 7px;outline:none">
+      <select title="Despesa: vai para o Financeiro. Valor Oculto: soma ao valor da proposta, não vira despesa."
+        onchange="NP_ITENS_OCULTOS[${i}].destino=this.value;npRenderItensOcultos();_saveItensOcultos()"
+        style="background:var(--s3);border:1px solid ${ (item.destino||'despesa')==='oculto' ? 'var(--teal)' : 'var(--coral)' };border-radius:5px;color:${ (item.destino||'despesa')==='oculto' ? 'var(--teal)' : 'var(--coral)' };font-size:10px;font-weight:600;padding:4px 5px;outline:none;cursor:pointer">
+        <option value="despesa" ${ (item.destino||'despesa')==='despesa' ? 'selected' : '' }>💸 Despesa</option>
+        <option value="oculto"  ${ (item.destino||'despesa')==='oculto'  ? 'selected' : '' }>🔒 Valor Oculto</option>
+      </select>
       <button onclick="NP_ITENS_OCULTOS.splice(${i},1);npRenderItensOcultos();_saveItensOcultos()"
         title="Remover item (subtrai do resumo)"
         style="background:none;border:none;color:var(--coral);cursor:pointer;font-size:13px;padding:2px 5px">✕</button>
@@ -18326,34 +18338,75 @@ function npRenderItensOcultos() {
   npAtualizarResumoInterno();
 }
 
-// Recalcula o resumo financeiro interno (sempre que itens são alterados/removidos)
+// Recalcula o resumo financeiro interno (sempre que itens são alterados/removidos).
+// REGRA (não-destrutiva, sempre recalcula a partir do valor base limpo):
+//   - valorBase   = líquido vindo da Calculadora (r-liq)
+//   - itens "oculto"  → SOMAM ao preço final (cliente paga mais; embutido)
+//   - itens "despesa" → SUBTRAEM da margem (saem do seu bolso)
+//   - valorFinal  = valorBase + soma(ocultos)   ← é o que vai para np-valor
+//   - margem      = valorBase − soma(despesas)
+// Como nunca empilha (recalcula do zero), remover/trocar um item desfaz o efeito.
 function npAtualizarResumoInterno() {
   const wrapResumo = document.getElementById('np-resumo-financeiro-interno');
   if (!wrapResumo) return;
-  // Valor base: prioriza o líquido calculado na calculadora (r-liq); senão usa np-valor
   const parseMoney = (s) => parseFloat((s||'0').toString().replace(/[R$\s.]/g,'').replace(',','.')) || 0;
   const liqCalc = parseMoney(document.getElementById('r-liq')?.textContent);
-  const valNp   = parseFloat((document.getElementById('np-valor')?.value || '0').toString().replace(',','.')) || 0;
-  const valorBase = liqCalc > 0 ? liqCalc : valNp;
-  let comissoes = 0, custos = 0;
+  // Valor base LIMPO = sempre o líquido da calculadora. Guardamos para recalcular.
+  // Se a calculadora não tem valor, cai no que estiver salvo como base limpa.
+  let valorBase = liqCalc;
+  if (!(valorBase > 0)) {
+    const baseSalva = parseFloat(window._npValorBaseLimpo || '0') || 0;
+    valorBase = baseSalva > 0 ? baseSalva : (parseFloat((document.getElementById('np-valor')?.value || '0').toString().replace(',','.')) || 0);
+  }
+  window._npValorBaseLimpo = valorBase; // memoriza a base limpa
+
+  let comissoesDesp = 0, custosDesp = 0, ocultosSoma = 0;
   (NP_ITENS_OCULTOS || []).forEach(it => {
     const v = parseFloat(it.valor) || 0;
-    if (it.tipo === 'Comissão' || it.tipo === 'Representante') comissoes += v;
-    else custos += v;
+    const ehComissao = (it.tipo === 'Comissão' || it.tipo === 'Representante');
+    const destino = it.destino || 'despesa';
+    if (destino === 'oculto') {
+      ocultosSoma += v;                 // soma ao preço final
+    } else {
+      if (ehComissao) comissoesDesp += v;
+      else            custosDesp    += v; // sai da margem
+    }
   });
-  const liq = valorBase - comissoes - custos;
+
+  const valorFinal = valorBase + ocultosSoma;        // o que o cliente paga
+  const margem     = valorBase - comissoesDesp - custosDesp; // o que sobra pra você
   const fmt = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2});
-  document.getElementById('resint-base').textContent     = fmt(valorBase);
-  document.getElementById('resint-comissoes-val').textContent = fmt(comissoes);
-  document.getElementById('resint-custos-val').textContent    = fmt(custos);
-  document.getElementById('resint-comissoes').style.display = comissoes > 0 ? 'flex' : 'none';
-  document.getElementById('resint-custos').style.display    = custos    > 0 ? 'flex' : 'none';
+
+  document.getElementById('resint-base').textContent          = fmt(valorBase);
+  document.getElementById('resint-comissoes-val').textContent = fmt(comissoesDesp);
+  document.getElementById('resint-custos-val').textContent    = fmt(custosDesp);
+  document.getElementById('resint-comissoes').style.display = comissoesDesp > 0 ? 'flex' : 'none';
+  document.getElementById('resint-custos').style.display    = custosDesp    > 0 ? 'flex' : 'none';
+
+  // Linha de valores ocultos somados + valor final ao cliente
+  const elOc  = document.getElementById('resint-ocultos');
+  const elOcV = document.getElementById('resint-ocultos-val');
+  const elFn  = document.getElementById('resint-final');
+  const elFnV = document.getElementById('resint-final-val');
+  if (elOcV) elOcV.textContent = fmt(ocultosSoma);
+  if (elFnV) elFnV.textContent = fmt(valorFinal);
+  if (elOc) elOc.style.display = ocultosSoma > 0 ? 'flex' : 'none';
+  if (elFn) elFn.style.display = ocultosSoma > 0 ? 'flex' : 'none';
+
   wrapResumo.style.display = 'block';
-  // % da margem em relação ao valor base
+
+  // Margem líquida (em relação ao valor base)
   const liqEl = document.getElementById('resint-liq');
   if (liqEl) {
-    const pct = valorBase > 0 ? ((liq / valorBase) * 100) : 0;
-    liqEl.textContent = fmt(liq) + (valorBase > 0 ? `  (${pct.toFixed(1)}%)` : '');
+    const pct = valorBase > 0 ? ((margem / valorBase) * 100) : 0;
+    liqEl.textContent = fmt(margem) + (valorBase > 0 ? `  (${pct.toFixed(1)}%)` : '');
+  }
+
+  // Atualiza o VALOR DA PROPOSTA = base + ocultos (sem empilhar; sempre recalculado).
+  // Só mexe se houver uma base válida, para não zerar um valor digitado à mão.
+  const elValProp = document.getElementById('np-valor');
+  if (elValProp && valorBase > 0) {
+    elValProp.value = valorFinal.toFixed(2);
   }
 }
 
@@ -18364,9 +18417,14 @@ async function npLancarCustosOcultosNaProposta() {
     toast('Nenhum custo ou comissão para lançar', 'warning');
     return;
   }
-  // Itens com valor > 0
-  const itens = NP_ITENS_OCULTOS.filter(it => (parseFloat(it.valor) || 0) > 0);
-  if (!itens.length) { toast('Preencha o valor dos custos/comissões antes de lançar', 'warning'); return; }
+  // Apenas itens marcados como DESPESA viram lançamento no Financeiro.
+  // Itens "Valor Oculto" já estão embutidos no preço da proposta — NÃO viram despesa.
+  const itens = NP_ITENS_OCULTOS.filter(it => (parseFloat(it.valor) || 0) > 0 && (it.destino || 'despesa') === 'despesa');
+  if (!itens.length) {
+    const temOculto = NP_ITENS_OCULTOS.some(it => (parseFloat(it.valor) || 0) > 0 && (it.destino || 'despesa') === 'oculto');
+    if (temOculto) { toast('Os itens estão como "Valor Oculto" (embutidos no preço) — não há despesas a lançar.', 'info'); return; }
+    toast('Preencha o valor dos custos/comissões antes de lançar', 'warning'); return;
+  }
 
   // Cliente da proposta atual
   const cliente =
