@@ -12691,7 +12691,7 @@ salvarProposta = async function() {
     idProp,        // A - ID
     d.cnpj,        // B - CNPJ
     d.razao,       // C - Razão Social
-    servicoPrincipal, // D - Serviço
+    (subcatsStr || servicoPrincipal), // D - Serviço (lista completa com subserviços)
     d.modelo || 'Valor por Serviço', // E - Modelo
     // F - Nome Composto (ID _ NOME _ EMPRESA _ CIDADE _ PESSOA)
     (() => {
@@ -13523,7 +13523,15 @@ function npAbrirEdicaoProposta(idx) {
   let _restaurou = false;
   const _ativJSON = r[CRM_COL.ATIVIDADES];
   if (_ativJSON && typeof npRestaurarAtividadesDeJSON === 'function') {
-    _restaurou = npRestaurarAtividadesDeJSON(_ativJSON);
+    const _res = npRestaurarAtividadesDeJSON(_ativJSON);
+    _restaurou = _res && _res.ok;
+    // Se o JSON trouxe a lista completa de serviços/subserviços, ela é a FONTE DA
+    // VERDADE — sobrescreve o parse do campo SERVICO (D), que guarda só o 1º serviço.
+    if (_res && Array.isArray(_res.servicos) && _res.servicos.length) {
+      npServicos = JSON.parse(JSON.stringify(_res.servicos));
+      PROPOSTA_CONTEXTO.servicos = npServicos;
+      try { localStorage.setItem('proposta_ctx', JSON.stringify(PROPOSTA_CONTEXTO)); } catch(e) {}
+    }
     // Atualizar a tela de itens ocultos após restaurar da planilha
     if (typeof npRenderItensOcultos === 'function') npRenderItensOcultos();
     if (typeof npAtualizarResumoInterno === 'function') npAtualizarResumoInterno();
@@ -18067,6 +18075,7 @@ let NP_ITENS_OCULTOS = JSON.parse(localStorage.getItem('np_itens_ocultos') || '[
 function npMontarAtividadesJSON() {
   try {
     const payload = {
+      servicos: (typeof npServicos !== 'undefined' && Array.isArray(npServicos)) ? npServicos : [],
       calcBlocos: (typeof calcBlocos !== 'undefined' && Array.isArray(calcBlocos)) ? calcBlocos : [],
       itensOcultos: (typeof NP_ITENS_OCULTOS !== 'undefined' && Array.isArray(NP_ITENS_OCULTOS)) ? NP_ITENS_OCULTOS : []
     };
@@ -18087,12 +18096,13 @@ function npSalvarBlocosProp(idProp) {
 }
 
 // Restaura calcBlocos + NP_ITENS_OCULTOS a partir do JSON salvo na coluna AS.
-// Retorna true se restaurou as atividades (calcBlocos) com sucesso.
+// Retorna um objeto { ok, servicos } — ok=true se restaurou as atividades (calcBlocos);
+// servicos = lista de serviços/subserviços salva (ou null se não houver no JSON).
 function npRestaurarAtividadesDeJSON(jsonStr) {
-  if (!jsonStr || typeof jsonStr !== 'string') return false;
+  if (!jsonStr || typeof jsonStr !== 'string') return { ok: false, servicos: null };
   let dados;
-  try { dados = JSON.parse(jsonStr); } catch(e) { return false; }
-  if (!dados || typeof dados !== 'object') return false;
+  try { dados = JSON.parse(jsonStr); } catch(e) { return { ok: false, servicos: null }; }
+  if (!dados || typeof dados !== 'object') return { ok: false, servicos: null };
 
   let carregou = false;
   // Atividades da calculadora
@@ -18107,7 +18117,9 @@ function npRestaurarAtividadesDeJSON(jsonStr) {
     dados.itensOcultos.forEach(it => NP_ITENS_OCULTOS.push(it));
     try { localStorage.setItem('np_itens_ocultos', JSON.stringify(NP_ITENS_OCULTOS)); } catch(e) {}
   }
-  return carregou;
+  // Serviços/subserviços completos do Step 1
+  const servicos = (Array.isArray(dados.servicos) && dados.servicos.length) ? dados.servicos : null;
+  return { ok: carregou, servicos: servicos };
 }
 
 function npCarregarBlocosProp(idProp) {
