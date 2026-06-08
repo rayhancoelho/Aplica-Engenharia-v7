@@ -13446,7 +13446,7 @@ function npAbrirCalculadora() {
 
 // ── EDITAR PROPOSTA EXISTENTE DO CRM ─────────────────────
 // Monta o contexto a partir de uma linha do DATA.crm e abre Nova Proposta preenchida
-function npAbrirEdicaoProposta(idx) {
+async function npAbrirEdicaoProposta(idx) {
   const r = DATA.crm[idx];
   if (!r) { toast('Proposta não encontrada', 'warning'); return; }
 
@@ -13522,7 +13522,20 @@ function npAbrirEdicaoProposta(idx) {
   const _idPropEdit = String(r[CRM_COL.ID] || idx + 1);
   let _restaurou = false;
   let _nItens = 0;
-  const _ativJSON = r[CRM_COL.ATIVIDADES];
+  let _ativJSON = r[CRM_COL.ATIVIDADES];
+  // ROBUSTEZ: se a memória (DATA.crm) ainda não tem o JSON da coluna AS — por exemplo
+  // logo após salvar, antes de um reload — lemos a célula AS desta linha direto da
+  // planilha. Isso elimina a necessidade de recarregar a página para a revisão funcionar.
+  if ((!_ativJSON || !String(_ativJSON).trim()) && typeof sheetsGet === 'function' && CONFIG.SHEET_ID && accessToken) {
+    try {
+      const _rowReal = idx + 2;
+      const _vals = await sheetsGet(CONFIG.SHEETS.CRM, 'AS' + _rowReal + ':AS' + _rowReal);
+      if (_vals && _vals[0] && _vals[0][0]) {
+        _ativJSON = _vals[0][0];
+        if (DATA.crm[idx]) DATA.crm[idx][CRM_COL.ATIVIDADES] = _ativJSON; // atualiza memória
+      }
+    } catch(e) { /* segue com fallback local */ }
+  }
   if (_ativJSON && typeof npRestaurarAtividadesDeJSON === 'function') {
     const _res = npRestaurarAtividadesDeJSON(_ativJSON);
     _restaurou = _res && _res.ok;
