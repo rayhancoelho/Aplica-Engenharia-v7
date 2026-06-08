@@ -8570,9 +8570,22 @@ function prevAtualizar() {
   const vis    = parseFloat(document.getElementById('calc-vis')?.value   || '1') || 1;
   const extras = parseFloat(document.getElementById('calc-extras')?.value|| '0') || 0;
   const desl   = km * rkm * vis;
-  const total  = liq + art + desl + extras;
-
-  // — Montar linhas da tabela de itens —
+  let total  = liq + art + desl + extras;
+  // FONTE DA VERDADE: o valor salvo da proposta (r[CRM_COL.VALOR]) já é o "Total Final"
+  // do sistema, com os custos/comissões somados. A proposta deve mostrar EXATAMENTE
+  // esse número (o cliente paga o valor cheio), sem refazer imposto/ART por cima.
+  const _valorSalvo = r ? (parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0) : 0;
+  if (_valorSalvo > 0) {
+    total = _valorSalvo;
+    // Reescala os itens para que a SOMA das linhas seja igual ao total final exibido.
+    const _somaItens = prevItens.reduce((s, it) => s + (it.qtd||0) * (it.unit||0), 0);
+    if (_somaItens > 0 && Math.abs(_somaItens - total) > 0.005) {
+      const _fator = total / _somaItens;
+      prevItens.forEach(it => { it.unit = (it.unit||0) * _fator; });
+    } else if (_somaItens === 0 && prevItens.length) {
+      prevItens[0].unit = total / (prevItens[0].qtd || 1);
+    }
+  }
   // Coletar todos os itens dos blocos da calculadora para cruzar normas/descrição
   const blocoItens = [];
   // Só usar calcBlocos se a calculadora está vinculada a esta mesma proposta
@@ -14196,7 +14209,19 @@ function prevExportarWord() {
   const vis    = parseFloat(document.getElementById('calc-vis')?.value || '1') || 1;
   const desl   = km*rkm*vis;
   const extras = parseFloat(document.getElementById('calc-extras')?.value || '0') || 0;
-  const total  = liq + art + desl + extras;
+  let total  = liq + art + desl + extras;
+  // FONTE DA VERDADE: valor salvo da proposta = "Total Final" do sistema (com custos).
+  const _valorSalvoPdf = r ? (parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0) : 0;
+  if (_valorSalvoPdf > 0) {
+    total = _valorSalvoPdf;
+    const _somaItens = prevItens.reduce((s, it) => s + (it.qtd||0) * (it.unit||0), 0);
+    if (_somaItens > 0 && Math.abs(_somaItens - total) > 0.005) {
+      const _fator = total / _somaItens;
+      prevItens.forEach(it => { it.unit = (it.unit||0) * _fator; });
+    } else if (_somaItens === 0 && prevItens.length) {
+      prevItens[0].unit = total / (prevItens[0].qtd || 1);
+    }
+  }
 
   const fmt = v => 'R$ ' + v.toLocaleString('pt-BR',{minimumFractionDigits:2});
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
