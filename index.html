@@ -8571,13 +8571,33 @@ function prevAtualizar() {
   const extras = parseFloat(document.getElementById('calc-extras')?.value|| '0') || 0;
   const desl   = km * rkm * vis;
   let total  = liq + art + desl + extras;
-  // FONTE DA VERDADE: o valor salvo da proposta (r[CRM_COL.VALOR]) já é o "Total Final"
-  // do sistema, com os custos/comissões somados. A proposta deve mostrar EXATAMENTE
-  // esse número (o cliente paga o valor cheio), sem refazer imposto/ART por cima.
-  const _valorSalvo = r ? (parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0) : 0;
-  if (_valorSalvo > 0) {
-    total = _valorSalvo;
-    // Reescala os itens para que a SOMA das linhas seja igual ao total final exibido.
+  // FONTE DA VERDADE para o valor da proposta (o "Total Final" do sistema, com custos).
+  // Prioridade: (1) Total Final mostrado AGORA na tela (r-final), pois é o mais atual;
+  //             (2) campo Valor da proposta (np-valor); (3) valor salvo no CRM.
+  const _parseBRL = (s) => parseFloat((s||'0').toString().replace(/[R$\s.]/g,'').replace(',','.')) || 0;
+  const _calcPropIdV = document.getElementById('calc-id-proposta')?.value || '';
+  const _prevPropIdV = String(r ? (r[CRM_COL.ID]||'') : '');
+  let _valorFinal = 0;
+  // (1) Total Final da calculadora — só se vinculada a ESTA proposta
+  if (_calcPropIdV && _calcPropIdV === _prevPropIdV) {
+    const _rfRow = document.getElementById('r-final-row');
+    if (_rfRow && _rfRow.style.display !== 'none') {
+      _valorFinal = _parseBRL(document.getElementById('r-final')?.textContent);
+    }
+  }
+  // (2) campo Valor da proposta, se corresponder à proposta aberta
+  if (!(_valorFinal > 0)) {
+    const _npId = document.getElementById('np-id-prop')?.value || '';
+    if (_npId && _npId === _prevPropIdV) {
+      _valorFinal = _parseBRL(document.getElementById('np-valor')?.value);
+    }
+  }
+  // (3) valor salvo no CRM
+  if (!(_valorFinal > 0)) {
+    _valorFinal = r ? (_parseBRL(r[CRM_COL.VALOR])) : 0;
+  }
+  if (_valorFinal > 0) {
+    total = _valorFinal;
     const _somaItens = prevItens.reduce((s, it) => s + (it.qtd||0) * (it.unit||0), 0);
     if (_somaItens > 0 && Math.abs(_somaItens - total) > 0.005) {
       const _fator = total / _somaItens;
@@ -14212,8 +14232,22 @@ function prevExportarWord() {
   let total  = liq + art + desl + extras;
   // FONTE DA VERDADE: valor salvo da proposta = "Total Final" do sistema (com custos).
   const _valorSalvoPdf = r ? (parseFloat((r[CRM_COL.VALOR]||'0').toString().replace(',','.')) || 0) : 0;
-  if (_valorSalvoPdf > 0) {
-    total = _valorSalvoPdf;
+  // Mesma prioridade do preview: Total Final na tela > np-valor > valor salvo.
+  const _parseBRLp = (s) => parseFloat((s||'0').toString().replace(/[R$\s.]/g,'').replace(',','.')) || 0;
+  const _prevPropIdP = String(r ? (r[CRM_COL.ID]||'') : '');
+  const _calcPropIdP = document.getElementById('calc-id-proposta')?.value || '';
+  let _valorFinalPdf = 0;
+  if (_calcPropIdP && _calcPropIdP === _prevPropIdP) {
+    const _rfRowP = document.getElementById('r-final-row');
+    if (_rfRowP && _rfRowP.style.display !== 'none') _valorFinalPdf = _parseBRLp(document.getElementById('r-final')?.textContent);
+  }
+  if (!(_valorFinalPdf > 0)) {
+    const _npIdP = document.getElementById('np-id-prop')?.value || '';
+    if (_npIdP && _npIdP === _prevPropIdP) _valorFinalPdf = _parseBRLp(document.getElementById('np-valor')?.value);
+  }
+  if (!(_valorFinalPdf > 0)) _valorFinalPdf = _valorSalvoPdf;
+  if (_valorFinalPdf > 0) {
+    total = _valorFinalPdf;
     const _somaItens = prevItens.reduce((s, it) => s + (it.qtd||0) * (it.unit||0), 0);
     if (_somaItens > 0 && Math.abs(_somaItens - total) > 0.005) {
       const _fator = total / _somaItens;
