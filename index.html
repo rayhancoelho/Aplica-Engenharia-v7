@@ -8261,10 +8261,21 @@ async function calcSalvarNoSheets() {
   const bruto = subtotal + art + desl + extras;
   const liq   = bruto - bruto * (imp/100);
 
+  // Somar os custos/comissões marcados para somar na proposta (Total Final).
+  // É ESTE valor (com os custos embutidos) que deve ir para o CRM — não o líquido puro.
+  let _somaOcultos = 0;
+  if (typeof NP_ITENS_OCULTOS !== 'undefined' && Array.isArray(NP_ITENS_OCULTOS)) {
+    NP_ITENS_OCULTOS.forEach(it => {
+      const v = parseFloat(it && it.valor) || 0;
+      if (it && it.somar !== false && v > 0) _somaOcultos += v;
+    });
+  }
+  const totalFinal = liq + _somaOcultos;
+
   const idx = DATA.crm.findIndex(r => parseInt(r[CRM_COL.ID]) === idProp);
   if (idx < 0) { toast('Proposta não encontrada no cache', 'error'); return; }
 
-  DATA.crm[idx][CRM_COL.VALOR] = liq.toFixed(2);
+  DATA.crm[idx][CRM_COL.VALOR] = totalFinal.toFixed(2);
 
   // Montar o JSON das atividades (serviços + blocos da calculadora + custos ocultos)
   // para gravar na coluna AS — é isso que permite restaurar tudo na revisão.
@@ -8285,7 +8296,7 @@ async function calcSalvarNoSheets() {
         body: JSON.stringify({
           valueInputOption: 'USER_ENTERED',
           data: [
-            { range: CONFIG.SHEETS.CRM + '!H'  + rowReal, values: [[liq.toFixed(2)]] },
+            { range: CONFIG.SHEETS.CRM + '!H'  + rowReal, values: [[totalFinal.toFixed(2)]] },
             { range: CONFIG.SHEETS.CRM + '!AS' + rowReal, values: [[_ativJSON]] }
           ]
         })
@@ -8294,7 +8305,7 @@ async function calcSalvarNoSheets() {
         const e = await r.json().catch(() => ({}));
         throw new Error(e.error?.message || ('Sheets API ' + r.status));
       }
-      toast(`✅ Valor R$ ${liq.toFixed(2)} e atividades salvos na proposta #${idProp}`, 'success');
+      toast(`✅ Valor R$ ${totalFinal.toFixed(2)} e atividades salvos na proposta #${idProp}`, 'success');
     } catch(e) {
       toast('Erro: ' + e.message, 'error');
     }
@@ -12987,9 +12998,15 @@ function calcCarregarSubcategorias() {
 function calcEnviarParaProposta() {
   const liqEl = document.getElementById('r-liq');
   const liq = parseFloat((liqEl?.textContent||'0').replace(/[R$.\s]/g,'').replace(',','.')) || 0;
+  // Somar custos/comissões marcados → Total Final (é o que vai pra proposta).
+  let _somaOc = 0;
+  if (typeof NP_ITENS_OCULTOS !== 'undefined' && Array.isArray(NP_ITENS_OCULTOS)) {
+    NP_ITENS_OCULTOS.forEach(it => { const v = parseFloat(it && it.valor)||0; if (it && it.somar !== false && v > 0) _somaOc += v; });
+  }
+  const totalFinal = liq + _somaOc;
 
   // Salvar valor e condições no contexto
-  PROPOSTA_CONTEXTO.valor = liq.toFixed(2);
+  PROPOSTA_CONTEXTO.valor = totalFinal.toFixed(2);
   PROPOSTA_CONTEXTO.pagto = calcGetPagtoStr?.() || '';
   PROPOSTA_CONTEXTO.parcelas = JSON.parse(JSON.stringify(calcPagtoItens || []));
   localStorage.setItem('proposta_ctx', JSON.stringify(PROPOSTA_CONTEXTO));
@@ -12998,7 +13015,7 @@ function calcEnviarParaProposta() {
   setTimeout(() => {
     // Restaurar valor
     const elVal = document.getElementById('np-valor');
-    if (elVal && liq) elVal.value = liq.toFixed(2);
+    if (elVal && totalFinal) elVal.value = totalFinal.toFixed(2);
 
     // Restaurar campos da proposta se existir contexto
     const ctx = PROPOSTA_CONTEXTO;
