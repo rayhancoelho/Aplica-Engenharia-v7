@@ -4729,6 +4729,14 @@ tr.proj-row-ok      td:first-child { border-left: 3px solid var(--teal);  }
                     <span class="label">= Total Líquido</span>
                     <span class="val" id="r-liq">R$ 0</span>
                   </div>
+                  <div class="calc-resumo-row" id="r-ocultos-row" style="display:none;color:var(--teal)">
+                    <span class="label">+ Comissões / Custos</span>
+                    <span class="val" id="r-ocultos">R$ 0</span>
+                  </div>
+                  <div class="calc-resumo-row total" id="r-final-row" style="display:none">
+                    <span class="label">= Total Final</span>
+                    <span class="val" id="r-final" style="color:var(--gold)">R$ 0</span>
+                  </div>
                   <div class="calc-resumo-row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
                     <span class="label">Com desconto à vista</span>
                     <span class="val" id="r-desc" style="color:var(--green)">R$ 0</span>
@@ -8212,6 +8220,8 @@ function calcRecalcular() {
   if (s('r-desl-mem')) s('r-desl-mem').textContent  = `${km} km × R$${rkm}/km × ${vis} vis.`;
 
   renderCalcItens();
+  // Atualizar a linha "+ Comissões/Custos" e o Total Final na calculadora.
+  if (typeof npAtualizarResumoInterno === 'function') setTimeout(npAtualizarResumoInterno, 30);
   // Recalcular parcelas de pagamento quando valor muda
   if (typeof calcPagtoRecalcular === 'function') setTimeout(calcPagtoRecalcular, 50);
 }
@@ -12899,6 +12909,7 @@ calcRecalcular = function() {
   if (s('r-desl-mem')) s('r-desl-mem').textContent = `${km} km × R$${rkm}/km × ${vis} vis.`;
 
   renderCalcItens();
+  if (typeof npAtualizarResumoInterno === 'function') setTimeout(npAtualizarResumoInterno, 30);
 };
 
 // Drag & Drop (sistema legado — substituído por calcBlocoDrop na F9)
@@ -18358,6 +18369,18 @@ function npAtualizarResumoInterno() {
   if (elOc)   elOc.style.display  = somados > 0 ? 'flex' : 'none';
 
   wrapResumo.style.display = 'block';
+
+  // Reflete os itens somados também no RESUMO DA CALCULADORA (linha "+ Comissões/Custos"
+  // e "= Total Final"). A base R$ (Total Líquido) permanece pura; a soma aparece por cima.
+  const rOcRow = document.getElementById('r-ocultos-row');
+  const rOc    = document.getElementById('r-ocultos');
+  const rFnRow = document.getElementById('r-final-row');
+  const rFn    = document.getElementById('r-final');
+  const fmtCalc = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {minimumFractionDigits:2});
+  if (rOc) rOc.textContent = fmtCalc(somados);
+  if (rFn) rFn.textContent = fmtCalc(valorFinal);
+  if (rOcRow) rOcRow.style.display = somados > 0 ? 'flex' : 'none';
+  if (rFnRow) rFnRow.style.display = somados > 0 ? 'flex' : 'none';
 
   // Atualiza o VALOR DA PROPOSTA = base + itens somados (sempre recalculado).
   const elValProp = document.getElementById('np-valor');
