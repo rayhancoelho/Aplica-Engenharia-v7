@@ -7333,7 +7333,7 @@ async function salvarProposta() {
     '',          // N-W
     '','','','','','','','','','',
     canal,       // Y - Canal
-    '','','','', // Z-AB
+    '','','',    // Z-AB (3 colunas: Z, AA, AB)
     '',          // AC - Retorno
     '',          // AD
     contato,     // AE - Contato
@@ -8267,17 +8267,35 @@ async function calcSalvarNoSheets() {
 
   DATA.crm[idx][CRM_COL.VALOR] = liq.toFixed(2);
 
+  // Montar o JSON das atividades (serviços + blocos da calculadora + custos ocultos)
+  // para gravar na coluna AS — é isso que permite restaurar tudo na revisão.
+  const _ativJSON = (typeof npMontarAtividadesJSON === 'function') ? npMontarAtividadesJSON() : '';
+  // Atualizar memória local imediatamente (não depende de reload).
+  if (typeof CRM_COL.ATIVIDADES === 'number') DATA.crm[idx][CRM_COL.ATIVIDADES] = _ativJSON;
+  // Cache local por-proposta (segunda fonte de recuperação).
+  if (typeof npSalvarBlocosProp === 'function') { try { npSalvarBlocosProp(String(idProp)); } catch(e) {} }
+
   if (CONFIG.SHEET_ID && accessToken) {
     try {
       const rowReal = idx + 2;
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(CONFIG.SHEETS.CRM + '!H' + rowReal)}?valueInputOption=USER_ENTERED`;
-      const r = await authedFetch(url, {
-        method: 'PUT',
+      // Gravar VALOR (H) e ATIVIDADES (AS) numa única chamada batchUpdate.
+      const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values:batchUpdate`;
+      const r = await authedFetch(batchUrl, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[liq.toFixed(2)]] })
+        body: JSON.stringify({
+          valueInputOption: 'USER_ENTERED',
+          data: [
+            { range: CONFIG.SHEETS.CRM + '!H'  + rowReal, values: [[liq.toFixed(2)]] },
+            { range: CONFIG.SHEETS.CRM + '!AS' + rowReal, values: [[_ativJSON]] }
+          ]
+        })
       });
-      if (!r.ok) throw new Error('Sheets API ' + r.status);
-      toast(`✅ Valor R$ ${liq.toFixed(2)} salvo na proposta #${idProp}`, 'success');
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.error?.message || ('Sheets API ' + r.status));
+      }
+      toast(`✅ Valor R$ ${liq.toFixed(2)} e atividades salvos na proposta #${idProp}`, 'success');
     } catch(e) {
       toast('Erro: ' + e.message, 'error');
     }
