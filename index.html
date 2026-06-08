@@ -6483,7 +6483,7 @@ async function syncData() {
 
   try {
     const [crm, fin, cli, proj, desp, mkt] = await Promise.all([
-      sheetsGet(CONFIG.SHEETS.CRM,        'A2:AS1000'),
+      sheetsGet(CONFIG.SHEETS.CRM,        'A2:AZ1000'),
       sheetsGet(CONFIG.SHEETS.FINANCEIRO,  'A2:P500'),
       sheetsGet(CONFIG.SHEETS.CLIENTES,    'A2:K200'),
       sheetsGet(CONFIG.SHEETS.PROJETOS,    'A2:P300'),
@@ -13541,16 +13541,27 @@ async function npAbrirEdicaoProposta(idx) {
   let _restaurou = false;
   let _nItens = 0;
   let _ativJSON = r[CRM_COL.ATIVIDADES];
-  // ROBUSTEZ: se a memória (DATA.crm) ainda não tem o JSON da coluna AS — por exemplo
-  // logo após salvar, antes de um reload — lemos a célula AS desta linha direto da
-  // planilha. Isso elimina a necessidade de recarregar a página para a revisão funcionar.
-  if ((!_ativJSON || !String(_ativJSON).trim()) && typeof sheetsGet === 'function' && CONFIG.SHEET_ID && accessToken) {
+  // Validação: considera "tem JSON" só se for um JSON com calcBlocos de verdade.
+  const _ehAtivJSON = (s) => {
+    if (!s || typeof s !== 'string' || s.indexOf('calcBlocos') < 0) return false;
+    try { const o = JSON.parse(s); return !!(o && (Array.isArray(o.calcBlocos) || Array.isArray(o.servicos))); }
+    catch(e) { return false; }
+  };
+  // ROBUSTEZ: se a memória não tem o JSON válido (ex.: logo após salvar, ou porque o
+  // append caiu numa coluna ligeiramente diferente), VARREMOS as colunas AS..AZ desta
+  // linha direto na planilha e pegamos a primeira célula que contenha um JSON de
+  // atividades válido. Isso torna a recuperação imune a pequenos desalinhamentos.
+  if (!_ehAtivJSON(_ativJSON) && typeof sheetsGet === 'function' && CONFIG.SHEET_ID && accessToken) {
     try {
       const _rowReal = idx + 2;
-      const _vals = await sheetsGet(CONFIG.SHEETS.CRM, 'AS' + _rowReal + ':AS' + _rowReal);
-      if (_vals && _vals[0] && _vals[0][0]) {
-        _ativJSON = _vals[0][0];
-        if (DATA.crm[idx]) DATA.crm[idx][CRM_COL.ATIVIDADES] = _ativJSON; // atualiza memória
+      const _vals = await sheetsGet(CONFIG.SHEETS.CRM, 'AS' + _rowReal + ':AZ' + _rowReal);
+      const _linha = (_vals && _vals[0]) ? _vals[0] : [];
+      for (let _c = 0; _c < _linha.length; _c++) {
+        if (_ehAtivJSON(_linha[_c])) {
+          _ativJSON = _linha[_c];
+          if (DATA.crm[idx]) DATA.crm[idx][CRM_COL.ATIVIDADES] = _ativJSON; // atualiza memória
+          break;
+        }
       }
     } catch(e) { /* segue com fallback local */ }
   }
