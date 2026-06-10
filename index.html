@@ -11988,7 +11988,7 @@ async function cfgExportarTodosParaPlanilha(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Exportando...'; }
   try {
     // 1) Reúne todos os subserviços (padrão + custom)
-    const todos = { ...SUBCATEGORIAS, ...SERVICOS_CUSTOM };
+    const todos = getCatalogoServicos();
     const subservicos = [];
     Object.values(todos).forEach(arr => (arr || []).forEach(s => {
       if (s && !subservicos.includes(s)) subservicos.push(s);
@@ -12112,11 +12112,37 @@ async function normaSalvarNaPlanilha(item, normas, descricao, obs) {
 // ═══ GESTÃO DE SERVIÇOS E NORMAS (Configurações) ═══
 let SERVICOS_CUSTOM = JSON.parse(localStorage.getItem('servicos_custom') || '{}');
 
+// ── EXCLUSÕES DEFINITIVAS DO CATÁLOGO ──────────────────────
+// Serviços e subserviços removidos pelo usuário (inclusive nativos). Persistem no
+// localStorage. O catálogo sempre filtra esses itens, então some de tudo (listas,
+// configurações, calculadora, nova proposta), funcionando como exclusão definitiva.
+let SERVICOS_OCULTOS = JSON.parse(localStorage.getItem('servicos_ocultos') || '[]');      // nomes de serviços removidos
+let SUBSERVICOS_OCULTOS = JSON.parse(localStorage.getItem('subservicos_ocultos') || '{}'); // { "SERVICO": ["sub1","sub2"] }
+
+function _salvarExclusoes() {
+  localStorage.setItem('servicos_ocultos', JSON.stringify(SERVICOS_OCULTOS));
+  localStorage.setItem('subservicos_ocultos', JSON.stringify(SUBSERVICOS_OCULTOS));
+}
+
+// Catálogo efetivo de serviços: mescla nativos + customizados e remove os excluídos.
+// É a ÚNICA fonte que todas as telas devem usar para listar serviços/subserviços.
+function getCatalogoServicos() {
+  const base = { ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
+  const out = {};
+  Object.keys(base).forEach(svc => {
+    if (SERVICOS_OCULTOS.indexOf(svc) >= 0) return; // serviço removido → some
+    const ocultosSub = SUBSERVICOS_OCULTOS[svc] || [];
+    out[svc] = (base[svc] || []).filter(sub => ocultosSub.indexOf(sub) < 0);
+  });
+  return out;
+}
+
+
 function cfgRenderServicos() {
   const wrap = document.getElementById('cfg-servicos-wrap');
   if (!wrap) return;
   // Mesclar SUBCATEGORIAS padrão com custom
-  const todos = { ...SUBCATEGORIAS, ...SERVICOS_CUSTOM };
+  const todos = getCatalogoServicos();
   wrap.innerHTML = Object.keys(todos).map(svc => {
     const subs = todos[svc] || [];
     const isCustom = SERVICOS_CUSTOM[svc] !== undefined;
@@ -12131,7 +12157,10 @@ function cfgRenderServicos() {
           return `<div style="margin-bottom:12px;padding:10px;background:var(--s3);border-radius:6px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
               <strong style="font-size:12px">${sub}</strong>
-              <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgEditarSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">✏️ Editar</button>
+              <div style="display:flex;gap:4px">
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgEditarSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">✏️ Editar</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;color:var(--coral)" onclick="cfgRemoverSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">🗑</button>
+              </div>
             </div>
             <div style="font-size:11px;color:var(--teal);margin-bottom:3px"><b>Normas:</b> ${nd.normas || '<span style=color:var(--text3)>— não definida —</span>'}</div>
             <div style="font-size:11px;color:var(--text3);line-height:1.5">${nd.descricao ? nd.descricao.slice(0,120)+'...' : '<span style=color:var(--coral)>— sem texto —</span>'}</div>
@@ -12139,7 +12168,7 @@ function cfgRenderServicos() {
         }).join('')}
         <div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn btn-ghost btn-sm" onclick="cfgAddSubservico('${svc.replace(/'/g,"\\'")}')">+ Subserviço</button>
-          ${isCustom ? `<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="cfgRemoverServico('${svc.replace(/'/g,"\\'")}')">🗑 Remover Serviço</button>` : ''}
+          <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="cfgRemoverServico('${svc.replace(/'/g,"\\'")}')">🗑 Remover Serviço</button>
         </div>
       </div>
     </div>`;
@@ -12229,11 +12258,38 @@ function cfgAddServico() {
 }
 
 function cfgRemoverServico(servico) {
-  if (!confirm(`Remover "${servico}" e todos seus subserviços?`)) return;
-  delete SERVICOS_CUSTOM[servico];
-  localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  if (!confirm(`Remover "${servico}" e todos os seus subserviços?\n\nEsta ação é definitiva.`)) return;
+  // Se for customizado, apaga do custom. Em todo caso, registra como oculto para
+  // que serviços nativos também sumam de tudo de forma definitiva.
+  if (SERVICOS_CUSTOM[servico] !== undefined) {
+    delete SERVICOS_CUSTOM[servico];
+    localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  }
+  if (SERVICOS_OCULTOS.indexOf(servico) < 0) SERVICOS_OCULTOS.push(servico);
+  // Limpa eventual lista de subserviços ocultos desse serviço (não é mais necessária).
+  delete SUBSERVICOS_OCULTOS[servico];
+  _salvarExclusoes();
   cfgRenderServicos();
   toast('Serviço removido', 'info');
+}
+
+// Remove um subserviço específico (nativo ou customizado), de forma definitiva.
+function cfgRemoverSubservico(servico, sub) {
+  if (!confirm(`Remover o subserviço "${sub}"?\n\nEsta ação é definitiva.`)) return;
+  // Se o serviço é customizado e o sub está na lista custom, remove de lá.
+  if (SERVICOS_CUSTOM[servico] && Array.isArray(SERVICOS_CUSTOM[servico])) {
+    const k = SERVICOS_CUSTOM[servico].indexOf(sub);
+    if (k >= 0) {
+      SERVICOS_CUSTOM[servico].splice(k, 1);
+      localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+    }
+  }
+  // Sempre registra na lista de ocultos (cobre nativos e garante que não reapareça).
+  if (!Array.isArray(SUBSERVICOS_OCULTOS[servico])) SUBSERVICOS_OCULTOS[servico] = [];
+  if (SUBSERVICOS_OCULTOS[servico].indexOf(sub) < 0) SUBSERVICOS_OCULTOS[servico].push(sub);
+  _salvarExclusoes();
+  cfgRenderServicos();
+  toast('Subserviço removido', 'info');
 }
 
 // ── CARREGAR SERVIÇOS E NORMAS DA PLANILHA ────────────────
@@ -12591,7 +12647,7 @@ function npRenderServicos() {
   const wrap = document.getElementById('np-servicos-wrap');
   if (!wrap) return;
   // Mesclar serviços padrão com customizados
-  const todosServicos = { ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
+  const todosServicos = getCatalogoServicos();
   wrap.innerHTML = npServicos.map((sv, i) => {
     const subs = todosServicos[sv.servico] || [];
     return `
@@ -13154,7 +13210,7 @@ function calcRenderBlocos() {
         <input class="calc-bloco-nome" placeholder="Local / Escopo (ex: Casa da Rua X)"
           value="${bloco.nome||''}" oninput="calcBlocos[${bi}].nome=this.value">
         <select class="calc-bloco-servico" onchange="calcBlocos[${bi}].servico=this.value;calcBlocoCarregarSubs(${bi},true)">
-          ${Object.keys({ ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) }).map(s =>
+          ${Object.keys(getCatalogoServicos()).map(s =>
             `<option ${bloco.servico===s?'selected':''}>${s}</option>`
           ).join('')}
         </select>
@@ -13199,7 +13255,7 @@ function calcBlocoCarregarSubs(bi, onlyIfEmpty) {
   if (onlyIfEmpty && bloco.itens.length) return; // só carrega se vazio
   // Usar a MESMA fonte do cadastro (Configurações) e do Step 1:
   // mescla os subserviços padrão com os personalizados / vindos da planilha.
-  const todos = { ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== 'undefined' ? SERVICOS_CUSTOM : {}) };
+  const todos = getCatalogoServicos();
   const subs = todos[bloco.servico] || [];
   const existentes = bloco.itens.map(i => i.desc);
   subs.forEach(sub => {
@@ -14646,7 +14702,7 @@ function prevExportarWord() {
 
 function prevAbrirCadNormas() {
   // Construir lista de todos os itens disponíveis
-  const todos = Object.values({ ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== "undefined" ? SERVICOS_CUSTOM : {}) }).flat();
+  const todos = Object.values(getCatalogoServicos()).flat();
 
   const html = `
   <div id="cad-normas-overlay" onclick="if(event.target===this)prevFecharCadNormas()"
@@ -14706,7 +14762,7 @@ function cadNormasFiltrar(q) {
 }
 
 function cadNormasSalvarTudo() {
-  const todos = Object.values({ ...SUBCATEGORIAS, ...(typeof SERVICOS_CUSTOM !== "undefined" ? SERVICOS_CUSTOM : {}) }).flat();
+  const todos = Object.values(getCatalogoServicos()).flat();
   todos.forEach(item => {
     const idSafe = item.replace(/[^a-zA-Z0-9]/g,'_');
     const norma = document.getElementById(`cn-norma-${idSafe}`)?.value || '';
