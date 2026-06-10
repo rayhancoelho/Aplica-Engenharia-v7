@@ -12159,6 +12159,7 @@ function cfgRenderServicos() {
               <strong style="font-size:12px">${sub}</strong>
               <div style="display:flex;gap:4px">
                 <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgEditarSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">✏️ Editar</button>
+                <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px" onclick="cfgRenomearSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">🔤 Renomear</button>
                 <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 6px;color:var(--coral)" onclick="cfgRemoverSubservico('${svc.replace(/'/g,"\\'")}','${sub.replace(/'/g,"\\'")}')">🗑</button>
               </div>
             </div>
@@ -12166,8 +12167,9 @@ function cfgRenderServicos() {
             <div style="font-size:11px;color:var(--text3);line-height:1.5">${nd.descricao ? nd.descricao.slice(0,120)+'...' : '<span style=color:var(--coral)>— sem texto —</span>'}</div>
           </div>`;
         }).join('')}
-        <div style="display:flex;gap:6px;margin-top:8px">
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="cfgAddSubservico('${svc.replace(/'/g,"\\'")}')">+ Subserviço</button>
+          <button class="btn btn-ghost btn-sm" onclick="cfgRenomearServico('${svc.replace(/'/g,"\\'")}')">✏️ Renomear Serviço</button>
           <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="cfgRemoverServico('${svc.replace(/'/g,"\\'")}')">🗑 Remover Serviço</button>
         </div>
       </div>
@@ -12290,6 +12292,63 @@ function cfgRemoverSubservico(servico, sub) {
   _salvarExclusoes();
   cfgRenderServicos();
   toast('Subserviço removido', 'info');
+}
+
+// Renomeia um SERVIÇO (nativo ou customizado), de forma definitiva.
+// O serviço passa a existir com o novo nome (como customizado, preservando os subs)
+// e o nome antigo é ocultado para sumir de tudo.
+function cfgRenomearServico(servico) {
+  const novo = (prompt('Novo nome para o serviço:', servico) || '').trim().toUpperCase();
+  if (!novo || novo === servico.toUpperCase()) return;
+  const cat = getCatalogoServicos();
+  if ((SUBCATEGORIAS[novo] && SERVICOS_OCULTOS.indexOf(novo) < 0) || SERVICOS_CUSTOM[novo] || cat[novo]) {
+    toast('Já existe um serviço com esse nome', 'warning'); return;
+  }
+  // Subserviços atuais (já filtrados) passam para o nome novo, como customizado.
+  const subsAtuais = (cat[servico] || []).slice();
+  SERVICOS_CUSTOM[novo] = subsAtuais;
+  localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  // Remove o antigo: se era custom apaga; em todo caso oculta o nome antigo.
+  if (SERVICOS_CUSTOM[servico] !== undefined) {
+    delete SERVICOS_CUSTOM[servico];
+    localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  }
+  if (SERVICOS_OCULTOS.indexOf(servico) < 0) SERVICOS_OCULTOS.push(servico);
+  delete SUBSERVICOS_OCULTOS[servico];
+  // Reaproveita as normas/descrições dos subs (ficam vinculadas ao nome do sub, não muda).
+  _salvarExclusoes();
+  cfgRenderServicos();
+  toast(`Serviço renomeado para "${novo}"`, 'success');
+}
+
+// Renomeia um SUBSERVIÇO (nativo ou customizado), de forma definitiva.
+function cfgRenomearSubservico(servico, sub) {
+  const novo = (prompt('Novo nome para o subserviço:', sub) || '').trim();
+  if (!novo || novo === sub) return;
+  const cat = getCatalogoServicos();
+  if ((cat[servico] || []).indexOf(novo) >= 0) { toast('Já existe um subserviço com esse nome', 'warning'); return; }
+  // Garante que o serviço seja customizável (copia a lista atual para custom).
+  if (SERVICOS_CUSTOM[servico] === undefined) {
+    SERVICOS_CUSTOM[servico] = (cat[servico] || []).slice();
+  }
+  // Substitui o nome do sub na lista custom.
+  const arr = SERVICOS_CUSTOM[servico];
+  const k = arr.indexOf(sub);
+  if (k >= 0) arr[k] = novo; else arr.push(novo);
+  localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
+  // Oculta o nome antigo do sub (cobre o caso de ele ainda vir do nativo).
+  if (!Array.isArray(SUBSERVICOS_OCULTOS[servico])) SUBSERVICOS_OCULTOS[servico] = [];
+  if (SUBSERVICOS_OCULTOS[servico].indexOf(sub) < 0) SUBSERVICOS_OCULTOS[servico].push(sub);
+  _salvarExclusoes();
+  // Copia as normas/descrição do sub antigo para o novo nome, se houver.
+  try {
+    const nd = (typeof normaDe === 'function') ? normaDe(sub) : null;
+    if (nd && (nd.normas || nd.descricao || nd.obs) && typeof normaSalvar === 'function') {
+      normaSalvar(novo, nd.normas || '', nd.descricao || '', nd.obs || '');
+    }
+  } catch(e) {}
+  cfgRenderServicos();
+  toast(`Subserviço renomeado para "${novo}"`, 'success');
 }
 
 // ── CARREGAR SERVIÇOS E NORMAS DA PLANILHA ────────────────
