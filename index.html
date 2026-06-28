@@ -12243,6 +12243,7 @@ function cfgAddSubservico(servico) {
   localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
   // Abrir editor de normas para o novo subserviço
   cfgRenderServicos();
+  cfgSalvarServicosNaPlanilha();
   setTimeout(() => cfgEditarSubservico(servico, nome.trim()), 200);
   toast(`Subserviço "${nome.trim()}" adicionado`, 'success');
 }
@@ -12256,6 +12257,7 @@ function cfgAddServico() {
   localStorage.setItem('servicos_custom', JSON.stringify(SERVICOS_CUSTOM));
   // Adicionar ao select de serviços da proposta
   cfgRenderServicos();
+  cfgSalvarServicosNaPlanilha();
   toast(`Serviço "${nomeUp}" criado — adicione subserviços`, 'success');
 }
 
@@ -12272,6 +12274,7 @@ function cfgRemoverServico(servico) {
   delete SUBSERVICOS_OCULTOS[servico];
   _salvarExclusoes();
   cfgRenderServicos();
+  cfgSalvarServicosNaPlanilha();
   toast('Serviço removido', 'info');
 }
 
@@ -12291,6 +12294,7 @@ function cfgRemoverSubservico(servico, sub) {
   if (SUBSERVICOS_OCULTOS[servico].indexOf(sub) < 0) SUBSERVICOS_OCULTOS[servico].push(sub);
   _salvarExclusoes();
   cfgRenderServicos();
+  cfgSalvarServicosNaPlanilha();
   toast('Subserviço removido', 'info');
 }
 
@@ -12318,6 +12322,7 @@ function cfgRenomearServico(servico) {
   // Reaproveita as normas/descrições dos subs (ficam vinculadas ao nome do sub, não muda).
   _salvarExclusoes();
   cfgRenderServicos();
+  cfgSalvarServicosNaPlanilha();
   toast(`Serviço renomeado para "${novo}"`, 'success');
 }
 
@@ -12348,6 +12353,7 @@ function cfgRenomearSubservico(servico, sub) {
     }
   } catch(e) {}
   cfgRenderServicos();
+  cfgSalvarServicosNaPlanilha();
   toast(`Subserviço renomeado para "${novo}"`, 'success');
 }
 
@@ -12391,6 +12397,59 @@ async function cfgCarregarServicosDaPlanilha() {
     if (typeof toast === 'function') toast('Não consegui ler Serviços da planilha — exibindo dados locais', 'warning');
   }
   cfgRenderServicos();
+}
+
+// ── SALVAR CATÁLOGO DE SERVIÇOS NA PLANILHA (aba 🔧 SERVICOS) ──────────
+// Persiste TODO o catálogo efetivo (nativos + customizados, já com exclusões e
+// renomeações aplicadas) na aba 🔧 SERVICOS, para que os cadastros funcionem em
+// qualquer aparelho. Reescreve a aba inteira (limpa e regrava), garantindo que
+// remoções e renomeações também se reflitam lá.
+// Formato por linha: A=categoria(serviço), B=índice, C=subitem, D=custom, E=oculto.
+let _cfgSalvandoServicos = false;
+async function cfgSalvarServicosNaPlanilha() {
+  if (!CONFIG.SHEET_ID || !accessToken) return; // sem planilha/login: fica só local
+  if (_cfgSalvandoServicos) return;
+  _cfgSalvandoServicos = true;
+  try {
+    const cat = getCatalogoServicos(); // já aplica exclusões e renomeações
+    const linhas = [];
+    Object.keys(cat).forEach(servico => {
+      const subs = cat[servico] || [];
+      const ehCustom = (typeof SUBCATEGORIAS === 'undefined') || (SUBCATEGORIAS[servico] === undefined);
+      if (!subs.length) {
+        // Serviço sem subserviços ainda — grava uma linha "marcadora" para não sumir.
+        linhas.push([servico, 0, '', ehCustom ? 'TRUE' : 'FALSE', 'FALSE']);
+      } else {
+        subs.forEach((sub, i) => {
+          linhas.push([servico, i + 1, JSON.stringify(sub), ehCustom ? 'TRUE' : 'FALSE', 'FALSE']);
+        });
+      }
+    });
+
+    // 1) Limpar a área de dados antiga (A2:F500).
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent('🔧 SERVICOS!A2:F500')}:clear`;
+    await authedFetch(clearUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+
+    // 2) Gravar as linhas novas (se houver).
+    if (linhas.length) {
+      const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent('🔧 SERVICOS!A2')}?valueInputOption=USER_ENTERED`;
+      const resp = await authedFetch(putUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ range: '🔧 SERVICOS!A2', majorDimension: 'ROWS', values: linhas })
+      });
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => ({}));
+        throw new Error(e.error?.message || ('Sheets API ' + resp.status));
+      }
+    }
+    if (typeof toast === 'function') toast('✅ Serviços salvos na planilha', 'success');
+  } catch (e) {
+    if (typeof toast === 'function') toast('Erro ao salvar serviços na planilha: ' + e.message, 'error');
+    console.error('cfgSalvarServicosNaPlanilha:', e);
+  } finally {
+    _cfgSalvandoServicos = false;
+  }
 }
 
 // Renderizar ao abrir config
