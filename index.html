@@ -12406,6 +12406,24 @@ async function cfgCarregarServicosDaPlanilha() {
 // remoções e renomeações também se reflitam lá.
 // Formato por linha: A=categoria(serviço), B=índice, C=subitem, D=custom, E=oculto.
 let _cfgSalvandoServicos = false;
+// Descobre o nome REAL de uma aba pela busca de um trecho (ignora emoji/acentos/caixa).
+// Retorna o título exato como está na planilha, ou null se não encontrar.
+async function _acharNomeAba(trecho) {
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}?fields=sheets.properties.title`;
+    const resp = await authedFetch(url, { method: 'GET' });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z]/g,'').toUpperCase();
+    const alvo = norm(trecho);
+    const abas = (data.sheets || []).map(sh => sh.properties && sh.properties.title).filter(Boolean);
+    // match exato do conteúdo textual (sem emoji); senão, contém.
+    let achou = abas.find(t => norm(t) === alvo);
+    if (!achou) achou = abas.find(t => norm(t).indexOf(alvo) >= 0);
+    return achou || null;
+  } catch(e) { return null; }
+}
+
 async function cfgSalvarServicosNaPlanilha() {
   if (!CONFIG.SHEET_ID || !accessToken) return; // sem planilha/login: fica só local
   if (_cfgSalvandoServicos) return;
@@ -12417,7 +12435,6 @@ async function cfgSalvarServicosNaPlanilha() {
       const subs = cat[servico] || [];
       const ehCustom = (typeof SUBCATEGORIAS === 'undefined') || (SUBCATEGORIAS[servico] === undefined);
       if (!subs.length) {
-        // Serviço sem subserviços ainda — grava uma linha "marcadora" para não sumir.
         linhas.push([servico, 0, '', ehCustom ? 'TRUE' : 'FALSE', 'FALSE']);
       } else {
         subs.forEach((sub, i) => {
@@ -12426,26 +12443,39 @@ async function cfgSalvarServicosNaPlanilha() {
       }
     });
 
-    // 1) Limpar a área de dados antiga (A2:F500).
-    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent('🔧 SERVICOS!A2:F500')}:clear`;
-    await authedFetch(clearUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    // Descobrir o nome REAL da aba de serviços (resolve divergência de emoji).
+    let aba = await _acharNomeAba('SERVICOS');
+    if (!aba) aba = '🔧 SERVICOS'; // fallback ao nome esperado
+    const ref = (rng) => `${aba}!${rng}`;
 
-    // 2) Gravar as linhas novas (se houver).
+    // 1) Limpar a área antiga — agora VERIFICANDO se deu certo.
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(ref('A2:F1000'))}:clear`;
+    const rc = await authedFetch(clearUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!rc.ok) {
+      const e = await rc.json().catch(() => ({}));
+      throw new Error('Limpeza falhou: ' + (e.error?.message || rc.status) + ` (aba: "${aba}")`);
+    }
+
+    // 2) Gravar as linhas novas.
     if (linhas.length) {
-      const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent('🔧 SERVICOS!A2')}?valueInputOption=USER_ENTERED`;
+      const putUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(ref('A2'))}?valueInputOption=USER_ENTERED`;
       const resp = await authedFetch(putUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ range: '🔧 SERVICOS!A2', majorDimension: 'ROWS', values: linhas })
+        body: JSON.stringify({ range: ref('A2'), majorDimension: 'ROWS', values: linhas })
       });
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error?.message || ('Sheets API ' + resp.status));
       }
+      const out = await resp.json().catch(() => ({}));
+      const cells = out.updatedCells || 0;
+      if (typeof toast === 'function') toast(`✅ Serviços salvos na planilha (${cells} células, aba "${aba}")`, 'success');
+    } else {
+      if (typeof toast === 'function') toast(`✅ Catálogo limpo na planilha (aba "${aba}")`, 'success');
     }
-    if (typeof toast === 'function') toast('✅ Serviços salvos na planilha', 'success');
   } catch (e) {
-    if (typeof toast === 'function') toast('Erro ao salvar serviços na planilha: ' + e.message, 'error');
+    if (typeof toast === 'function') toast('Erro ao salvar serviços: ' + e.message, 'error');
     console.error('cfgSalvarServicosNaPlanilha:', e);
   } finally {
     _cfgSalvandoServicos = false;
